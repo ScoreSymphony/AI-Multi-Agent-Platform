@@ -25,19 +25,60 @@ const TRUST_STATES: RegistryTrustStatus[] = ["trusted", "reviewed", "local", "un
 const MATURITY_STATES: RegistryMaturity[] = ["stable", "beta", "experimental"];
 const PAGE_SIZE = 24;
 
-const PRIMARY_KIND_GROUPS: Array<{ value: string; label: string; kinds: string[] }> = [
-  { value: "tool", label: "Tools", kinds: ["tool"] },
-  { value: "skill", label: "Skills", kinds: ["skill"] },
-  { value: "plugin", label: "Plugins", kinds: ["plugin"] },
-  { value: "connector", label: "Connectors", kinds: ["connector"] },
-  { value: "application", label: "Applications", kinds: ["application"] },
-  { value: "template,workflow", label: "Templates / Workflows", kinds: ["template", "workflow"] },
+const PRIMARY_KIND_GROUPS: Array<{ group: string; label: string; kinds: string[] }> = [
+  {
+    group: "ai_agents",
+    label: "AI & Agents",
+    kinds: ["agent", "agent_team", "skill", "orchestrator"],
+  },
+  {
+    group: "models",
+    label: "Models",
+    kinds: ["model_provider", "model_configuration"],
+  },
+  {
+    group: "tools_integrations",
+    label: "Tools & Integrations",
+    kinds: ["tool", "connector", "capability_provider"],
+  },
+  { group: "applications", label: "Applications", kinds: ["application"] },
+  {
+    group: "platform_extensions",
+    label: "Platform Extensions",
+    kinds: [
+      "plugin",
+      "executor",
+      "memory_provider",
+      "file_provider",
+      "knowledge_provider",
+      "observability_exporter",
+      "automation_provider",
+      "evaluator",
+    ],
+  },
+  { group: "content", label: "Content", kinds: ["template", "workflow"] },
 ];
 
+const FALLBACK_KIND_GROUPS: Record<string, string> = Object.fromEntries(
+  PRIMARY_KIND_GROUPS.flatMap((entry) => entry.kinds.map((kind) => [kind, entry.group])),
+);
+
 const FALLBACK_KIND_DESCRIPTORS: RegistryKindDescriptor[] = [
+  descriptor("agent", "Agent", "kind_handler", "/agents"),
+  descriptor("agent_team", "Agent Team", "kind_handler", "/agent-teams"),
+  descriptor("orchestrator", "Orchestrator", "kind_handler", "/plugins"),
+  descriptor("executor", "Executor", "kind_handler", "/plugins"),
+  descriptor("model_provider", "Model Provider", "kind_handler", "/models"),
+  descriptor("capability_provider", "Capability Provider", "kind_handler", "/plugins"),
+  descriptor("memory_provider", "Memory Provider", "kind_handler", "/plugins"),
+  descriptor("file_provider", "File / Storage Provider", "kind_handler", "/plugins"),
+  descriptor("knowledge_provider", "Knowledge Provider", "kind_handler", "/plugins"),
+  descriptor("observability_exporter", "Observability Exporter", "kind_handler", "/plugins"),
+  descriptor("automation_provider", "Automation Provider", "kind_handler", "/plugins"),
+  descriptor("evaluator", "Evaluator", "kind_handler", "/plugins"),
   descriptor("tool", "Tool", "portable_import"),
   descriptor("skill", "Skill", "kind_handler"),
-  descriptor("plugin", "Plugin", "plugin"),
+  descriptor("plugin", "Plugin", "plugin", "/plugins"),
   descriptor("connector", "Connector", "portable_import"),
   descriptor("application", "Application", "kind_handler", "/applications"),
   descriptor("template", "Template", "portable_import"),
@@ -57,6 +98,7 @@ function descriptor(
     supports_install: default_route !== "manual",
     supports_update: default_route !== "manual",
     supports_uninstall: default_route === "kind_handler" || default_route === "plugin",
+    group: FALLBACK_KIND_GROUPS[kind] ?? null,
     management_path,
   };
 }
@@ -171,12 +213,32 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     [kindDescriptors, page, selected],
   );
 
+  const effectivePrimaryKindGroups = useMemo(
+    () =>
+      PRIMARY_KIND_GROUPS.map((group) => {
+        const extras = effectiveKindDescriptors
+          .filter(
+            (descriptor) =>
+              descriptor.group === group.group && !group.kinds.includes(descriptor.kind),
+          )
+          .sort((left, right) => kindLabel(left).localeCompare(kindLabel(right)))
+          .map((descriptor) => descriptor.kind);
+        const kinds = [...group.kinds, ...extras];
+        return {
+          ...group,
+          kinds,
+          value: kinds.join(","),
+        };
+      }),
+    [effectiveKindDescriptors],
+  );
+
   const dynamicKinds = useMemo(() => {
-    const primary = new Set(PRIMARY_KIND_GROUPS.flatMap((entry) => entry.kinds));
+    const primary = new Set(effectivePrimaryKindGroups.flatMap((entry) => entry.kinds));
     return effectiveKindDescriptors
       .filter((entry) => !primary.has(entry.kind))
       .sort((left, right) => kindLabel(left).localeCompare(kindLabel(right)));
-  }, [effectiveKindDescriptors]);
+  }, [effectiveKindDescriptors, effectivePrimaryKindGroups]);
 
   const selectedKind = selected
     ? effectiveKindDescriptors.find((entry) => entry.kind === selected.item_type) ??
@@ -258,6 +320,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
 
   const uninstall = async () => {
     if (!selected || !uninstallSupported(selected)) return;
+    if (!window.confirm(`Uninstall ${selected.name} (${selected.item_id}) from its canonical owner?`)) return;
     setBusy(true);
     setActionError(null);
     setSuccessMessage(null);
@@ -376,9 +439,10 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
         <p className="eyebrow">Unified component catalog</p>
         <h1>Marketplace</h1>
         <p>
-          Discover Tools, Skills, Plugins, Connectors, Applications, Templates, Workflows and
-          future component kinds in one catalog. Mutations remain delegated to the canonical
-          owner domain for each component.
+          Discover Agents, Agent Teams, Orchestrators, Model Providers, Executors, Tools,
+          Skills, integrations, Applications and reusable content in one catalog. Semantic
+          Marketplace kinds stay independent from their technical package format, while every
+          mutation remains delegated to the canonical owner domain.
         </p>
       </header>
 
@@ -387,7 +451,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
           <button type="button" aria-pressed={!kindFilter} onClick={() => setKindFilter("")}>
             All
           </button>
-          {PRIMARY_KIND_GROUPS.map((entry) => (
+          {effectivePrimaryKindGroups.map((entry) => (
             <button
               type="button"
               key={entry.value}
@@ -1417,6 +1481,7 @@ function mergeKindDescriptors(
     merged.set(entry.kind, {
       ...fallback,
       ...entry,
+      group: entry.group ?? fallback?.group ?? null,
       management_path: entry.management_path ?? fallback?.management_path ?? null,
     });
   }
@@ -1429,10 +1494,28 @@ function mergeKindDescriptors(
 }
 
 function fallbackDescriptor(kind: string, route: RegistryKindDescriptor["default_route"]): RegistryKindDescriptor {
+  const managementPaths: Record<string, string> = {
+    agent: "/agents",
+    agent_team: "/agent-teams",
+    orchestrator: "/plugins",
+    executor: "/plugins",
+    model_provider: "/models",
+    capability_provider: "/plugins",
+    memory_provider: "/plugins",
+    file_provider: "/plugins",
+    knowledge_provider: "/plugins",
+    observability_exporter: "/plugins",
+    automation_provider: "/plugins",
+    evaluator: "/plugins",
+    plugin: "/plugins",
+    application: "/applications",
+    model_configuration: "/models",
+  };
   return descriptor(
     kind,
     humanizeKind(kind),
     route,
+    managementPaths[kind] ?? null,
   );
 }
 

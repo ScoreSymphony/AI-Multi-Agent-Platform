@@ -187,6 +187,8 @@ def _extend_base_deployment(
         capabilities=base.capabilities,
         capability_assignments=base.capability_assignments,
         models=base.models,
+        orchestrators=base.orchestrators,
+        executors=base.executors,
         routing_profile_repository=base.routing_profile_repository,
         routing_profiles=base.routing_profiles,
         model_runtime=base.model_runtime,

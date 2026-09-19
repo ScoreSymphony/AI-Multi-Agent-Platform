@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import cast
 from urllib import parse
 
+from ai_multi_agent_platform.agents.models import AgentExecutionSpec, OrchestratorMapping
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import Orchestrator
 from ai_multi_agent_platform.contracts.types import (
@@ -70,6 +71,17 @@ def _adapter_metadata(**values: JsonValue) -> tuple[AdapterMetadata, ...]:
 
 class HermesOrchestrator(Orchestrator):
     """Canonical ``Orchestrator`` backed by Hermes' documented ``/v1/runs`` API."""
+
+    @property
+    def adapter_id(self) -> str:
+        """Expose the #33 mapper identity alongside the canonical provider identity."""
+
+        return HERMES_ADAPTER_ID
+
+    async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping:
+        """Map canonical Agent/Team execution through the existing Hermes mapper seam."""
+
+        return await HermesAgentMapper(self.config).map_agent(spec)
 
     def __init__(
         self,

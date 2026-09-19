@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.agents import (
+    AgentOrchestratorMapperRegistry,
     AgentRuntime,
     AgentService,
     DurableRoutingProfileAgentRuntime,
@@ -71,6 +72,7 @@ class RuntimeServicesBundle:
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
+    orchestrator_mappers: AgentOrchestratorMapperRegistry
     capabilities: CapabilityRegistry
     models: ModelRegistry
     routing_profile_repository: JsonModelRoutingProfileRepository
@@ -116,6 +118,7 @@ def build_runtime_services(
     routing_profile_repository = JsonModelRoutingProfileRepository(
         database_dir / "model-routing-profiles.json"
     )
+    orchestrator_mappers = AgentOrchestratorMapperRegistry()
     agent_runtime = DurableRoutingProfileAgentRuntime(
         agents,
         routing_profile_repository=routing_profile_repository,
@@ -154,6 +157,7 @@ def build_runtime_services(
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,
+        orchestrator_mappers=orchestrator_mappers,
         capabilities=capabilities,
         models=models,
         routing_profile_repository=routing_profile_repository,

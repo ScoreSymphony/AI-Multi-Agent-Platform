@@ -41,7 +41,7 @@ function cardByHeading(page, name) {
 async function expectMarketplaceMutationError(page, mode, expectedMessage) {
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=${mode}`);
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const skillCard = cardByHeading(page, "Code Review Skill");
   await skillCard.getByRole("button", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
@@ -80,9 +80,9 @@ try {
     "Example Plugin",
     "GitHub Connector",
     "Code Server",
-    "Skills",
+    "AI & Agents",
     "Applications",
-    "Templates / Workflows",
+    "Content",
     "Marketplace source",
     "Provenance",
     "Maturity",
@@ -108,11 +108,11 @@ try {
   requireText(decodedInitialUrl, "direction=asc", "Marketplace server-side sorting");
 
   let before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
-        decodeURIComponent(call.url).includes("filter[item_type]=skill"),
+        decodeURIComponent(call.url).includes("filter[item_type]=agent,agent_team,skill,orchestrator"),
       ),
     before,
   );
@@ -154,6 +154,70 @@ try {
     before,
   );
   await page.getByRole("heading", { name: "GitHub Connector", exact: true }).waitFor();
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("Hermes");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=Hermes"),
+      ),
+    before,
+  );
+  const hermesCard = cardByHeading(page, "Hermes");
+  await hermesCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByText("Owner status", { exact: true }).waitFor();
+  const hermesDetailText = await page.locator("body").innerText();
+  requireText(hermesDetailText, "Orchestrator", "Semantic Orchestrator Marketplace detail");
+  requireText(hermesDetailText, "Owner status", "Canonical Orchestrator owner status");
+  requireText(hermesDetailText, "enabled", "Enabled Orchestrator owner state");
+  requireText(hermesDetailText, "healthy", "Orchestrator owner health");
+  const orchestratorLink = page.getByRole("link", {
+    name: "Open Orchestrator management",
+    exact: true,
+  });
+  if ((await orchestratorLink.getAttribute("href")) !== "/plugins") {
+    throw new Error("Semantic Orchestrator management did not resolve to canonical Plugin owner");
+  }
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("Research Agent");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=Research+Agent") ||
+        decodeURIComponent(call.url).includes("q=Research%20Agent") ||
+        decodeURIComponent(call.url).includes("q=Research Agent"),
+      ),
+    before,
+  );
+  const researchAgentCard = cardByHeading(page, "Research Agent");
+  await researchAgentCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const agentLink = page.getByRole("link", { name: "Open Agent management", exact: true });
+  if ((await agentLink.getAttribute("href")) !== "/agents") {
+    throw new Error("Semantic Agent management did not resolve to canonical Agent owner");
+  }
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await searchInput.fill("Local Model Provider");
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some((call) =>
+        decodeURIComponent(call.url).includes("q=Local+Model+Provider") ||
+        decodeURIComponent(call.url).includes("q=Local%20Model%20Provider") ||
+        decodeURIComponent(call.url).includes("q=Local Model Provider"),
+      ),
+    before,
+  );
+  const modelProviderCard = cardByHeading(page, "Local Model Provider");
+  await modelProviderCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  const modelProviderLink = page.getByRole("link", {
+    name: "Open Model Provider management",
+    exact: true,
+  });
+  if ((await modelProviderLink.getAttribute("href")) !== "/models") {
+    throw new Error("Semantic Model Provider management did not resolve to canonical Model owner");
+  }
 
   await searchInput.fill("");
   before = await page.evaluate(() => window.__marketplaceCalls.length);
@@ -346,7 +410,7 @@ try {
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await page.getByRole("button", { name: "Templates / Workflows", exact: true }).click();
+  await page.getByRole("button", { name: "Content", exact: true }).click();
   await page.waitForFunction(
     (count) =>
       window.__marketplaceCalls.slice(count).some((call) =>
@@ -460,6 +524,12 @@ try {
   requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind detail");
   requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind fallback label");
   before = await page.evaluate(() => window.__marketplaceCalls.length);
+  page.once("dialog", async (dialog) => {
+    if (dialog.type() !== "confirm" || !dialog.message().includes("Uninstall")) {
+      throw new Error(`Unexpected Marketplace uninstall dialog: ${dialog.type()} ${dialog.message()}`);
+    }
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "Uninstall", exact: true }).click();
   await page.waitForFunction(
     (count) =>
@@ -516,7 +586,7 @@ try {
 
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=slow`);
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const slowSkillCard = cardByHeading(page, "Code Review Skill");
   await slowSkillCard.getByRole("button", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();

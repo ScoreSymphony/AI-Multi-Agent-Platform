@@ -6,7 +6,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.accounting import AccountingService
-from ai_multi_agent_platform.agents import AgentRuntime, AgentService
+from ai_multi_agent_platform.agents import (
+    AgentOrchestratorMapperRegistry,
+    AgentRuntime,
+    AgentService,
+)
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.capabilities.assignments import CapabilityAssignmentService
 from ai_multi_agent_platform.configuration import SecretProvider
@@ -23,6 +27,7 @@ from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.evaluation import EvaluationService, SqliteEvaluationRepository
+from ai_multi_agent_platform.execution import ExecutorRegistry
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.models import (
     JsonModelRoutingProfileRepository,
@@ -40,6 +45,7 @@ from ai_multi_agent_platform.onboarding import (
     OnboardingModelAdapter,
     OnboardingService,
 )
+from ai_multi_agent_platform.orchestration import OrchestratorRegistry
 from ai_multi_agent_platform.repositories import (
     RepositoryDiscoveryResolver,
     RepositoryEventRuntimeIngress,
@@ -143,9 +149,12 @@ class SingleNodeDeployment:
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
+    agent_orchestrator_mappers: AgentOrchestratorMapperRegistry
     capabilities: CapabilityRegistry
     capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
+    orchestrators: OrchestratorRegistry
+    executors: ExecutorRegistry
     routing_profile_repository: JsonModelRoutingProfileRepository
     routing_profiles: ModelRoutingProfileService
     model_runtime: ModelRuntime
@@ -449,9 +458,12 @@ def _assemble_deployment(
         agents=runtime.agents,
         conversations=runtime.conversations,
         agent_runtime=runtime.agent_runtime,
+        agent_orchestrator_mappers=runtime.orchestrator_mappers,
         capabilities=runtime.capabilities,
         capability_assignments=platform_services.capability_assignments,
         models=runtime.models,
+        orchestrators=execution.orchestrators,
+        executors=execution.executors,
         routing_profile_repository=runtime.routing_profile_repository,
         routing_profiles=runtime.routing_profiles,
         model_runtime=runtime.model_runtime,

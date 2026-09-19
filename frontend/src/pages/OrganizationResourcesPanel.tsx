@@ -221,9 +221,11 @@ export function OrganizationResourcesPanel({
               shares={shares.items}
               ownershipById={ownershipById}
               busy={busy}
-              onRevoke={(share) =>
-                void run(`share.revoke:${share.id}`, () => client.revokeShare(share.id))
-              }
+              onRevoke={(share) => {
+                if (window.confirm(`Revoke resource share ${share.id}?`)) {
+                  void run(`share.revoke:${share.id}`, () => client.revokeShare(share.id));
+                }
+              }}
             />
           </Card>
         </>
