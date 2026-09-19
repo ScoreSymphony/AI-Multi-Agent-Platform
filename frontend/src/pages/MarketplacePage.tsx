@@ -64,23 +64,23 @@ const FALLBACK_KIND_GROUPS: Record<string, string> = Object.fromEntries(
 );
 
 const FALLBACK_KIND_DESCRIPTORS: RegistryKindDescriptor[] = [
-  descriptor("agent", "Agent", "kind_handler", "/agents"),
-  descriptor("agent_team", "Agent Team", "kind_handler", "/agent-teams"),
-  descriptor("orchestrator", "Orchestrator", "kind_handler", "/plugins"),
-  descriptor("executor", "Executor", "kind_handler", "/plugins"),
-  descriptor("model_provider", "Model Provider", "kind_handler", "/models"),
-  descriptor("capability_provider", "Capability Provider", "kind_handler", "/plugins"),
-  descriptor("memory_provider", "Memory Provider", "kind_handler", "/plugins"),
-  descriptor("file_provider", "File / Storage Provider", "kind_handler", "/plugins"),
-  descriptor("knowledge_provider", "Knowledge Provider", "kind_handler", "/plugins"),
-  descriptor("observability_exporter", "Observability Exporter", "kind_handler", "/plugins"),
-  descriptor("automation_provider", "Automation Provider", "kind_handler", "/plugins"),
-  descriptor("evaluator", "Evaluator", "kind_handler", "/plugins"),
+  descriptor("agent", "Agent", "kind_handler"),
+  descriptor("agent_team", "Agent Team", "kind_handler"),
+  descriptor("orchestrator", "Orchestrator", "kind_handler"),
+  descriptor("executor", "Executor", "kind_handler"),
+  descriptor("model_provider", "Model Provider", "kind_handler"),
+  descriptor("capability_provider", "Capability Provider", "kind_handler"),
+  descriptor("memory_provider", "Memory Provider", "kind_handler"),
+  descriptor("file_provider", "File / Storage Provider", "kind_handler"),
+  descriptor("knowledge_provider", "Knowledge Provider", "kind_handler"),
+  descriptor("observability_exporter", "Observability Exporter", "kind_handler"),
+  descriptor("automation_provider", "Automation Provider", "kind_handler"),
+  descriptor("evaluator", "Evaluator", "kind_handler"),
   descriptor("tool", "Tool", "portable_import"),
   descriptor("skill", "Skill", "kind_handler"),
-  descriptor("plugin", "Plugin", "plugin", "/plugins"),
+  descriptor("plugin", "Plugin", "plugin"),
   descriptor("connector", "Connector", "portable_import"),
-  descriptor("application", "Application", "kind_handler", "/applications"),
+  descriptor("application", "Application", "kind_handler"),
   descriptor("template", "Template", "portable_import"),
   descriptor("workflow", "Workflow", "portable_import"),
 ];
@@ -95,9 +95,11 @@ function descriptor(
     kind,
     display_name,
     default_route,
-    supports_install: default_route !== "manual",
-    supports_update: default_route !== "manual",
-    supports_uninstall: default_route === "kind_handler" || default_route === "plugin",
+    // A fallback descriptor exists only to keep unknown/older catalog kinds renderable.
+    // Lifecycle support is canonical server metadata and must fail closed when absent.
+    supports_install: false,
+    supports_update: false,
+    supports_uninstall: false,
     group: FALLBACK_KIND_GROUPS[kind] ?? null,
     management_path,
   };
@@ -289,7 +291,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   const applyInstallOrUpdate = async () => {
     if (!selected || !preview || preview.id !== selected.id || !preview.activation_allowed) return;
     const operation = mutationOperation(selected);
-    if (!operation || !operationSupported(selected, operation)) return;
+    if (!operation || !operationSupported(selected, operation, selectedKind)) return;
     setBusy(true);
     setActionError(null);
     setSuccessMessage(null);
@@ -319,7 +321,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   };
 
   const uninstall = async () => {
-    if (!selected || !uninstallSupported(selected)) return;
+    if (!selected || !uninstallSupported(selected, selectedKind)) return;
     if (!window.confirm(`Uninstall ${selected.name} (${selected.item_id}) from its canonical owner?`)) return;
     setBusy(true);
     setActionError(null);
@@ -804,7 +806,7 @@ function MarketplaceDetail({
   onUnpin: () => void;
 }) {
   const operation = mutationOperation(item);
-  const supportsOperation = operation ? operationSupported(item, operation) : false;
+  const supportsOperation = operation ? operationSupported(item, operation, descriptor) : false;
   const selectedIsInstalledVersion = candidateIsInstalled(item);
   const partialMetadata =
     !item.publisher ||
@@ -980,7 +982,7 @@ function MarketplaceDetail({
         {installationSourceMatches(item) && item.pinned_version ? (
           <button type="button" disabled={busy} onClick={onUnpin}>Unpin</button>
         ) : null}
-        {uninstallSupported(item) ? (
+        {uninstallSupported(item, descriptor) ? (
           <button type="button" disabled={busy} onClick={onUninstall}>Uninstall</button>
         ) : null}
       </div>
@@ -993,6 +995,7 @@ function MarketplaceDetail({
         <InstallPreview
           preview={preview}
           item={item}
+          descriptor={descriptor}
           operation={operation}
           selectedIsInstalledVersion={selectedIsInstalledVersion}
           busy={busy}
@@ -1006,6 +1009,7 @@ function MarketplaceDetail({
 function InstallPreview({
   preview,
   item,
+  descriptor,
   operation,
   selectedIsInstalledVersion,
   busy,
@@ -1013,6 +1017,7 @@ function InstallPreview({
 }: {
   preview: RegistryPreview;
   item: RegistryItem;
+  descriptor: RegistryKindDescriptor;
   operation: "install" | "update" | null;
   selectedIsInstalledVersion: boolean;
   busy: boolean;
@@ -1086,7 +1091,7 @@ function InstallPreview({
   const canApply =
     Boolean(operation) &&
     operation !== null &&
-    operationSupported(item, operation) &&
+    operationSupported(item, operation, descriptor) &&
     preview.activation_allowed &&
     !item.pinned_version &&
     !decision?.update_state.blocked_by_pin;
@@ -1393,20 +1398,32 @@ function routeAvailable(item: RegistryItem): boolean {
 }
 
 function missingHandler(item: RegistryItem): boolean {
+  if (item.operation_state === "missing_handler") return true;
+  if (item.operation_state) return false;
   return (
-    item.operation_state === "missing_handler" ||
-    (item.route === "kind_handler" &&
-      (item.route_available === false || item.owner_extension?.handler_available === false))
+    item.route === "kind_handler" &&
+    (item.route_available === false || item.owner_extension?.handler_available === false)
   );
 }
 
-function operationSupported(item: RegistryItem, operation: "install" | "update"): boolean {
-  if (!routeAvailable(item) || item.pinned_version) return false;
+function operationSupported(
+  item: RegistryItem,
+  operation: "install" | "update",
+  descriptor: RegistryKindDescriptor | null | undefined,
+): boolean {
+  if (!descriptor || !routeAvailable(item) || item.pinned_version) return false;
+  const descriptorAllows =
+    operation === "install" ? descriptor.supports_install : descriptor.supports_update;
+  if (!descriptorAllows) return false;
+
   const advertised = item.owner_extension?.supported_operations;
-  if (advertised && !advertised.includes(operation)) return false;
-  // The canonical Application owner intentionally exposes no artifact-version migration yet.
-  // Fail closed until the owner explicitly advertises update support.
-  if (operation === "update" && item.item_type === "application" && !advertised) return false;
+  if (item.route === "kind_handler") {
+    if (item.owner_extension?.handler_available !== true) return false;
+    if (!advertised?.includes(operation)) return false;
+  } else if (advertised && !advertised.includes(operation)) {
+    return false;
+  }
+
   if (operation === "install") return !item.installed;
   return item.installed && (
     (item.update_available && item.installed_version !== item.version) ||
@@ -1414,12 +1431,27 @@ function operationSupported(item: RegistryItem, operation: "install" | "update")
   );
 }
 
-function uninstallSupported(item: RegistryItem): boolean {
-  if (!installationSourceMatches(item) || !["kind_handler", "plugin"].includes(item.route)) return false;
-  if (item.owner_extension?.handler_available !== true) return false;
-  const advertised = item.owner_extension.supported_operations;
-  if (advertised && !advertised.includes("uninstall")) return false;
-  return item.route_available !== false;
+function uninstallSupported(
+  item: RegistryItem,
+  descriptor: RegistryKindDescriptor | null | undefined,
+): boolean {
+  if (
+    !descriptor?.supports_uninstall ||
+    !installationSourceMatches(item) ||
+    item.route === "manual" ||
+    item.route_available === false
+  ) {
+    return false;
+  }
+
+  const advertised = item.owner_extension?.supported_operations;
+  if (item.route === "kind_handler") {
+    if (item.owner_extension?.handler_available !== true) return false;
+    if (!advertised?.includes("uninstall")) return false;
+  } else if (advertised && !advertised.includes("uninstall")) {
+    return false;
+  }
+  return true;
 }
 
 function itemStateLabel(item: RegistryItem): string {
@@ -1482,7 +1514,8 @@ function mergeKindDescriptors(
       ...fallback,
       ...entry,
       group: entry.group ?? fallback?.group ?? null,
-      management_path: entry.management_path ?? fallback?.management_path ?? null,
+      // Owner-management links are canonical kind metadata. Do not recreate them in Web.
+      management_path: entry.management_path ?? null,
     });
   }
   for (const item of items) {
@@ -1494,29 +1527,7 @@ function mergeKindDescriptors(
 }
 
 function fallbackDescriptor(kind: string, route: RegistryKindDescriptor["default_route"]): RegistryKindDescriptor {
-  const managementPaths: Record<string, string> = {
-    agent: "/agents",
-    agent_team: "/agent-teams",
-    orchestrator: "/plugins",
-    executor: "/plugins",
-    model_provider: "/models",
-    capability_provider: "/plugins",
-    memory_provider: "/plugins",
-    file_provider: "/plugins",
-    knowledge_provider: "/plugins",
-    observability_exporter: "/plugins",
-    automation_provider: "/plugins",
-    evaluator: "/plugins",
-    plugin: "/plugins",
-    application: "/applications",
-    model_configuration: "/models",
-  };
-  return descriptor(
-    kind,
-    humanizeKind(kind),
-    route,
-    managementPaths[kind] ?? null,
-  );
+  return descriptor(kind, humanizeKind(kind), route);
 }
 
 function kindLabel(descriptor: RegistryKindDescriptor): string {
