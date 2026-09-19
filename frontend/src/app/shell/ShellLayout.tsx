@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { APImanifest } from "../../api/types";
 import { OnboardingCallout } from "../../components/OnboardingCallout";
+import { ErrorState } from "../../components/States";
 import { PermissionHintsProvider } from "../../security/permissions";
 import { navigation, navigationItemForPath, navigationMaturity } from "../navigation";
 import { AppLink } from "../router";
@@ -13,6 +14,8 @@ export function ShellLayout({
   onToggleMenu,
   manifest,
   manifestState,
+  manifestError,
+  onManifestRetry,
   clients,
   content,
 }: {
@@ -21,6 +24,8 @@ export function ShellLayout({
   onToggleMenu: () => void;
   manifest: APImanifest | null;
   manifestState: ManifestState;
+  manifestError: unknown;
+  onManifestRetry: () => void;
   clients: ShellClients;
   content: ReactNode;
 }) {
@@ -94,6 +99,9 @@ export function ShellLayout({
             </div>
           </header>
           <main id="main" tabIndex={-1} data-route={path}>
+            {manifestState === "unavailable" && manifestError ? (
+              <ErrorState error={manifestError} onRetry={onManifestRetry} />
+            ) : null}
             {path !== "/onboarding" && onboardingAvailable ? <OnboardingCallout client={clients.onboardingClient} /> : null}
             {content}
           </main>
