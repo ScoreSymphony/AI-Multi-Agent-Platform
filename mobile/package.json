@@ -25,6 +25,7 @@
     "react-native": "0.86.3"
   },
   "devDependencies": {
+    "@types/node": "22.20.3",
     "@types/react": "19.2.18",
     "typescript": "6.0.3",
     "vitest": "5.0.0"
