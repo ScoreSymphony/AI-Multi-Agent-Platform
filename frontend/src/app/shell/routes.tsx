@@ -10,6 +10,7 @@ import { CapabilitiesPage, CapabilityDetailPage, CapabilityProviderDetailPage } 
 import { CanonicalConfigurationDetailPage } from "../../pages/CanonicalConfigurationDetailPage";
 import { ChatPage } from "../../pages/ChatPage";
 import { ComputeNodeDetailPage, ComputePage, ComputeWorkerDetailPage, ComputeWorkerJobDetailPage } from "../../pages/ComputePage";
+import { DecisionRecordDetailPage, DecisionRecordsPage } from "../../pages/DecisionRecordsPage";
 import { EvaluationRunDetailPage, EvaluationSuiteDetailPage, EvaluationsPage } from "../../pages/EvaluationsPage";
 import { GoalDetailPage, GoalsPage } from "../../pages/GoalsPage";
 import { ImportExportPage, PortabilityDetailPage } from "../../pages/ImportExportPage";
@@ -30,6 +31,7 @@ import { PluginCandidateDetailPage, PluginDetailPage, PluginsPage } from "../../
 import { ProjectDetailPage, WorkspaceDetailPage } from "../../pages/ProjectPages";
 import { ProjectsPage } from "../../pages/ProjectListPage";
 import { RepositoriesPage, RepositoryDetailPage } from "../../pages/RepositoriesPage";
+import { ResearchDetailPage, ResearchPage } from "../../pages/ResearchPage";
 import { FileDetailPage, ReferenceCollectionPage, ReferencesPage } from "../../pages/ReferencePages";
 import { RunsPage } from "../../pages/RunListPage";
 import { SearchPage } from "../../pages/SearchPage";
@@ -53,6 +55,7 @@ const INTEGRATION_RESOURCES = ["connector-definitions", "connections"] as const;
 const MARKETPLACE_RESOURCES = ["registry-items", "marketplace-kinds"] as const;
 const KNOWLEDGE_RESOURCES = ["knowledge", "knowledge-results"] as const;
 const APPLICATION_RESOURCES = ["applications", "application-instances", "application-logs"] as const;
+const RESEARCH_RESOURCES = ["research-items", "research-sources", "research-source-observations", "research-claims", "research-evidence"] as const;
 
 export function renderShellRoute({
   path,
@@ -77,6 +80,7 @@ export function renderShellRoute({
     automationClient,
     goalClient,
     computeClient,
+    decisionRecordClient,
     evaluationClient,
     filesClient,
     governanceClient,
@@ -88,6 +92,7 @@ export function renderShellRoute({
     pluginsClient,
     portabilityClient,
     registryClient,
+    researchClient,
     templateClient,
     verificationClient,
   } = clients;
@@ -109,6 +114,8 @@ export function renderShellRoute({
   const connectionMatch = matchPath("/integrations/connections/:connectionId", path);
   const memoryMatch = matchPath("/memory/:memoryId", path);
   const knowledgeMatch = matchPath("/knowledge/:sourceId", path);
+  const researchMatch = matchPath("/research/:researchItemId", path);
+  const decisionRecordMatch = matchPath("/decisions/:decisionRecordId", path);
   const fileMatch = matchPath("/files/:fileId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
@@ -184,6 +191,8 @@ export function renderShellRoute({
   if (path === "/knowledge") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Knowledge" resources={KNOWLEDGE_RESOURCES}><KnowledgePage client={memoryKnowledgeClient} /></ManifestResourcesPage>;
   if (knowledgeMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Knowledge" resources={KNOWLEDGE_RESOURCES}><KnowledgeDetailPage client={memoryKnowledgeClient} sourceId={knowledgeMatch.sourceId} /></ManifestResourcesPage>;
   if (path === "/search") return <SearchPage client={client} />;
+  if (path === "/research") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Research Evidence" resources={RESEARCH_RESOURCES}><ResearchPage client={researchClient} /></ManifestResourcesPage>;
+  if (researchMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Research Evidence" resources={RESEARCH_RESOURCES}><ResearchDetailPage client={researchClient} decisions={decisionRecordClient} researchItemId={researchMatch.researchItemId} /></ManifestResourcesPage>;
   if (path === "/import-export") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Import / Export" resources={PORTABILITY_RESOURCES}><ImportExportPage client={portabilityClient} /></ManifestResourcesPage>;
   if (portabilityPackageMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Portable package" resource={PORTABILITY_PACKAGE_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="package" resourceId={portabilityPackageMatch.packageId} /></ManifestResourcePage>;
   if (portabilityPreviewMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Import preview" resource={PORTABILITY_PREVIEW_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="preview" resourceId={portabilityPreviewMatch.previewId} /></ManifestResourcePage>;
@@ -221,6 +230,8 @@ export function renderShellRoute({
   if (path === "/approvals") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals"><ApprovalsPage client={approvalClient} decisionState={approvalDecisionState} /></ManifestResourcePage>;
   if (approvalMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals"><ApprovalDetailPage client={approvalClient} approvalId={approvalMatch.approvalId} decisionState={approvalDecisionState} /></ManifestResourcePage>;
   if (path === "/notifications") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Notifications" resource="notifications"><NotificationsPage client={notificationClient} /></ManifestResourcePage>;
+  if (path === "/decisions") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Decision Records" resource="decision-records"><DecisionRecordsPage client={decisionRecordClient} /></ManifestResourcePage>;
+  if (decisionRecordMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Decision Records" resource="decision-records"><DecisionRecordDetailPage client={decisionRecordClient} decisionRecordId={decisionRecordMatch.decisionRecordId} /></ManifestResourcePage>;
   if (path === "/events") return <ObservabilityPage client={client} view="events" />;
   if (eventTaskMatch) return <ObservabilityPage client={client} view="events" initialTaskId={eventTaskMatch.taskId} />;
   if (path === "/observability") return <ObservabilityPage client={client} view="observability" />;
