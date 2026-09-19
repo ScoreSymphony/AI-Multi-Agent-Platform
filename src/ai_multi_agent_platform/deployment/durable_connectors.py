@@ -184,6 +184,7 @@ def _extend_base_deployment(
         agents=base.agents,
         conversations=base.conversations,
         agent_runtime=base.agent_runtime,
+        agent_orchestrator_mappers=base.agent_orchestrator_mappers,
         capabilities=base.capabilities,
         capability_assignments=base.capability_assignments,
         models=base.models,
