@@ -43,7 +43,11 @@
       "message": "operation is forbidden",
       "request_id": "request_client_forbidden",
       "correlation_id": "corr_client_forbidden",
-      "retryable": false
+      "retryable": false,
+      "details": {
+        "authorization_outcome": "deny",
+        "policy_id": "local:user:issue-1236"
+      }
     }
   },
   "approval_required": {
@@ -57,7 +61,9 @@
       "retryable": false,
       "details": {
         "authorization_outcome": "require_approval",
-        "approval_id": "approval_123e4567-e89b-42d3-a456-426614174030"
+        "approval_id": "approval_123e4567-e89b-42d3-a456-426614174030",
+        "requested_action_digest": "sha256:issue-1236-exact-action",
+        "policy_id": "local:user:issue-1236"
       }
     }
   },
