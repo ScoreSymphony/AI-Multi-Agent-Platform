@@ -307,6 +307,12 @@ export function CapabilityProviderDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {!provider.available || provider.health !== "healthy" ? (
+        <DegradedState
+          title="Capability provider unavailable or degraded"
+          detail={`Canonical provider state reports health=${provider.health} and available=${provider.available ? "yes" : "no"}. The browser does not contact the provider directly.`}
+        />
+      ) : null}
       <div className="grid-two">
         <Card title="Provider contract">
           <DefinitionList
