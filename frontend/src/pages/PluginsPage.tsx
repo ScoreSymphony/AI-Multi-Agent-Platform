@@ -214,6 +214,7 @@ export function PluginDetailPage({
 
   const remove = async () => {
     if (!plugin) return;
+    if (!window.confirm(`Remove Plugin ${plugin.id} from active configuration?`)) return;
     setBusy(true);
     setActionError(null);
     try {

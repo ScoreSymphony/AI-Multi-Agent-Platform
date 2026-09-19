@@ -320,6 +320,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
 
   const uninstall = async () => {
     if (!selected || !uninstallSupported(selected)) return;
+    if (!window.confirm(`Uninstall ${selected.name} (${selected.item_id}) from its canonical owner?`)) return;
     setBusy(true);
     setActionError(null);
     setSuccessMessage(null);

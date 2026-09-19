@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   ApplicationsClient,
   type CanonicalApplication,
+  type CanonicalApplicationConfigurationField,
   type CanonicalApplicationInstance,
   type CanonicalApplicationLogStream,
 } from "../api/applications";
-import type { Page } from "../api/types";
+import type { JsonValue, Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
@@ -188,7 +189,17 @@ export function ApplicationDetailPage({
           <button disabled={busy || !actionState.stop} onClick={() => void mutate((id) => client.stop(id))}>Stop</button>
           <button disabled={busy || !actionState.restart} onClick={() => void mutate((id) => client.restart(id))}>Restart</button>
           <button disabled={busy || !actionState.reconcile} onClick={() => void mutate((id) => client.reconcile(id))}>Reconcile</button>
-          <button disabled={busy || !actionState.remove} onClick={() => void mutate((id) => client.remove(id))}>Remove</button>
+          <button
+            className="danger"
+            disabled={busy || !actionState.remove}
+            onClick={() => {
+              if (window.confirm(`Remove Application instance ${instance.id}?`)) {
+                void mutate((id) => client.remove(id));
+              }
+            }}
+          >
+            Remove
+          </button>
           <button disabled={busy} onClick={() => void load()}>Refresh</button>
           {instance.open ? <OpenApplication target={instance.open} /> : null}
         </div>
@@ -245,13 +256,23 @@ export function ApplicationDetailPage({
       </Card>
 
       <Card title="Configuration and bindings">
+        <ApplicationConfigurationForm
+          application={application}
+          instance={instance}
+          busy={busy}
+          onConfigure={(configuration) => void mutate((id) => client.configure(id, configuration))}
+        />
         <dl className="detail-grid">
-          <Detail label="Configuration"><JsonBlock value={instance.configuration} /></Detail>
+          <Detail label="Current configuration"><JsonBlock value={instance.configuration} /></Detail>
           <Detail label="Secret references"><JsonBlock value={instance.secret_bindings} /></Detail>
           <Detail label="Volume bindings"><JsonBlock value={instance.volume_bindings} /></Detail>
           <Detail label="Resource requirements"><JsonBlock value={application.manifest.resources} /></Detail>
         </dl>
-        <p className="muted">Secret values are never returned to this surface; only canonical references are visible.</p>
+        <p className="muted">
+          Secret values are never returned to this surface; only canonical references are visible.
+          Running instances converge configuration through the canonical lifecycle, including the
+          owner-controlled restart semantics when required.
+        </p>
       </Card>
 
       <Card title="Application definition">
@@ -267,6 +288,133 @@ export function ApplicationDetailPage({
       </Card>
     </div>
   );
+}
+
+export function ApplicationConfigurationForm({
+  application,
+  instance,
+  busy,
+  onConfigure,
+}: {
+  application: CanonicalApplication;
+  instance: CanonicalApplicationInstance;
+  busy: boolean;
+  onConfigure: (configuration: Record<string, JsonValue>) => void;
+}) {
+  const fields = application.manifest.configuration.filter((field) => field.mutable);
+  if (fields.length === 0) {
+    return (
+      <EmptyState
+        title="No mutable configuration"
+        detail="This Application manifest exposes no user-editable configuration fields."
+      />
+    );
+  }
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const configuration: Record<string, JsonValue> = {};
+    for (const field of fields) {
+      configuration[field.name] = parseApplicationConfigurationValue(
+        field,
+        String(form.get(field.name) ?? ""),
+      );
+    }
+    onConfigure(configuration);
+  };
+
+  return (
+    <form className="form-grid" onSubmit={submit}>
+      {fields.map((field) => (
+        <ApplicationConfigurationInput
+          key={field.name}
+          field={field}
+          value={instance.configuration[field.name] ?? field.default}
+          disabled={busy || instance.desired_state === "removed" || instance.observed_state === "removed"}
+        />
+      ))}
+      <button
+        className="primary"
+        type="submit"
+        disabled={busy || instance.desired_state === "removed" || instance.observed_state === "removed"}
+      >
+        {busy ? "Saving…" : "Save configuration"}
+      </button>
+    </form>
+  );
+}
+
+function ApplicationConfigurationInput({
+  field,
+  value,
+  disabled,
+}: {
+  field: CanonicalApplicationConfigurationField;
+  value: JsonValue;
+  disabled: boolean;
+}) {
+  if (field.value_type === "boolean") {
+    return (
+      <label>
+        {field.name}
+        <select
+          name={field.name}
+          disabled={disabled}
+          defaultValue={value === true ? "true" : "false"}
+        >
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+        <small>{applicationConfigurationHint(field)}</small>
+      </label>
+    );
+  }
+
+  return (
+    <label>
+      {field.name}
+      <input
+        name={field.name}
+        disabled={disabled}
+        required={field.required}
+        type={field.value_type === "string" ? "text" : "number"}
+        step={field.value_type === "integer" ? "1" : field.value_type === "number" ? "any" : undefined}
+        defaultValue={value === null ? "" : String(value)}
+      />
+      <small>{applicationConfigurationHint(field)}</small>
+    </label>
+  );
+}
+
+export function parseApplicationConfigurationValue(
+  field: CanonicalApplicationConfigurationField,
+  raw: string,
+): JsonValue {
+  if (!raw.trim()) {
+    if (field.required) throw new Error(`Configuration field ${field.name} is required`);
+    return null;
+  }
+  if (field.value_type === "string") return raw;
+  if (field.value_type === "boolean") {
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    throw new Error(`Configuration field ${field.name} must be true or false`);
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Configuration field ${field.name} must be a finite number`);
+  }
+  if (field.value_type === "integer" && !Number.isInteger(value)) {
+    throw new Error(`Configuration field ${field.name} must be an integer`);
+  }
+  return value;
+}
+
+function applicationConfigurationHint(field: CanonicalApplicationConfigurationField): string {
+  const parts = [field.value_type, field.required ? "required" : "optional"];
+  if (field.environment_variable) parts.push(`runtime env ${field.environment_variable}`);
+  return parts.join(" · ");
 }
 
 export function applicationActionState(instance: CanonicalApplicationInstance) {
