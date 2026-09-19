@@ -71,6 +71,19 @@ kind expansion. This branch therefore consumes those implementations instead of 
 | Research Evidence (#589) | **OWNER GAP** | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP | canonical owner exists | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP |
 | Decision Records (#598) | **OWNER GAP** | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP | canonical owner exists | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP |
 
+## Pending / mutation-state audit
+
+The requested table keeps the exact columns from the #1234 audit prompt, so mutation-pending state is
+recorded separately. The maintained mutation-heavy surfaces inspected in this pass (including
+Onboarding, Tasks, Repositories, Models, Compute, Integrations, Plugins, Templates, Memory,
+Knowledge, Automations, Approvals, Verification, Applications and Organizations) use explicit
+busy/pending state and release it from `finally` paths after both success and failure. Controls are
+disabled or relabelled while the mutation is in flight where the owning page exposes an action.
+
+No common "stuck busy" pattern was found that justified a second lifecycle abstraction. This branch
+therefore keeps pending state page-local while fixing the actual shared stuck-state gap: failed
+manifest discovery can now recover in-place.
+
 ## Cross-cutting findings closed in this branch
 
 ### 1. Unknown routes were conflated with unavailable optional subsystems
