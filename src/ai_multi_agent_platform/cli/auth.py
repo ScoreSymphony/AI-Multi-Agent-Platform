@@ -491,9 +491,6 @@ def _execute_approval(
     current = client.get(f"/approvals/{approval_id}")
     approval = _object_body(current)
     digest = _body_string(approval, "requested_action_digest")
-    status = _body_string(approval, "status")
-    if status != "pending":
-        raise ProfileError(f"approval is not pending: {status}")
     action = _body_string(approval, "action")
     resource_type = _body_string(approval, "resource_type")
     resource_id = _body_string(approval, "resource_id")

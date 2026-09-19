@@ -35,7 +35,9 @@ def test_client_consistency_scenarios_bind_task_run_result_parity() -> None:
     assert (
         "test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error" in cli_command
     )
-    assert "test_cli_preserves_not_found_and_conflict_error_categories" in cli_command
+    assert "test_cli_preserves_shared_canonical_core_error_semantics" in cli_command
+    assert "test_approval_cli_deny_and_expired_conflict_paths" in cli_command
+    assert "test_cli_status_doctor_project_workspace_and_canonical_error_output" in cli_command
     assert "test_cli_and_public_api_share_the_same_canonical_task_state" in cli_command
     assert "test_cli_and_public_api_share_pagination_filter_sort_semantics" in cli_command
     assert "test_cli_surfaces_canonical_authorization_denial" in cli_command
@@ -44,4 +46,5 @@ def test_client_consistency_scenarios_bind_task_run_result_parity() -> None:
     web_command = " ".join(web.command)
     assert "src/api/canonicalStateParity.test.ts" in web_command
     assert "src/api/errorPresentation.test.ts" in web_command
+    assert "src/api/approvals.test.ts" in web_command
     assert "src/api/onboarding.multiAgent.test.ts" in web_command
