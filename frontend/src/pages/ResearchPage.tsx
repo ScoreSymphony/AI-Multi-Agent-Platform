@@ -16,6 +16,7 @@ import { PaginationControls } from "../components/Pagination";
 import {
   CanonicalId,
   Card,
+  DegradedState,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -145,6 +146,7 @@ export function ResearchDetailPage({
   const [claims, setClaims] = useState<CanonicalResearchClaim[]>([]);
   const [evidence, setEvidence] = useState<CanonicalResearchEvidence[]>([]);
   const [linkedDecisions, setLinkedDecisions] = useState<CanonicalDecisionRecord[]>([]);
+  const [decisionError, setDecisionError] = useState<unknown>(null);
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
@@ -156,10 +158,9 @@ export function ResearchDetailPage({
         Promise.all(current.evidence_ids.map((id) => client.getEvidence(id))),
       ]);
       const observationIds = [...new Set(nextSources.flatMap((source) => source.observation_ids))];
-      const [nextObservations, decisionInventory] = await Promise.all([
-        Promise.all(observationIds.map((id) => client.getObservation(id))),
-        listAllDecisions(decisions),
-      ]);
+      const nextObservations = await Promise.all(
+        observationIds.map((id) => client.getObservation(id)),
+      );
       const researchIds = new Set([
         current.id,
         ...current.claim_ids,
@@ -170,10 +171,18 @@ export function ResearchDetailPage({
       setClaims(nextClaims);
       setEvidence(nextEvidence);
       setObservations(nextObservations);
-      setLinkedDecisions(
-        decisionInventory.filter((decision) => decisionReferencesAny(decision, researchIds)),
-      );
       setError(null);
+
+      try {
+        const decisionInventory = await listAllDecisions(decisions);
+        setLinkedDecisions(
+          decisionInventory.filter((decision) => decisionReferencesAny(decision, researchIds)),
+        );
+        setDecisionError(null);
+      } catch (nextDecisionError) {
+        setLinkedDecisions([]);
+        setDecisionError(nextDecisionError);
+      }
     } catch (nextError) {
       setError(nextError);
     }
@@ -317,7 +326,12 @@ export function ResearchDetailPage({
       </Card>
 
       <Card title="Downstream Decision Records">
-        {linkedDecisions.length ? (
+        {decisionError ? (
+          <DegradedState
+            title="Decision history unavailable"
+            detail="Canonical Research Evidence remains available, but the optional Decision Record projection could not be loaded."
+          />
+        ) : linkedDecisions.length ? (
           <ul className="reference-list">
             {linkedDecisions.map((decision) => (
               <li key={decision.id}>
