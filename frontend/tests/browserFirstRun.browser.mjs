@@ -440,6 +440,12 @@ try {
   if (!producedResultHref?.startsWith("/results/")) {
     throw new Error(`Produced Result link did not expose a canonical Result route: ${producedResultHref}`);
   }
+  const createdTask = tasksAfterSuccess.find(
+    (task) => !tasksBeforeFailure.some((before) => before.id === task.id),
+  );
+  if (!createdTask) {
+    throw new Error("Official browser first run did not expose the newly created canonical Task");
+  }
 
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
   await (await waitForButton(page, "Bootstrap standard Agents")).click();
@@ -483,6 +489,40 @@ try {
   // Completed setup survives reload and no longer routes back to onboarding.
   await page.reload();
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+
+  // #1234 consumes the maintained #1164 browser harness for representative cross-domain
+  // navigation. Deep-linked canonical detail state must survive reload, Search filters must
+  // survive reload/back navigation, and an unknown URL must remain distinct from an optional
+  // provider/resource-unavailable state.
+  const taskPath = `/tasks/${encodeURIComponent(createdTask.id)}`;
+  await page.goto(`${frontendUrl}${taskPath}`);
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.reload();
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+
+  const searchPath = "/search?q=Browser&types=task";
+  await page.goto(`${frontendUrl}${searchPath}`);
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query was not restored from the deep-link URL");
+  }
+  if ((await page.locator('input[name="types"]').inputValue()) !== "task") {
+    throw new Error("Global Search type filter was not restored from the deep-link URL");
+  }
+  await page.reload();
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query did not survive browser reload");
+  }
+
+  await page.goto(`${frontendUrl}/definitely-missing-route`);
+  await page.getByRole("heading", { name: "Page not found", exact: true }).waitFor();
+  await page.getByRole("link", { name: "Return to platform overview", exact: true }).waitFor();
+  await page.goBack();
+  await page.waitForURL(`${frontendUrl}${searchPath}`);
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query did not survive browser Back navigation");
+  }
 
   const bootstrapStatus = await page.evaluate(async () => {
     const response = await fetch("/api/v1/auth/bootstrap-status");
