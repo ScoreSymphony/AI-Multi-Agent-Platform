@@ -176,6 +176,7 @@ export function ComputeNodeDetailPage({ client, nodeId }: { client: ComputeClien
         <p><CanonicalId value={node.id} /></p>
       </header>
       {actionError ? <ErrorState error={actionError} /> : null}
+      {busy ? <p role="status">Applying canonical Node administration command…</p> : null}
 
       <Card title="Runtime state">
         <dl className="detail-grid">
@@ -292,6 +293,7 @@ export function ComputeWorkerDetailPage({
         <p>{worker.worker_type}</p>
       </header>
       {actionError ? <ErrorState error={actionError} /> : null}
+      {busy ? <p role="status">Applying canonical Worker administration command…</p> : null}
 
       <Card title="Runtime state">
         <dl className="detail-grid">
