@@ -141,6 +141,7 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
         <p>Creation requires an explicit canonical scope ID, origin and Memory Type. For Project-scoped Memory use <code>workspace</code> with the canonical Project ID as the scope ID.</p>
         <p className="muted"><code>unclassified</code> is available only as an explicit legacy/import compatibility choice; normal interactive creation should select the semantic type that actually applies.</p>
         {actionError ? <ErrorState error={actionError} /> : null}
+        {creating ? <p role="status">Creating canonical Memory…</p> : null}
         <MemoryCreateForm disabled={creating} onSubmit={createMemory} />
         {created ? <p role="status">Created <AppLink href={`/memory/${encodeURIComponent(created.id)}`}><CanonicalId value={created.id} /></AppLink>{" · type "}<code>{created.memory_type}</code></p> : null}
       </Card>
