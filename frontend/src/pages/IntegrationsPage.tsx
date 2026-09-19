@@ -95,7 +95,8 @@ export function IntegrationsPage({ client }: { client: IntegrationsClient }) {
       <Card title="Connector definitions">
         <p>Versioned capabilities and configuration contracts advertised by registered connector providers.</p>
         {definitionError ? <ErrorState error={definitionError} onRetry={() => void loadDefinitions()} /> : null}
-        {!definitions ? <LoadingState label="Loading Connector Definitions…" /> : (
+        {!definitions && !definitionError ? <LoadingState label="Loading Connector Definitions…" /> : null}
+        {definitions ? (
           <>
             <DefinitionTable definitions={definitions.items} />
             <PaginationControls
@@ -107,13 +108,14 @@ export function IntegrationsPage({ client }: { client: IntegrationsClient }) {
               onNext={() => definitionPagination.next(definitions.next_cursor)}
             />
           </>
-        )}
+        ) : null}
       </Card>
 
       <Card title="Connections">
         <p>Configured canonical accounts/endpoints with safe metadata and secret references only.</p>
         {connectionError ? <ErrorState error={connectionError} onRetry={() => void loadConnections()} /> : null}
-        {!connections ? <LoadingState label="Loading Connections…" /> : (
+        {!connections && !connectionError ? <LoadingState label="Loading Connections…" /> : null}
+        {connections ? (
           <>
             <ConnectionTable connections={connections.items} />
             <PaginationControls
@@ -125,7 +127,7 @@ export function IntegrationsPage({ client }: { client: IntegrationsClient }) {
               onNext={() => connectionPagination.next(connections.next_cursor)}
             />
           </>
-        )}
+        ) : null}
       </Card>
 
       <Card title="Create connection">
@@ -177,6 +179,10 @@ export function ConnectorDefinitionDetailPage({
         <p className="eyebrow">Integrations / Definition</p>
         <h1>{definition.name}</h1>
         <p><CanonicalId value={definition.id} /> · {definition.connector_type_id}@{definition.version}</p>
+        <div className="button-row">
+          <AppLink href="/integrations">Back to Integrations</AppLink>
+          <button type="button" onClick={() => void load()}>Refresh</button>
+        </div>
       </header>
 
       <Card title="Declared surface">
@@ -297,6 +303,7 @@ export function ConnectionDetailPage({
         <p className="eyebrow">Integrations / Connection</p>
         <h1>{connection.display_name}</h1>
         <p><CanonicalId value={connection.id} /></p>
+        <AppLink href="/integrations">Back to Integrations</AppLink>
       </header>
       {actionError ? <ErrorState error={actionError} /> : null}
 

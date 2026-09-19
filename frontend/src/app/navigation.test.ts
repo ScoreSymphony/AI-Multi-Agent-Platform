@@ -97,6 +97,8 @@ describe("#1234 V1 Web navigation coverage", () => {
     expect(navigationItemForPath("/workflows/workflow_1")?.path).toBe("/templates");
     expect(navigationItemForPath("/models/providers/provider_1")?.path).toBe("/models");
     expect(navigationItemForPath("/import-export/previews/preview_1")?.path).toBe("/import-export");
+    expect(navigationItemForPath("/marketplace/items/official%3A%3Aagent.example%401.0.0")?.path).toBe("/marketplace");
+    expect(navigationItemForPath("/integrations/connections/connection_1")?.path).toBe("/integrations");
     expect(navigationItemForPath("/events/task_older")?.path).toBe("/events");
     expect(navigationItemForPath("/observability/task_older")?.path).toBe("/observability");
     expect(navigationItemForPath("/unknown/thing")).toBeUndefined();
