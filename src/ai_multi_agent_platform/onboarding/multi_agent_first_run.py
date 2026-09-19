@@ -7,7 +7,6 @@ from typing import Any
 from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
-from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.data import FileProvider
 from ai_multi_agent_platform.domain import TaskStatus
 from ai_multi_agent_platform.planning import PlanningService, ProposalStatus
@@ -36,7 +35,6 @@ class MultiAgentFirstRunService:
         onboarding: OnboardingService,
         kernel: Any,
         planning: PlanningService,
-        scopes: ScopeStore,
         agents: AgentService,
         authorization: Any,
         coordination: Any,
@@ -47,7 +45,6 @@ class MultiAgentFirstRunService:
         self._onboarding = onboarding
         self._kernel = kernel
         self._planning = planning
-        self._scopes = scopes
         self._agents = agents
         self._authorization = authorization
         self._coordination = coordination
@@ -65,9 +62,9 @@ class MultiAgentFirstRunService:
         objective = _required_string(payload, "objective")
         owner = require_owner(context)
         self._require_model(context)
+        scope_projection = await self._onboarding.first_run_path_projection_async(context)
         project_id, workspace_id = resolve_scope(
-            self._scopes,
-            owner,
+            scope_projection,
             project_id=_optional_string(payload, "project_id"),
             workspace_id=_optional_string(payload, "workspace_id"),
         )
