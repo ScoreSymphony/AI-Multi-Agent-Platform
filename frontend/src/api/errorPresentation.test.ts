@@ -47,4 +47,59 @@ describe("canonical frontend error presentation", () => {
     expect(presentation.title).toBe("Access denied");
     expect(presentation.reference).toBeUndefined();
   });
+
+  it("distinguishes stale deep links and validation failures from backend outages", () => {
+    expect(
+      describeError(controlPlaneError(404, {
+        code: "not_found",
+        category: "request",
+        message: "resource missing",
+      })).title,
+    ).toBe("Not found");
+    expect(
+      describeError(controlPlaneError(422, {
+        code: "invalid_request",
+        category: "request",
+        message: "invalid value",
+      })).title,
+    ).toBe("Validation failed");
+    expect(
+      describeError(controlPlaneError(409, {
+        code: "conflict",
+        category: "request",
+        message: "revision changed",
+      })).title,
+    ).toBe("State changed");
+  });
+
+  it("does not misclassify an unsupported 400 response as validation", () => {
+    const presentation = describeError(controlPlaneError(400, {
+      code: "unsupported_capability",
+      category: "contract",
+      message: "semantic search unavailable",
+    }));
+    expect(presentation.title).toBe("Request failed");
+  });
+
+  it("labels model unavailability as a subsystem outage", () => {
+    const presentation = describeError(controlPlaneError(503, {
+      code: "model_unavailable",
+      category: "provider",
+      message: "local model is offline",
+      retryable: true,
+    }));
+    expect(presentation.title).toBe("Subsystem unavailable");
+    expect(presentation.hint).toContain("retryable");
+  });
+
+  it("labels transport failures as Control Plane availability failures", () => {
+    const presentation = describeError(controlPlaneError(0, {
+      code: "network_failure",
+      category: "transport",
+      message: "network request failed",
+      retryable: true,
+    }));
+    expect(presentation.title).toBe("Control Plane unavailable");
+    expect(presentation.hint).toContain("retried");
+  });
 });

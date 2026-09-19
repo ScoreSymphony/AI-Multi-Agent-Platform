@@ -1,5 +1,6 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ControlPlaneError } from "../../api/client";
 import { describe, expect, it, vi } from "vitest";
 import {
   AutomationClient,
@@ -18,6 +19,17 @@ vi.mock("../../app/router", () => ({
     <a href={href} {...rest}>{children}</a>
   ),
 }));
+
+function retryableBackendError(message: string): ControlPlaneError {
+  return new ControlPlaneError(503, {
+    code: "unavailable",
+    category: "backend",
+    message,
+    request_id: "request_regression_retry",
+    correlation_id: "correlation_regression_retry",
+    retryable: true,
+  });
+}
 
 function automation(overrides: Partial<CanonicalAutomation> = {}): CanonicalAutomation {
   return {
@@ -121,7 +133,7 @@ describe("Automations page regression coverage", () => {
     )).toContain("Loading…");
 
     const errorMarkup = renderToStaticMarkup(
-      <AutomationInventoryState page={null} error={new Error("control plane unavailable")} onRetry={retry} />,
+      <AutomationInventoryState page={null} error={retryableBackendError("control plane unavailable")} onRetry={retry} />,
     );
     expect(errorMarkup).toContain('role="alert"');
     expect(errorMarkup).toContain("control plane unavailable");

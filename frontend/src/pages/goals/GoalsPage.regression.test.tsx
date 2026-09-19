@@ -1,8 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { ControlPlaneError } from "../../api/client";
 import { describe, expect, it, vi } from "vitest";
 import { GoalClient, type CanonicalGoal } from "../../api/goals";
 import type { Page } from "../../api/types";
 import { GoalInventoryState, GoalsPage } from "./GoalsPage";
+
+function retryableBackendError(message: string): ControlPlaneError {
+  return new ControlPlaneError(503, {
+    code: "unavailable",
+    category: "backend",
+    message,
+    request_id: "request_regression_retry",
+    correlation_id: "correlation_regression_retry",
+    retryable: true,
+  });
+}
 
 function page(items: CanonicalGoal[] = []): Page<CanonicalGoal> {
   return { items, next_cursor: null, total: items.length, limit: 50 };
@@ -32,7 +44,7 @@ describe("Goals route regression coverage", () => {
     )).toContain("Loading…");
 
     const errorMarkup = renderToStaticMarkup(
-      <GoalInventoryState page={null} error={new Error("goal service unavailable")} onRetry={retry} />,
+      <GoalInventoryState page={null} error={retryableBackendError("goal service unavailable")} onRetry={retry} />,
     );
     expect(errorMarkup).toContain('role="alert"');
     expect(errorMarkup).toContain("goal service unavailable");

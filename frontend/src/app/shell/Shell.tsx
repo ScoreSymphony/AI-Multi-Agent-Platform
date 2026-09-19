@@ -18,6 +18,7 @@ export function Shell() {
   const clients = useShellClients(baseUrl);
   const [manifest, setManifest] = useState<APImanifest | null>(null);
   const [manifestState, setManifestState] = useState<ManifestState>("loading");
+  const [manifestError, setManifestError] = useState<unknown>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [bootstrapStatus, setBootstrapStatus] = useState<FirstUserBootstrapStatus | null>(null);
   const [bootstrapChecked, setBootstrapChecked] = useState(false);
@@ -78,21 +79,30 @@ export function Shell() {
     });
   }, [bootstrapStatus, loadAuthenticatedState, navigate, path]);
 
+  const loadManifest = useCallback(async () => {
+    if (!authenticated) return;
+    setManifestState("loading");
+    setManifestError(null);
+    try {
+      const loadedManifest = await clients.client.manifest();
+      setManifest(loadedManifest);
+      setManifestState("ready");
+    } catch (error) {
+      setManifest(null);
+      setManifestError(error);
+      setManifestState("unavailable");
+    }
+  }, [authenticated, clients.client]);
+
   useEffect(() => {
     if (!authenticated) {
       setManifest(null);
+      setManifestError(null);
       setManifestState("loading");
       return;
     }
-    setManifestState("loading");
-    void clients.client.manifest().then((loadedManifest) => {
-      setManifest(loadedManifest);
-      setManifestState("ready");
-    }).catch(() => {
-      setManifest(null);
-      setManifestState("unavailable");
-    });
-  }, [authenticated, clients.client]);
+    void loadManifest();
+  }, [authenticated, loadManifest]);
 
   useEffect(() => setMenuOpen(false), [path]);
 
@@ -147,6 +157,8 @@ export function Shell() {
       onToggleMenu={() => setMenuOpen((value) => !value)}
       manifest={manifest}
       manifestState={manifestState}
+      manifestError={manifestError}
+      onManifestRetry={() => void loadManifest()}
       clients={clients}
       content={content}
     />

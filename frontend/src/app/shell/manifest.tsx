@@ -20,6 +20,7 @@ export function ManifestResourcePage({
   resource: string;
   children: ReactNode;
 }) {
+  if (state === "unavailable" && manifest === null) return null;
   const resourceState = resource === "templates"
     ? templateManifestState(state, manifest)
     : manifestResourceState(state, manifest, resource);
@@ -43,6 +44,7 @@ export function ManifestResourcesPage({
   resources: readonly string[];
   children: ReactNode;
 }) {
+  if (state === "unavailable" && manifest === null) return null;
   const resourceState = manifestResourcesState(state, manifest, resources);
   if (resourceState === "loading") return <LoadingState label={`Checking ${label} availability…`} />;
   if (resourceState === "unavailable") {

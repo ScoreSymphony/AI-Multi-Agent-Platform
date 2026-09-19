@@ -620,6 +620,12 @@ try {
       `Browser Artifact deep links diverged from canonical IDs: browser=${JSON.stringify(artifactHrefs)} expected=${JSON.stringify(expectedArtifactHrefs)}`,
     );
   }
+  const createdTask = tasksAfterSuccess.find(
+    (task) => !tasksBeforeFailure.some((before) => before.id === task.id),
+  );
+  if (!createdTask) {
+    throw new Error("Official browser first run did not expose the newly created canonical Task");
+  }
 
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
   const standardBootstrapResponsePromise = page.waitForResponse(
@@ -768,6 +774,117 @@ try {
   await page.goto(frontendUrl);
   await signIn(page);
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+
+  // Keep representative cross-domain navigation in the maintained browser-first-run harness.
+  // Historical context: #1234 consumes #1164 rather than creating a competing E2E architecture.
+  // Deep-linked canonical detail state must survive reload, Search filters must
+  // survive reload/back navigation, and an unknown URL must remain distinct from an optional
+  // provider/resource-unavailable state.
+  const taskPath = `/tasks/${encodeURIComponent(createdTask.id)}`;
+  await page.goto(`${frontendUrl}${taskPath}`);
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
+  await page.reload();
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
+
+  const searchPath = "/search?q=Browser&types=task";
+  await page.goto(`${frontendUrl}${searchPath}`);
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query was not restored from the deep-link URL");
+  }
+  if ((await page.locator('input[name="types"]').inputValue()) !== "task") {
+    throw new Error("Global Search type filter was not restored from the deep-link URL");
+  }
+  await page.reload();
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query did not survive browser reload");
+  }
+
+  await page.goto(`${frontendUrl}/definitely-missing-route`);
+  await page.getByRole("heading", { name: "Page not found", exact: true }).waitFor();
+  await page.getByRole("link", { name: "Return to platform overview", exact: true }).waitFor();
+  await page.goBack();
+  await page.waitForURL(`${frontendUrl}${searchPath}`);
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query did not survive browser Back navigation");
+  }
+
+  // A direct deep link with revoked/insufficient permission must fail closed as Access denied,
+  // not as an empty resource or a retryable provider outage.
+  const taskDetailApi = `**/api/v1/tasks/${createdTask.id}`;
+  const denyTaskDetail = async (route) => {
+    await route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "forbidden",
+        category: "authorization",
+        message: "browser acceptance permission denial",
+        request_id: "request_browser_permission_denied",
+        correlation_id: "correlation_browser_permission_denied",
+        retryable: false,
+      }),
+    });
+  };
+  await page.route(taskDetailApi, denyTaskDetail);
+  await page.goto(`${frontendUrl}${taskPath}`);
+  const deniedAlert = page.getByRole("alert").filter({ hasText: "Access denied" });
+  await deniedAlert.waitFor();
+  if ((await deniedAlert.getByRole("button", { name: "Retry", exact: true }).count()) !== 0) {
+    throw new Error("Non-retryable permission denial exposed a Retry action");
+  }
+  await page.unroute(taskDetailApi, denyTaskDetail);
+
+  // A resource that disappeared behind a once-valid deep link must be an explicit Not found state.
+  const missingTaskDetail = async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "not_found",
+        category: "request",
+        message: "browser acceptance resource missing",
+        request_id: "request_browser_not_found",
+        correlation_id: "correlation_browser_not_found",
+        retryable: false,
+      }),
+    });
+  };
+  await page.route(taskDetailApi, missingTaskDetail);
+  await page.reload();
+  const missingAlert = page.getByRole("alert").filter({ hasText: "Not found" });
+  await missingAlert.waitFor();
+  if ((await missingAlert.getByRole("button", { name: "Retry", exact: true }).count()) !== 0) {
+    throw new Error("Non-retryable missing-resource state exposed a Retry action");
+  }
+  await page.unroute(taskDetailApi, missingTaskDetail);
+  await page.reload();
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
+
+  // Force both transport attempts for manifest discovery to fail once. The maintained shell must
+  // expose a retryable Control Plane outage and recover in-place when the next manifest read works.
+  let manifestFailures = 0;
+  const manifestApi = "**/api/v1/";
+  const failManifestTemporarily = async (route) => {
+    if (manifestFailures < 2) {
+      manifestFailures += 1;
+      await route.abort("connectionfailed");
+      return;
+    }
+    await route.continue();
+  };
+  await page.route(manifestApi, failManifestTemporarily);
+  await page.goto(`${frontendUrl}/tools`);
+  const manifestAlert = page.getByRole("alert").filter({ hasText: "Control Plane unavailable" });
+  await manifestAlert.waitFor();
+  await manifestAlert.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.locator(".api-indicator").filter({ hasText: "/api/v1" }).waitFor();
+  await manifestAlert.waitFor({ state: "detached" });
+  await page.unroute(manifestApi, failManifestTemporarily);
 } catch (error) {
   await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
   if (page) {

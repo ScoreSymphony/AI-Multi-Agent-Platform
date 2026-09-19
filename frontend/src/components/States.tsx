@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { isControlPlaneError } from "../api/client";
-import { describeError } from "../api/errorPresentation";
+import { canRetryError, describeError } from "../api/errorPresentation";
 import { compactCanonicalId } from "../platform/id";
 
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
@@ -34,7 +34,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
       {presentation.hint && <p>{presentation.hint}</p>}
       {presentation.reference && <p>Reference <CanonicalId value={presentation.reference} /></p>}
       {isControlPlaneError(error) && <small>Request {error.body.request_id}</small>}
-      {onRetry && <button onClick={onRetry}>Retry</button>}
+      {onRetry && canRetryError(error) ? <button onClick={onRetry}>Retry</button> : null}
     </div>
   );
 }

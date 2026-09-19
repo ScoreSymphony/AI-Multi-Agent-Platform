@@ -31,7 +31,7 @@ describe("Usage failure presentation", () => {
     expect(html).toContain("usage-budgets");
     expect(html).toContain("Access denied");
     expect(html).toContain("Budget visibility denied");
-    expect(html).toContain(">Retry</button>");
+    expect(html).not.toContain(">Retry</button>");
   });
 
   it("preserves unavailable/retryable semantics without hiding healthy collections", () => {
@@ -49,5 +49,6 @@ describe("Usage failure presentation", () => {
     expect(html).toContain("Accounting backend offline");
     expect(html).toContain("reports this failure as retryable");
     expect(html).toContain("Available accounting collections remain usable");
+    expect(html).toContain(">Retry</button>");
   });
 });
