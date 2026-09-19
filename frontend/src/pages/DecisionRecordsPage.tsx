@@ -27,14 +27,23 @@ interface DecisionFilters {
   status?: string;
 }
 
-export function DecisionRecordsPage({ client }: { client: DecisionRecordClient }) {
+export function DecisionRecordsPage({
+  client,
+  commands = [],
+}: {
+  client: DecisionRecordClient;
+  commands?: readonly string[];
+}) {
   const { search, navigate } = useRouter();
   const filters = useMemo(() => decisionFiltersFromQuery(search), [search]);
   const queryKey = useMemo(() => JSON.stringify(filters), [filters]);
   const pagination = useCursorPagination(queryKey);
   const [page, setPage] = useState<Page<CanonicalDecisionRecord> | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const commandSet = useMemo(() => new Set(commands), [commands]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,6 +79,53 @@ export function DecisionRecordsPage({ client }: { client: DecisionRecordClient }
     navigate(decisionFiltersToPath(new FormData(event.currentTarget)));
   };
 
+  const createDecision = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setCreating(true);
+    setActionError(null);
+    try {
+      const evidenceKind = optionalFormValue(form, "evidence_kind");
+      const evidenceId = optionalFormValue(form, "evidence_id");
+      if ((evidenceKind === undefined) !== (evidenceId === undefined)) {
+        throw new Error("Evidence kind and Evidence ID must be supplied together.");
+      }
+      const outcome = requiredFormValue(form, "outcome");
+      const created = await client.create({
+        title: requiredFormValue(form, "title"),
+        subject: requiredFormValue(form, "subject"),
+        category: requiredFormValue(form, "category"),
+        scope_type: requiredFormValue(form, "scope_type"),
+        scope_id: optionalFormValue(form, "scope_id") ?? null,
+        question: requiredFormValue(form, "question"),
+        alternatives: [{
+          label: requiredFormValue(form, "alternative"),
+          status: ["adopt", "experimental", "custom"].includes(outcome) ? "selected" : "considered",
+          resource_ref: null,
+          evidence_refs: [],
+          trade_offs: [],
+          unknowns: [],
+        }],
+        outcome,
+        rationale: requiredFormValue(form, "rationale"),
+        evidence_refs: evidenceKind && evidenceId
+          ? [{ kind: evidenceKind, resource_id: evidenceId, revision: null, digest: null, locator: null, metadata: {} }]
+          : [],
+        evaluation_refs: [],
+        finding_refs: [],
+        cost_resource_refs: [],
+        reviewer_refs: [],
+        approval_ref: null,
+        adr_ref: null,
+      });
+      navigate(`/decisions/${encodeURIComponent(created.id)}`);
+    } catch (nextError) {
+      setActionError(nextError);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="stack">
       <header className="page-header">
@@ -81,6 +137,33 @@ export function DecisionRecordsPage({ client }: { client: DecisionRecordClient }
           or activates its subject by itself.
         </p>
       </header>
+
+      {commandSet.has("decision-record.create") ? (
+        <Card title="Create Decision Record">
+          {actionError ? <ErrorState error={actionError} /> : null}
+          <form className="form-grid" onSubmit={(event) => void createDecision(event)}>
+            <label>Title<input name="title" required /></label>
+            <label>Subject<input name="subject" required /></label>
+            <label>Category<input name="category" required /></label>
+            <label>Scope type<input name="scope_type" defaultValue="platform" required /></label>
+            <label>Scope ID<input name="scope_id" placeholder="optional" /></label>
+            <label>Question<textarea name="question" required /></label>
+            <label>Considered alternative<input name="alternative" required /></label>
+            <label>
+              Outcome
+              <select name="outcome" defaultValue="adopt">
+                {["adopt","reject","defer","experimental","custom"].map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+            <label>Rationale<textarea name="rationale" required /></label>
+            <label>Evidence kind<input name="evidence_kind" placeholder="optional, e.g. research-evidence" /></label>
+            <label>Evidence ID<input name="evidence_id" placeholder="optional exact canonical ID" /></label>
+            <button className="primary" disabled={creating}>
+              {creating ? "Creating…" : "Create Decision Record"}
+            </button>
+          </form>
+        </Card>
+      ) : null}
 
       <Card title="Decision filters">
         <form className="form-grid" onSubmit={submit}>
@@ -135,12 +218,17 @@ export function DecisionRecordsPage({ client }: { client: DecisionRecordClient }
 export function DecisionRecordDetailPage({
   client,
   decisionRecordId,
+  commands = [],
 }: {
   client: DecisionRecordClient;
   decisionRecordId: string;
+  commands?: readonly string[];
 }) {
   const [decision, setDecision] = useState<CanonicalDecisionRecord | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const commandSet = useMemo(() => new Set(commands), [commands]);
 
   const load = useCallback(async () => {
     try {
@@ -154,6 +242,48 @@ export function DecisionRecordDetailPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const supersede = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!decision) return;
+    const form = new FormData(event.currentTarget);
+    setBusyAction("supersede");
+    setActionError(null);
+    try {
+      const replacement = await client.supersede(
+        decision.id,
+        decisionMutationPayload(decision, {
+          title: requiredFormValue(form, "title"),
+          question: requiredFormValue(form, "question"),
+          rationale: requiredFormValue(form, "rationale"),
+        }),
+      );
+      setDecision(replacement);
+    } catch (nextError) {
+      setActionError(nextError);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const withdraw = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!decision) return;
+    const form = new FormData(event.currentTarget);
+    const reason = requiredFormValue(form, "reason");
+    if (!window.confirm(`Withdraw Decision Record "${decision.title}"? This appends a canonical withdrawal relation.`)) {
+      return;
+    }
+    setBusyAction("withdraw");
+    setActionError(null);
+    try {
+      setDecision(await client.withdraw(decision.id, reason));
+    } catch (nextError) {
+      setActionError(nextError);
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   if (error && !decision) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!decision) return <LoadingState label="Loading Decision Record…" />;
@@ -174,6 +304,36 @@ export function DecisionRecordDetailPage({
       </header>
 
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {actionError ? <ErrorState error={actionError} /> : null}
+
+      {decision.status === "current" && (
+        commandSet.has("decision-record.supersede") || commandSet.has("decision-record.withdraw")
+      ) ? (
+        <Card title="Decision lifecycle">
+          <div className="grid-two">
+            {commandSet.has("decision-record.supersede") ? (
+              <form className="form-grid" onSubmit={(event) => void supersede(event)}>
+                <h3>Supersede</h3>
+                <label>Replacement title<input name="title" defaultValue={decision.title} required /></label>
+                <label>Question<textarea name="question" defaultValue={decision.question} required /></label>
+                <label>Rationale<textarea name="rationale" defaultValue={decision.rationale} required /></label>
+                <button disabled={busyAction !== null}>
+                  {busyAction === "supersede" ? "Superseding…" : "Create superseding Decision"}
+                </button>
+              </form>
+            ) : null}
+            {commandSet.has("decision-record.withdraw") ? (
+              <form className="form-grid" onSubmit={(event) => void withdraw(event)}>
+                <h3>Withdraw</h3>
+                <label>Reason<textarea name="reason" required /></label>
+                <button className="danger" disabled={busyAction !== null}>
+                  {busyAction === "withdraw" ? "Withdrawing…" : "Withdraw Decision"}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid-two">
         <Card title="Decision">
@@ -326,6 +486,58 @@ function referencePath(reference: DecisionReference): string | null {
     default:
       return null;
   }
+}
+
+function decisionMutationPayload(
+  decision: CanonicalDecisionRecord,
+  changes: { title: string; question: string; rationale: string },
+): Record<string, import("../api/types").JsonValue> {
+  const reference = (value: DecisionReference | null) => value === null ? null : ({
+    kind: value.kind,
+    resource_id: value.resource_id,
+    revision: value.revision,
+    digest: value.digest,
+    locator: value.locator,
+    metadata: value.metadata,
+  });
+  return {
+    title: changes.title,
+    subject: decision.subject,
+    category: decision.category,
+    scope_type: decision.scope_type,
+    scope_id: decision.scope_id,
+    subject_ref: reference(decision.subject_ref),
+    question: changes.question,
+    alternatives: decision.alternatives.map((alternative) => ({
+      label: alternative.label,
+      status: alternative.status,
+      resource_ref: reference(alternative.resource_ref),
+      evidence_refs: alternative.evidence_refs.map(reference),
+      trade_offs: alternative.trade_offs,
+      unknowns: alternative.unknowns,
+    })),
+    outcome: decision.outcome,
+    rationale: changes.rationale,
+    evidence_refs: decision.evidence_refs.map(reference),
+    evaluation_refs: decision.evaluation_refs.map(reference),
+    finding_refs: decision.finding_refs.map(reference),
+    cost_resource_refs: decision.cost_resource_refs.map(reference),
+    reviewer_refs: decision.reviewer_refs,
+    approval_ref: reference(decision.approval_ref),
+    adr_ref: reference(decision.adr_ref),
+    review_at: decision.review_at,
+    review_condition: decision.review_condition,
+  };
+}
+
+function requiredFormValue(form: FormData, key: string): string {
+  const value = String(form.get(key) ?? "").trim();
+  if (!value) throw new Error(`${key} is required`);
+  return value;
+}
+
+function optionalFormValue(form: FormData, key: string): string | undefined {
+  return clean(String(form.get(key) ?? ""));
 }
 
 function decisionFiltersFromQuery(search: string): DecisionFilters {
