@@ -78,6 +78,9 @@ class ControlPlaneHealth:
             "available": descriptor.available,
             "readiness_state": provider_state.value,
         }
+        diagnostics = getattr(provider, "health_diagnostics", ())
+        if diagnostics:
+            payload["diagnostics"] = list(diagnostics)
         if dependencies:
             payload["dependencies"] = dependencies
         if probe_error is not None:

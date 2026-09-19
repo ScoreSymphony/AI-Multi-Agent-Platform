@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ai_multi_agent_platform.capability_assignments import (
+from ai_multi_agent_platform.capabilities.assignments import (
     CapabilityAssignmentAccessContext,
     CapabilityAssignmentContent,
     CapabilityAssignmentTarget,

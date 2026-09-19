@@ -140,6 +140,7 @@ def build_single_node_deployment(
         egress=egress,
         planning=planning,
     )
+    base.persistence_health.require_full_store_inventory()
     register_durable_template_environment(base, connector_foundation.registry)
     return _extend_base_deployment(
         base,
@@ -202,6 +203,7 @@ def _extend_base_deployment(
         observability_exporter=base.observability_exporter,
         telemetry=base.telemetry,
         health_provider=base.health_provider,
+        persistence_health=base.persistence_health,
         distributed_runtime=base.distributed_runtime,
         pre_authorization_lifecycle=base.pre_authorization_lifecycle,
         lifecycle_binding=base.lifecycle_binding,

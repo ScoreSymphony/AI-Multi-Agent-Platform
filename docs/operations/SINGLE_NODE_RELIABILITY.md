@@ -87,7 +87,12 @@ This slice deliberately distinguishes the outcomes already supported by the cano
 
 A reconciliation exception itself is fail-closed: `platform-server serve` does not open the HTTP serving path when a required recovery owner cannot complete its pass.
 
-Broader #707 work will extend this policy to additional session/materialization transient state, persistence failures and uncertain external side effects. Those must remain explicit instead of being collapsed into a generic `retry everything` rule.
+Broader #707 work extends this policy through focused follow-ups. #1155 owns the local
+persistence/filesystem slice documented in
+`docs/operations/PERSISTENCE_FAILURE_RECOVERY.md`: required persistence participates in
+readiness, crash-interrupted File/Workspace state is recovered only with ownership evidence, and
+unknown/corrupt canonical state remains fail-closed. Uncertain external side effects remain
+separate and must not be collapsed into a generic `retry everything` rule.
 
 ## Idempotency and fail-closed behavior
 
@@ -130,11 +135,10 @@ The reliability principle is intentionally stronger than "HA will recover it lat
 This startup slice does **not** close #707. Remaining reliability work includes, among other items:
 
 - graceful drain/shutdown hardening;
-- stale non-Worker session/materialization cleanup;
+- stale non-Worker session cleanup outside the #1155 File/Workspace storage slice;
 - explicit uncertain-side-effect recovery states;
-- persistence/filesystem fault injection and recovery;
-- provider/dependency failure isolation and bounded retries — owned by follow-up #1156;
+- provider/dependency failure isolation beyond persistence and bounded lifecycle retries — owned by follow-up #1156;
 - health/readiness integration while reconciliation is in progress — owned by follow-up #1156;
-- operator diagnostics beyond the startup report — owned by follow-up #1156;
+- operator diagnostics beyond startup/persistence diagnostics — owned by follow-up #1156;
 - repeated hard-kill/restart endurance testing;
-- reusable failure-injection fixtures and platform-conformance reliability evidence.
+- broader platform-conformance reliability evidence consuming the reusable #1155 fixtures.

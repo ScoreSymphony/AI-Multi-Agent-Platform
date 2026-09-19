@@ -387,18 +387,17 @@ class LocalWorkspaceProvider(WorkspaceProvider):
             if path.name in known:
                 continue
             try:
+                validate_id(path.name, "materialization")
+            except ValueError:
+                continue
+            try:
                 self._make_writable(path)
                 if path.is_dir() and not path.is_symlink():
                     shutil.rmtree(path)
                 else:
                     path.unlink(missing_ok=True)
-                validate_id(path.name, "materialization")
                 removed.append(path.name)
-            except (OSError, ValueError):
-                try:
-                    validate_id(path.name, "materialization")
-                except ValueError:
-                    continue
+            except OSError:
                 failed.append(path.name)
         if missing:
             async with self._lock:

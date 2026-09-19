@@ -62,8 +62,8 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | MA — reference multi-agent baseline | maintained external-orchestrator/executor-free single-node #889 golden path: canonical multi-Step Plan with parallel roots/fan-in -> exact Agent revisions -> Handoffs -> ContextBundles -> Result -> exact Verification -> accepted Task, with persisted provenance across every boundary | #889 / platform conformance |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
 | H — restart/recovery | crash after backend accept -> process reconstruction -> same running canonical Run with no duplicate dispatch, plus queued/pre-accept/orphaned recovery classification | platform conformance / canonical kernel recovery |
-| J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures through versioned Control Plane routes | #17 / platform conformance |
-| J-web — client consistency | Web reads the same canonical Task/Run/Result fixtures through the same versioned API routes | #17 / #395 |
+| J-cli — client consistency | CLI reads shared canonical Task/Run/Result fixtures and preserves shared list-query/pagination, canonical error and authorization/approval semantics through versioned Control Plane routes | #1236 / #17 / platform conformance |
+| J-web — client consistency | Web reads the same fixtures and preserves the same list-query/pagination, canonical error and authorization/approval presentation through the same versioned API routes | #1236 / #17 / #395 |
 | U — runtime verification | Verification gates completion, binds exact revisions, works deterministically without an LLM, enforces reviewer independence and keeps repair loops bounded and auditable | #86 |
 | ARCH — architecture invariants | canonical/backend isolation, AST-resolved northbound Python client backend isolation, backend-private public-type guard and platform-owned Task/Run identity preserved through distributed restart/failover | platform conformance |
 

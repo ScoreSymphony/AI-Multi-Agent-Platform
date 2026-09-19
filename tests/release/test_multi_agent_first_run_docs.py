@@ -54,7 +54,7 @@ def test_readme_quick_start_uses_browser_first_supported_single_node_path() -> N
     assert "not a prerequisite" in readme
     assert "docs/operations/DEPLOYMENT.md" in readme
     assert (
-        "No GPU, paid AI/API service, Hermes, Forge, LiteLLM, MCP server or remote Worker" in readme
+        "No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker" in readme
     )
 
 
@@ -102,6 +102,7 @@ def test_first_run_doc_uses_browser_first_single_node_and_canonical_command() ->
     assert "onboarding.run-multi-agent-golden-path" in guide
     assert "platform auth login --username admin" in guide
     assert "platform onboarding run-multi-agent" in guide
-    assert "Hermes, Forge, LiteLLM" in guide
+    assert "Hermes, LiteLLM, MCP" in guide
+    assert "retired Forge runtime is not part of this workflow" in guide
     assert "does **not** require" in guide
     assert "paid" in guide.lower()

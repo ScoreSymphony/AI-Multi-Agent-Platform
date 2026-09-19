@@ -175,7 +175,7 @@ def test_recommendation_never_selects_unavailable_or_security_blocked_component(
             availability=ComponentAvailability.UNAVAILABLE,
         ),
         _component(
-            "forge",
+            "alternate-executor",
             ComponentCategory.EXECUTOR,
             priority=10,
         ),
@@ -197,7 +197,7 @@ def test_recommendation_never_selects_unavailable_or_security_blocked_component(
         profile_id="safe-default",
     )
 
-    assert profile.defaults[ComponentCategory.EXECUTOR] == "forge"
+    assert profile.defaults[ComponentCategory.EXECUTOR] == "alternate-executor"
 
 
 def test_global_workspace_agent_task_precedence_is_explicit() -> None:
@@ -233,7 +233,7 @@ def test_duplicate_override_scope_fails_closed() -> None:
         ),
         ComponentSelectionLayer(
             OverrideScope.GLOBAL,
-            {ComponentCategory.EXECUTOR: "forge"},
+            {ComponentCategory.EXECUTOR: "alternate-executor"},
         ),
     )
 

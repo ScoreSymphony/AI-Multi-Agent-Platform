@@ -10,7 +10,6 @@ from ai_multi_agent_platform.agents import register_standard_agent_control_plane
 from ai_multi_agent_platform.agents.routing_profile_control_plane import (
     register_routing_profile_aware_agent_control_plane,
 )
-from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.control_plane import (
     ControlPlaneASGI,
     evaluation_command_handlers,
@@ -18,6 +17,7 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.first_user_bootstrap import AuthenticatedControlPlaneHTTP
+from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
@@ -54,6 +54,7 @@ from ai_multi_agent_platform.verification.control_plane import register_verifica
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
 
 from ..config import SingleNodeConfig
+from ..persistence_health import SingleNodePersistenceHealthProvider
 from .execution import EvaluationBundle, ExecutionBundle, KernelBundle, VerificationBundle
 from .foundation import ObservabilityBundle, SecurityBundle, StorageBundle
 from .repositories import RepositoryFoundationBundle, RepositoryRuntimeBundle
@@ -87,6 +88,7 @@ class HealthBundle:
     """Health/readiness authority over the supported single-node providers."""
 
     provider: AggregatedHealthProvider
+    persistence: SingleNodePersistenceHealthProvider
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,13 +106,37 @@ class HttpBundle:
     app: ControlPlaneASGI
 
 
+_BASE_PERSISTENCE_OWNERS = frozenset(
+    {
+        "kernel",
+        "coordination",
+        "control-plane",
+        "data",
+        "workspaces",
+        "repositories",
+        "research",
+        "verification",
+        "evaluation",
+        "security",
+        "automation",
+        "notifications",
+    }
+)
+
+
 def build_health(
+    config: SingleNodeConfig,
     storage: StorageBundle,
     execution: ExecutionBundle,
-    observability: ObservabilityBundle | None = None,
+    observability: ObservabilityBundle,
 ) -> HealthBundle:
     """Build required single-node health dependencies explicitly."""
 
+    persistence = SingleNodePersistenceHealthProvider(
+        config,
+        telemetry=observability.telemetry,
+        required_store_owners=_BASE_PERSISTENCE_OWNERS,
+    )
     return HealthBundle(
         provider=AggregatedHealthProvider(
             (
@@ -130,9 +156,15 @@ def build_health(
                     name="lifecycle",
                 ),
                 ProviderHealthDependency(storage.files, required=True, name="files"),
+                ProviderHealthDependency(
+                    persistence,
+                    required=True,
+                    name="persistence",
+                ),
             ),
-            telemetry=None if observability is None else observability.telemetry,
-        )
+            telemetry=observability.telemetry,
+        ),
+        persistence=persistence,
     )
 
 

@@ -1,0 +1,30 @@
+{
+  "not_found": {
+    "status": 404,
+    "body": {
+      "code": "not_found",
+      "category": "resource",
+      "message": "Task was not found",
+      "request_id": "request_client_not_found",
+      "correlation_id": "corr_client_not_found",
+      "retryable": false,
+      "details": {
+        "resource_type": "task"
+      }
+    }
+  },
+  "conflict": {
+    "status": 409,
+    "body": {
+      "code": "conflict",
+      "category": "conflict",
+      "message": "Task state conflicts with the requested operation",
+      "request_id": "request_client_conflict",
+      "correlation_id": "corr_client_conflict",
+      "retryable": false,
+      "details": {
+        "resource_type": "task"
+      }
+    }
+  }
+}

@@ -15,11 +15,11 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.capabilities import CapabilityToolProvider
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, ToolInvocation
-from ai_multi_agent_platform.repository_intelligence.capabilities import (
+from ai_multi_agent_platform.repositories.intelligence.capabilities import (
     RepositoryIntelligenceOperation,
     repository_intelligence_capability_specs,
 )
-from ai_multi_agent_platform.repository_intelligence.models import RepositoryIntelligenceFreshness
+from ai_multi_agent_platform.repositories.intelligence.models import RepositoryIntelligenceFreshness
 
 from .context import EvaluationExecutionContext
 from .models import EvaluationAttempt, EvaluationCase, EvaluationObservation

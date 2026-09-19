@@ -57,10 +57,10 @@ from ai_multi_agent_platform.plugins import (
     PluginRegistry,
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
-from ai_multi_agent_platform.repository_intelligence import (
+from ai_multi_agent_platform.repositories.intelligence import (
     WorkspaceAwareRepositoryIntelligenceProvider,
 )
-from ai_multi_agent_platform.repository_intelligence.wiring import (
+from ai_multi_agent_platform.repositories.intelligence.wiring import (
     AuthorizedRepositorySnapshotLoader,
     AuthorizedRunWorkspaceSnapshotLoader,
 )

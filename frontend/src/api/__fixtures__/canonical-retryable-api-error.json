@@ -1,0 +1,11 @@
+{
+  "code": "backend_unavailable",
+  "category": "availability",
+  "message": "Control Plane backend is temporarily unavailable",
+  "request_id": "request_client_retry_parity",
+  "correlation_id": "corr_client_retry_parity",
+  "retryable": true,
+  "details": {
+    "operation": "task.queue"
+  }
+}

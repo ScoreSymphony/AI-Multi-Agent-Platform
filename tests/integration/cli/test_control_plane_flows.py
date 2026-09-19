@@ -204,3 +204,164 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
     assert error["category"] == "resource"
     assert error["request_id"].startswith("request_")
     assert error["correlation_id"].startswith("corr_")
+
+
+def test_cli_and_public_api_share_the_same_canonical_task_state(tmp_path: Path) -> None:
+    config = tmp_path / "cli.json"
+    _, transport = _stack()
+
+    code, cli_created, error = _invoke(
+        config,
+        transport,
+        "task",
+        "create",
+        "--title",
+        "Created through CLI",
+        "--objective",
+        "Read through public API",
+        "--owner-type",
+        "user",
+        "--owner-id",
+        "test",
+    )
+    assert code == 0 and not error
+    cli_task = cli_created["data"]
+    assert isinstance(cli_task, dict)
+    cli_task_id = cli_task["id"]
+    assert isinstance(cli_task_id, str)
+
+    api_read = asyncio.run(
+        transport.http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/tasks/{cli_task_id}",
+            )
+        )
+    )
+    assert api_read.status == 200
+    assert isinstance(api_read.body, dict)
+    assert api_read.body["id"] == cli_task_id
+    assert api_read.body["status"] == cli_task["status"]
+    assert api_read.body["revision"] == cli_task["revision"]
+
+    api_created = asyncio.run(
+        transport.http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/tasks",
+                headers={
+                    "content-type": "application/json",
+                    "idempotency-key": "issue-1236-api-create",
+                },
+                body={
+                    "title": "Created through API",
+                    "objective": "Read through CLI",
+                    "owner_type": "user",
+                    "owner_id": "test",
+                },
+            )
+        )
+    )
+    assert api_created.status == 201
+    assert isinstance(api_created.body, dict)
+    api_task_id = api_created.body["id"]
+    assert isinstance(api_task_id, str)
+
+    code, cli_read, error = _invoke(config, transport, "task", "show", api_task_id)
+    assert code == 0 and not error
+    assert cli_read["data"]["id"] == api_task_id
+    assert cli_read["data"]["status"] == api_created.body["status"]
+    assert cli_read["data"]["revision"] == api_created.body["revision"]
+
+
+def test_cli_and_public_api_share_pagination_filter_sort_semantics(tmp_path: Path) -> None:
+    config = tmp_path / "cli.json"
+    _, transport = _stack()
+
+    for index in range(2):
+        code, _, error = _invoke(
+            config,
+            transport,
+            "task",
+            "create",
+            "--title",
+            f"Parity task {index}",
+            "--objective",
+            "Cross-client list semantics",
+            "--owner-type",
+            "user",
+            "--owner-id",
+            "test",
+        )
+        assert code == 0 and not error
+
+    list_arguments = (
+        "task",
+        "list",
+        "--limit",
+        "1",
+        "--sort",
+        "id",
+        "--direction",
+        "asc",
+        "--q",
+        "Parity task",
+        "--filter",
+        "status=draft",
+    )
+    code, cli_page, error = _invoke(config, transport, *list_arguments)
+    assert code == 0 and not error
+    cli_data = cli_page["data"]
+    assert isinstance(cli_data, dict)
+    assert cli_data["total"] == 2
+    first_cursor = cli_data["next_cursor"]
+    assert isinstance(first_cursor, str)
+
+    api_page = asyncio.run(
+        transport.http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/tasks",
+                query={
+                    "limit": "1",
+                    "sort": "id",
+                    "direction": "asc",
+                    "q": "Parity task",
+                    "filter[status]": "draft",
+                },
+            )
+        )
+    )
+    assert api_page.status == 200
+    assert api_page.body == cli_data
+
+    code, cli_second, error = _invoke(
+        config,
+        transport,
+        *list_arguments,
+        "--cursor",
+        first_cursor,
+    )
+    assert code == 0 and not error
+    cli_second_data = cli_second["data"]
+    assert isinstance(cli_second_data, dict)
+
+    api_second = asyncio.run(
+        transport.http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/tasks",
+                query={
+                    "limit": "1",
+                    "cursor": first_cursor,
+                    "sort": "id",
+                    "direction": "asc",
+                    "q": "Parity task",
+                    "filter[status]": "draft",
+                },
+            )
+        )
+    )
+    assert api_second.status == 200
+    assert api_second.body == cli_second_data
+    assert cli_second_data["next_cursor"] is None

@@ -34,6 +34,7 @@ from .fakes import (
     FakeToolProvider,
     FakeWorkerProvider,
 )
+from .persistence_faults import FailOnceFilesystemOperation, SqliteWriteLock
 from .scoped_memory import FakeScopedMemoryProvider
 from .scoped_memory_hardening import assert_scoped_memory_provider_contract
 
@@ -53,6 +54,8 @@ __all__ = [
     "FakeScopedMemoryProvider",
     "FakeToolProvider",
     "FakeWorkerProvider",
+    "FailOnceFilesystemOperation",
+    "SqliteWriteLock",
     "assert_authorization_provider_contract",
     "assert_canonical_error",
     "assert_capability_provider_contract",

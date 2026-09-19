@@ -21,7 +21,7 @@ from ai_multi_agent_platform.evaluation.repository_intelligence import (
     RepositoryIntelligenceEvaluationCaseExecutor,
 )
 from ai_multi_agent_platform.repositories import RepositoryTree, RepositoryTreeEntry
-from ai_multi_agent_platform.repository_intelligence import BaselineRepositoryIntelligenceProvider
+from ai_multi_agent_platform.repositories.intelligence import BaselineRepositoryIntelligenceProvider
 
 _SHA = "a" * 40
 _REPOSITORY_ID = new_id("external_resource")

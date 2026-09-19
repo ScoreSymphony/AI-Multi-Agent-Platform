@@ -160,6 +160,7 @@ class AggregatedHealthProvider(ProviderContract):
         self._operational_detail: str | None = None
         self._operational_action: str | None = None
         self._last_readiness_state: ReadinessState | None = None
+        self._health_diagnostics: tuple[dict[str, JsonValue], ...] = ()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -174,6 +175,10 @@ class AggregatedHealthProvider(ProviderContract):
     @property
     def service_health(self) -> ServiceHealth:
         return self._service_health
+
+    @property
+    def health_diagnostics(self) -> tuple[dict[str, JsonValue], ...]:
+        return self._health_diagnostics
 
     @property
     def health_timeout_seconds(self) -> float:
@@ -213,8 +218,22 @@ class AggregatedHealthProvider(ProviderContract):
     async def health(self) -> HealthStatus:
         async with self._probe_lock:
             dependencies: list[DependencyHealth] = []
+            diagnostics: list[dict[str, JsonValue]] = []
             for item in self._dependencies:
-                dependencies.append(await self._probe_dependency(item))
+                dependency = await self._probe_dependency(item)
+                dependencies.append(dependency)
+                provider_diagnostics = getattr(item.provider, "health_diagnostics", ())
+                if dependency.state is not ReadinessState.READY or provider_diagnostics:
+                    diagnostic: dict[str, JsonValue] = {
+                        "dependency": item.dependency_name,
+                        "provider_id": item.provider.descriptor.provider_id,
+                        "status": dependency.detail or dependency.state.value,
+                        "required": item.required,
+                    }
+                    if provider_diagnostics:
+                        diagnostic["diagnostics"] = list(provider_diagnostics)
+                    diagnostics.append(diagnostic)
+            self._health_diagnostics = tuple(diagnostics)
             if self._operational_state is not None:
                 dependencies.append(
                     DependencyHealth(
