@@ -65,11 +65,8 @@ self-hosted default is `InMemoryRequestRateLimiter`, a deterministic sliding-win
 reference implementation.
 
 The Control Plane consumes the hook after canonical authentication and before protected
-request dispatch. A rejected authenticated request returns `429 rate_limited`. The self-hosted
-reference limiter defaults to 1200 authenticated requests per minute per credential/session so
-ordinary maintained Web flows with Control Plane fan-out remain below the protection boundary.
-Deployments may inject a stricter or external limiter without changing authentication semantics.
-The hook is replaceable and does not depend on hosted IAM, telemetry or a specific deployment
+request dispatch. A rejected authenticated request returns `429 rate_limited`. The hook
+is replaceable and does not depend on hosted IAM, telemetry or a specific deployment
 topology.
 
 ## Security invariants
