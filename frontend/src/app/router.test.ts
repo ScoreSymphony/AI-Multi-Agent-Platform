@@ -20,6 +20,8 @@ describe("AppLink URL safety", () => {
   it("normalizes same-origin links and preserves safe external HTTP(S) links", () => {
     expect(normalizeAppLinkHref("/tasks/task_123?tab=runs#latest", base))
       .toBe("/tasks/task_123?tab=runs#latest");
+    expect(normalizeAppLinkHref("/tasks/task_123", "about:blank"))
+      .toBe("/tasks/task_123");
     expect(normalizeAppLinkHref("https://docs.example.test/guide", base))
       .toBe("https://docs.example.test/guide");
   });
