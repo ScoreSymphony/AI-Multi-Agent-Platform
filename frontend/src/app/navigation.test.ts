@@ -88,6 +88,10 @@ describe("#1234 V1 Web navigation coverage", () => {
     expect(navigationItemForPath("/projects/project_1")?.path).toBe("/projects");
     expect(navigationItemForPath("/workspaces/workspace_1")?.path).toBe("/projects");
     expect(navigationItemForPath("/tasks/task_1")?.path).toBe("/tasks");
+    expect(navigationItemForPath("/artifacts")?.path).toBe("/files");
+    expect(navigationItemForPath("/results")?.path).toBe("/files");
+    expect(navigationItemForPath("/plans")?.path).toBe("/files");
+    expect(navigationItemForPath("/steps")?.path).toBe("/files");
     expect(navigationItemForPath("/results/result_1")?.path).toBe("/files");
     expect(navigationItemForPath("/artifacts/artifact_1")?.path).toBe("/files");
     expect(navigationItemForPath("/workflows/workflow_1")?.path).toBe("/templates");
