@@ -1129,7 +1129,9 @@ async def test_real_agent_team_owner_recovers_marketplace_evidence_after_restart
             authorized=True,
         )
     assert store.get(first.item_id) is None
-    assert AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 1
+    assert (
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 1
+    )
 
     restarted_store = _FailOnceInstallationStore(installation_path)
     restarted = DistributionService(
@@ -1147,7 +1149,9 @@ async def test_real_agent_team_owner_recovers_marketplace_evidence_after_restart
     persisted = restarted_store.get(first.item_id)
     assert persisted is not None
     assert persisted.current.version == "1.0.0"
-    assert AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 1
+    assert (
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 1
+    )
 
     update_preview = restarted.preview(second.item_id, second.version, context)
     restarted_store.fail_next_save = True
@@ -1156,7 +1160,9 @@ async def test_real_agent_team_owner_recovers_marketplace_evidence_after_restart
     persisted = restarted_store.get(first.item_id)
     assert persisted is not None
     assert persisted.current.version == "1.0.0"
-    assert AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 2
+    assert (
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 2
+    )
 
     after_update_store = _FailOnceInstallationStore(installation_path)
     after_update = DistributionService(

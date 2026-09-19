@@ -355,6 +355,4 @@ def test_cli_preserves_not_found_and_conflict_error_categories(tmp_path: Path) -
         assert observed["category"] == error_body["category"]
         assert observed["retryable"] == error_body["retryable"]
         expected_method = "POST" if is_mutation else "GET"
-        assert transport.calls == [
-            (expected_method, f"http://control-plane.invalid{path}")
-        ]
+        assert transport.calls == [(expected_method, f"http://control-plane.invalid{path}")]

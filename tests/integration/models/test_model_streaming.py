@@ -419,9 +419,7 @@ def test_model_runtime_bounds_hanging_stream_with_canonical_timeout() -> None:
     provider, runtime = hanging_runtime()
 
     with pytest.raises(ContractError) as captured:
-        asyncio.run(
-            collect_events(runtime.stream(hanging_request("req-hanging-stream")))
-        )
+        asyncio.run(collect_events(runtime.stream(hanging_request("req-hanging-stream"))))
 
     assert captured.value.code is ErrorCode.TIMEOUT
     assert captured.value.retryable is True

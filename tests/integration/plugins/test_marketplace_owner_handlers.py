@@ -561,10 +561,7 @@ async def test_agent_pack_uses_agent_dependencies_and_canonical_team_owner(tmp_p
 
     blocked_team = service.preview(team_item.item_id, team_item.version, context)
     assert blocked_team.activation_allowed is False
-    assert {
-        (step.item_id, step.item_kind)
-        for step in blocked_team.decision.install_order
-    } == {
+    assert {(step.item_id, step.item_kind) for step in blocked_team.decision.install_order} == {
         (researcher_item.item_id, RegistryItemType.AGENT.value),
         (reviewer_item.item_id, RegistryItemType.AGENT.value),
         (team_item.item_id, RegistryItemType.AGENT_TEAM.value),
@@ -577,15 +574,17 @@ async def test_agent_pack_uses_agent_dependencies_and_canonical_team_owner(tmp_p
 
     team_preview = service.preview(team_item.item_id, team_item.version, context)
     assert team_preview.activation_allowed is True
-    assert {
-        dependency.item_id for dependency in team_preview.decision.dependencies
-    } == {researcher_item.item_id, reviewer_item.item_id}
+    assert {dependency.item_id for dependency in team_preview.decision.dependencies} == {
+        researcher_item.item_id,
+        reviewer_item.item_id,
+    }
     installed_team = await service.activate(team_preview, context, authorized=True)
 
     assert installed_team.team_id == team.team_id
-    assert {
-        member.agent.agent_id for member in installed_team.profile.members
-    } == {researcher.agent_id, reviewer.agent_id}
+    assert {member.agent.agent_id for member in installed_team.profile.members} == {
+        researcher.agent_id,
+        reviewer.agent_id,
+    }
     assert {revision.agent_id for revision in target_repository.list_agents()} == {
         researcher.agent_id,
         reviewer.agent_id,
