@@ -74,7 +74,7 @@ class HermesOrchestrator(Orchestrator):
 
     @property
     def adapter_id(self) -> str:
-        """Expose the #33 mapper identity alongside the canonical provider identity."""
+        """Expose the mapper identity alongside the canonical provider identity."""
 
         return HERMES_ADAPTER_ID
 
