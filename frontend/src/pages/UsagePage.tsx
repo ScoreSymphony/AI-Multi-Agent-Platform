@@ -21,6 +21,11 @@ const accountingCollections = ["usage-records", "usage-aggregates", "usage-budge
 
 type AccountingCollection = (typeof accountingCollections)[number];
 
+export interface UsageCollectionFailure {
+  collection: AccountingCollection;
+  error: unknown;
+}
+
 export function UsagePage({
   client,
   manifest,
@@ -33,7 +38,7 @@ export function UsagePage({
   const [records, setRecords] = useState<Page<CanonicalUsageRecord> | null>(null);
   const [aggregates, setAggregates] = useState<Page<CanonicalUsageAggregate> | null>(null);
   const [budgets, setBudgets] = useState<Page<CanonicalUsageBudget> | null>(null);
-  const [failures, setFailures] = useState<string[]>([]);
+  const [failures, setFailures] = useState<UsageCollectionFailure[]>([]);
   const [loading, setLoading] = useState(false);
   const [scopeDraft, setScopeDraft] = useState("");
   const [scopeFilter, setScopeFilter] = useState("");
@@ -97,12 +102,12 @@ export function UsagePage({
     }
 
     const settled = await Promise.allSettled(requests.map((item) => item.request));
-    const nextFailures: string[] = [];
+    const nextFailures: UsageCollectionFailure[] = [];
     settled.forEach((result, index) => {
       const collection = requests[index]?.collection;
       if (!collection) return;
       if (result.status === "rejected") {
-        nextFailures.push(collection);
+        nextFailures.push({ collection, error: result.reason });
         return;
       }
       if (collection === "usage-records") {
@@ -158,10 +163,7 @@ export function UsagePage({
         />
       ) : null}
       {failures.length > 0 ? (
-        <DegradedState
-          title="Partial accounting request failure"
-          detail={`Failed Control Plane collections: ${failures.join(", ")}.`}
-        />
+        <UsageFailureState failures={failures} onRetry={() => void load()} />
       ) : null}
 
       <div className="metrics">
@@ -376,4 +378,30 @@ function formatDate(value: string): string {
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+
+export function UsageFailureState({
+  failures,
+  onRetry,
+}: {
+  failures: UsageCollectionFailure[];
+  onRetry: () => void;
+}) {
+  return (
+    <Card title="Accounting request failures">
+      <p>
+        Available accounting collections remain usable. Each failed collection keeps its canonical
+        Control Plane error so permission, approval, backend and unavailable states are not collapsed.
+      </p>
+      <div className="stack compact-stack">
+        {failures.map((failure) => (
+          <div key={failure.collection}>
+            <strong>{failure.collection}</strong>
+            <ErrorState error={failure.error} onRetry={onRetry} />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
 }
