@@ -123,8 +123,7 @@ def test_server_startup_recovery_reconciles_durable_applications(
     assert by_name["external-effect-recovery"]["ready_for_service"] is True
     assert by_name["single-node-transient-state"]["ready_for_service"] is True
     assert {
-        evidence["state_class"]
-        for evidence in by_name["single-node-transient-state"]["evidence"]
+        evidence["state_class"] for evidence in by_name["single-node-transient-state"]["evidence"]
     } == {"authentication_session", "transient_state_reconciliation"}
     assert by_name["applications"] == {
         "name": "applications",

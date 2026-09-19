@@ -75,7 +75,7 @@ describe("RepositoryCollectionClient", () => {
       { remote: "origin", refspec: "HEAD:refs/heads/feature/web", approvalId: "approval_4", idempotencyKey: "push-key" },
     );
 
-    const calls = fetchImpl.mock.calls as [string, RequestInit][];
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map(([url]) => String(url))).toEqual([
       "/api/v1/commands/repository.branch.create",
       "/api/v1/commands/repository.checkout",
@@ -120,7 +120,7 @@ describe("RepositoryCollectionClient", () => {
     );
     await client.detach("external_resource_1", "approval_7", "detach-key");
 
-    const calls = fetchImpl.mock.calls as [string, RequestInit][];
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map(([url]) => String(url))).toEqual([
       "/api/v1/commands/repository.local.attach",
       "/api/v1/commands/repository.discover",
