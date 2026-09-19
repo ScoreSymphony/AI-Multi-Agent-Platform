@@ -68,7 +68,7 @@ def test_terminal_session_handle_is_not_restored_into_new_process_owner() -> Non
         )
         created = await original.create_session(
             SessionCreateRequest(
-                session_type=SessionType.EXECUTION,
+                session_type=SessionType.PROCESS,
                 context=context,
                 mode=SessionMode.READ_ONLY,
                 actor_ref=principal,
