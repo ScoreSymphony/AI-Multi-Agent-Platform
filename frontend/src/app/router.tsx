@@ -107,7 +107,9 @@ export function AppLink({
 
 export function normalizeAppLinkHref(
   href: string | undefined,
-  baseHref = typeof window === "undefined" ? "https://router.invalid/" : window.location.href,
+  baseHref = typeof window === "undefined" || typeof window.location?.href !== "string"
+    ? "https://router.invalid/"
+    : window.location.href,
 ): string | undefined {
   if (!href) return href;
   try {
