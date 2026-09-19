@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ControlPlaneClient } from "../api/client";
 import {
   isTelemetryEntry,
@@ -23,13 +23,18 @@ import { TraceExplorer } from "./observability/TraceExplorer";
 export function ObservabilityPage({
   client,
   view,
+  initialTaskId = "",
 }: {
   client: ControlPlaneClient;
   view: "events" | "observability";
+  initialTaskId?: string;
 }) {
   const [tasks, setTasks] = useState<Page<CanonicalTask> | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState(initialTaskId);
+  const [taskIdDraft, setTaskIdDraft] = useState(initialTaskId);
   const [timeline, setTimeline] = useState<TimelineItem[] | null>(null);
+  const [timelineNextCursor, setTimelineNextCursor] = useState<string | null>(null);
+  const [timelineTotal, setTimelineTotal] = useState<number | null>(null);
   const [taskError, setTaskError] = useState<unknown>(null);
   const [timelineError, setTimelineError] = useState<unknown>(null);
 
@@ -42,27 +47,30 @@ export function ObservabilityPage({
       });
       setTasks(next);
       setTaskError(null);
-      setSelectedTaskId((current) => {
-        if (current && next.items.some((task) => task.id === current)) return current;
-        return next.items[0]?.id ?? "";
-      });
+      setSelectedTaskId((current) => current || next.items[0]?.id || "");
+      setTaskIdDraft((current) => current || next.items[0]?.id || "");
     } catch (error) {
       setTaskError(error);
     }
   }, [client]);
 
-  const loadTimeline = useCallback(async () => {
+  const loadTimeline = useCallback(async (cursor?: string, append = false) => {
     if (!selectedTaskId) {
       setTimeline([]);
+      setTimelineNextCursor(null);
+      setTimelineTotal(0);
       setTimelineError(null);
       return;
     }
     try {
       const next = await client.timeline(selectedTaskId, {
-        limit: 200,
+        limit: 100,
+        cursor,
         direction: "asc",
       });
-      setTimeline(next.items);
+      setTimeline((current) => append && current ? [...current, ...next.items] : next.items);
+      setTimelineNextCursor(next.next_cursor);
+      setTimelineTotal(next.total);
       setTimelineError(null);
     } catch (error) {
       setTimelineError(error);
@@ -70,11 +78,18 @@ export function ObservabilityPage({
   }, [client, selectedTaskId]);
 
   useEffect(() => {
+    setSelectedTaskId(initialTaskId);
+    setTaskIdDraft(initialTaskId);
+  }, [initialTaskId]);
+
+  useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
 
   useEffect(() => {
     setTimeline(null);
+    setTimelineNextCursor(null);
+    setTimelineTotal(null);
     void loadTimeline();
   }, [loadTimeline]);
 
@@ -82,6 +97,11 @@ export function ObservabilityPage({
     tasks?.items.find((task) => task.id === selectedTaskId) ?? null;
   const summary = useMemo(() => summarizeTimeline(timeline ?? []), [timeline]);
   const heading = view === "events" ? "Events & activity" : "Observability";
+
+  const applyTaskId = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSelectedTaskId(taskIdDraft.trim());
+  };
 
   return (
     <div className="stack">
@@ -103,32 +123,46 @@ export function ObservabilityPage({
         <ErrorState error={taskError} onRetry={() => void loadTasks()} />
       ) : null}
       <Card title="Task scope">
+        <form className="toolbar" onSubmit={applyTaskId}>
+          <label>
+            Exact Task ID
+            <input
+              value={taskIdDraft}
+              onChange={(event) => setTaskIdDraft(event.target.value)}
+              placeholder="task_…"
+            />
+          </label>
+          <button type="submit" disabled={!taskIdDraft.trim()}>Open telemetry</button>
+          <button type="button" onClick={() => void loadTimeline()}>Refresh</button>
+        </form>
         {!tasks ? (
-          <LoadingState />
+          <LoadingState label="Loading recent Tasks…" />
         ) : tasks.items.length === 0 ? (
-          <EmptyState title="No Tasks available" />
+          <EmptyState title="No recent Tasks available" />
         ) : (
-          <div className="toolbar">
-            <label>
-              Task
-              <select
-                value={selectedTaskId}
-                onChange={(event) => setSelectedTaskId(event.target.value)}
-              >
-                {tasks.items.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.title} — {task.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button onClick={() => void loadTimeline()}>Refresh</button>
-          </div>
+          <label>
+            Recent Task
+            <select
+              value={tasks.items.some((task) => task.id === selectedTaskId) ? selectedTaskId : ""}
+              onChange={(event) => {
+                setSelectedTaskId(event.target.value);
+                setTaskIdDraft(event.target.value);
+              }}
+            >
+              <option value="">Choose a recent Task</option>
+              {tasks.items.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.title} — {task.id}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
-        {selectedTask ? (
+        {selectedTaskId ? (
           <p>
-            <AppLink href={`/tasks/${selectedTask.id}`}>Open Task</AppLink> ·{" "}
-            <CanonicalId value={selectedTask.id} />
+            <AppLink href={`/tasks/${selectedTaskId}`}>{selectedTask ? "Open Task" : "Inspect Task"}</AppLink> ·{" "}
+            <AppLink href={`/${view}/${selectedTaskId}`}>Permalink</AppLink> ·{" "}
+            <CanonicalId value={selectedTaskId} />
           </p>
         ) : null}
       </Card>
@@ -138,7 +172,10 @@ export function ObservabilityPage({
       ) : null}
 
       <div className="metrics">
-        <Metric label="Timeline entries" value={timeline ? summary.total : "—"} />
+        <Metric
+          label="Timeline entries"
+          value={timeline ? `${summary.total} loaded / ${timelineTotal ?? summary.total} total` : "—"}
+        />
         <Metric label="Domain events" value={timeline ? summary.domainEvents : "—"} />
         <Metric label="Telemetry" value={timeline ? summary.telemetryEntries : "—"} />
         <Metric label="Failures" value={timeline ? summary.failures : "—"} />
@@ -159,6 +196,14 @@ export function ObservabilityPage({
         ) : (
           <TimelineTable items={timeline} />
         )}
+        {timelineNextCursor ? (
+          <button
+            type="button"
+            onClick={() => void loadTimeline(timelineNextCursor, true)}
+          >
+            Load more timeline entries
+          </button>
+        ) : null}
       </Card>
 
       {summary.components.length > 0 ? (

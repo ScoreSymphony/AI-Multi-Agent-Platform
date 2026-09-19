@@ -38,12 +38,28 @@ function cardByHeading(page, name) {
   return page.getByRole("heading", { name, exact: true }).locator("..");
 }
 
+async function waitForMarketplaceDetail(page, expectedHeading) {
+  await page.waitForFunction(
+    (expected) => {
+      const text = document.body?.innerText ?? "";
+      const headings = [...document.querySelectorAll("h2")].map((node) =>
+        (node.textContent ?? "").trim(),
+      );
+      return headings.includes(expected) && !text.includes("Loading Marketplace details…");
+    },
+    expectedHeading,
+  );
+}
+
 async function expectMarketplaceMutationError(page, mode, expectedMessage) {
   await page.goto(`${baseUrl}/tests/marketplaceHarness.html?mutation=${mode}`);
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const skillCard = cardByHeading(page, "Code Review Skill");
-  await skillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await skillCard.getByRole("link", { name: "Inspect", exact: true }).click();
+  if (!decodeURIComponent(new URL(page.url()).pathname).includes("/marketplace/items/local::code-review-skill@1.1.0")) {
+    throw new Error(`Marketplace Inspect did not navigate to a stable item deep link: ${page.url()}`);
+  }
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
   await page.getByRole("button", { name: "Preview install", exact: true }).click();
   await page.getByRole("button", { name: "Install component", exact: true }).waitFor();
@@ -117,7 +133,7 @@ try {
     before,
   );
   const skillCard = cardByHeading(page, "Code Review Skill");
-  await skillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await skillCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
   before = await page.evaluate(() => window.__marketplaceCalls.length);
   await page.getByRole("button", { name: "Preview install", exact: true }).click();
@@ -165,13 +181,27 @@ try {
     before,
   );
   const hermesCard = cardByHeading(page, "Hermes");
-  await hermesCard.getByRole("button", { name: "Inspect", exact: true }).click();
-  await page.getByText("Owner status", { exact: true }).waitFor();
+  await hermesCard.getByRole("link", { name: "Inspect", exact: true }).click();
+  await waitForMarketplaceDetail(page, "Hermes 1.1.0");
   const hermesDetailText = await page.locator("body").innerText();
   requireText(hermesDetailText, "Orchestrator", "Semantic Orchestrator Marketplace detail");
   requireText(hermesDetailText, "Owner status", "Canonical Orchestrator owner status");
   requireText(hermesDetailText, "enabled", "Enabled Orchestrator owner state");
   requireText(hermesDetailText, "healthy", "Orchestrator owner health");
+
+  before = await page.evaluate(() => window.__marketplaceCalls.length);
+  await page.getByRole("button", { name: "Refresh item", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      window.__marketplaceCalls.slice(count).some(
+        (call) =>
+          call.method === "GET" &&
+          decodeURIComponent(call.url).includes("local::hermes-orchestrator@1.1.0"),
+      ),
+    before,
+  );
+  await waitForMarketplaceDetail(page, "Hermes 1.1.0");
+
   const orchestratorLink = page.getByRole("link", {
     name: "Open Orchestrator management",
     exact: true,
@@ -192,7 +222,7 @@ try {
     before,
   );
   const researchAgentCard = cardByHeading(page, "Research Agent");
-  await researchAgentCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await researchAgentCard.getByRole("link", { name: "Inspect", exact: true }).click();
   const agentLink = page.getByRole("link", { name: "Open Agent management", exact: true });
   if ((await agentLink.getAttribute("href")) !== "/agents") {
     throw new Error("Semantic Agent management did not resolve to canonical Agent owner");
@@ -210,7 +240,7 @@ try {
     before,
   );
   const modelProviderCard = cardByHeading(page, "Local Model Provider");
-  await modelProviderCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await modelProviderCard.getByRole("link", { name: "Inspect", exact: true }).click();
   const modelProviderLink = page.getByRole("link", {
     name: "Open Model Provider management",
     exact: true,
@@ -365,7 +395,7 @@ try {
   requireText(privateSourceText, "source change available", "Same-version source switch state");
 
   before = await page.evaluate(() => window.__marketplaceCalls.length);
-  await privateSourceCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await privateSourceCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview update", exact: true }).waitFor();
   await page.waitForFunction(
     (count) =>
@@ -456,7 +486,7 @@ try {
   await page.getByRole("heading", { name: "Example Plugin", exact: true }).waitFor();
 
   const pluginCard = cardByHeading(page, "Example Plugin");
-  await pluginCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await pluginCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview update", exact: true }).waitFor();
   await page.getByRole("button", { name: "Preview update", exact: true }).click();
   await page.getByRole("heading", { name: "Permission changes", exact: true }).waitFor();
@@ -492,7 +522,7 @@ try {
 
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   const blockedCard = cardByHeading(page, "Blocked Tool");
-  await blockedCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await blockedCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
   await page.getByRole("button", { name: "Preview install", exact: true }).click();
   await page.getByRole("heading", { name: "Install / update preview", exact: true }).waitFor();
@@ -508,18 +538,19 @@ try {
   }
 
   const missingHandlerCard = cardByHeading(page, "Missing Handler Skill");
-  await missingHandlerCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await missingHandlerCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByText("Owner handler unavailable", { exact: true }).waitFor();
   if (await page.getByRole("button", { name: "Preview install", exact: true }).count()) {
     throw new Error("Missing-handler Marketplace item exposed an install preview");
   }
 
   const sparseMetadataCard = cardByHeading(page, "Sparse Metadata Tool");
-  await sparseMetadataCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await sparseMetadataCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByText("Partial metadata", { exact: true }).waitFor();
 
   const futureCard = cardByHeading(page, "Notebook Extension");
-  await futureCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await futureCard.getByRole("link", { name: "Inspect", exact: true }).click();
+  await waitForMarketplaceDetail(page, "Notebook Extension 1.1.0");
   const futureDetailText = await page.locator("body").innerText();
   requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind detail");
   requireText(futureDetailText, "Notebook Extension", "Future Marketplace kind fallback label");
@@ -542,7 +573,7 @@ try {
 
   await page.getByRole("button", { name: "Previous page", exact: true }).click();
   const applicationCard = cardByHeading(page, "Code Server");
-  await applicationCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await applicationCard.getByRole("link", { name: "Inspect", exact: true }).click();
   const applicationLink = page.getByRole("link", { name: "Open Application management", exact: true });
   if ((await applicationLink.getAttribute("href")) !== "/applications") {
     throw new Error("Application Marketplace detail does not link to canonical Application management");
@@ -588,7 +619,7 @@ try {
   await page.getByRole("heading", { name: "ProjectAtlas", exact: true }).waitFor();
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const slowSkillCard = cardByHeading(page, "Code Review Skill");
-  await slowSkillCard.getByRole("button", { name: "Inspect", exact: true }).click();
+  await slowSkillCard.getByRole("link", { name: "Inspect", exact: true }).click();
   await page.getByRole("button", { name: "Preview install", exact: true }).waitFor();
   await page.getByRole("button", { name: "Preview install", exact: true }).click();
   await page.getByRole("button", { name: "Install component", exact: true }).waitFor();

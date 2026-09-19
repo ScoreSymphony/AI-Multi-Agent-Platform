@@ -1,5 +1,6 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ControlPlaneError } from "../../api/client";
 import { describe, expect, it, vi } from "vitest";
 import {
   AutomationClient,
@@ -10,6 +11,7 @@ import { ControlPlaneCollectionClient } from "../../api/collections";
 import type { Page } from "../../api/types";
 import { AutomationForm } from "./AutomationForm";
 import { DeliveryTable } from "./AutomationTables";
+import { automationLifecycleActions } from "./AutomationDetailPage";
 import { AutomationInventoryState, AutomationsPage } from "./AutomationsPage";
 
 vi.mock("../../app/router", () => ({
@@ -17,6 +19,17 @@ vi.mock("../../app/router", () => ({
     <a href={href} {...rest}>{children}</a>
   ),
 }));
+
+function retryableBackendError(message: string): ControlPlaneError {
+  return new ControlPlaneError(503, {
+    code: "unavailable",
+    category: "backend",
+    message,
+    request_id: "request_regression_retry",
+    correlation_id: "correlation_regression_retry",
+    retryable: true,
+  });
+}
 
 function automation(overrides: Partial<CanonicalAutomation> = {}): CanonicalAutomation {
   return {
@@ -120,7 +133,7 @@ describe("Automations page regression coverage", () => {
     )).toContain("Loading…");
 
     const errorMarkup = renderToStaticMarkup(
-      <AutomationInventoryState page={null} error={new Error("control plane unavailable")} onRetry={retry} />,
+      <AutomationInventoryState page={null} error={retryableBackendError("control plane unavailable")} onRetry={retry} />,
     );
     expect(errorMarkup).toContain('role="alert"');
     expect(errorMarkup).toContain("control plane unavailable");
@@ -161,6 +174,14 @@ describe("Automations page regression coverage", () => {
     expect(html).toContain('type="submit"');
     expect(html).toContain("disabled");
     expect(html).toContain("Saving…");
+  });
+
+  it("maps the full canonical lifecycle without inventing delete", () => {
+    expect(automationLifecycleActions("enabled")).toEqual(["pause", "disable"]);
+    expect(automationLifecycleActions("paused")).toEqual(["resume", "disable"]);
+    expect(automationLifecycleActions("disabled")).toEqual(["resume"]);
+    expect(automationLifecycleActions("invalid")).toEqual(["revalidate"]);
+    expect(automationLifecycleActions("disabled")).not.toContain("delete");
   });
 
   it("keeps retry as a native keyboard-activatable button and disables it while busy", () => {

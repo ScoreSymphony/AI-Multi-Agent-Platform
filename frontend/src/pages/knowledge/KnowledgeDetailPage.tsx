@@ -60,6 +60,7 @@ export function KnowledgeDetailPage({
         <p><CanonicalId value={source.id} /></p>
       </header>
       {actionError ? <ErrorState error={actionError} /> : null}
+      {busy ? <p role="status">Applying canonical Knowledge lifecycle command…</p> : null}
 
       <Card title="Source identity and status">
         <dl className="detail-grid">

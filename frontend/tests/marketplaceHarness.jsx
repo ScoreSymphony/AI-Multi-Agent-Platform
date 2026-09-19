@@ -1,7 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { RegistryClient } from "/src/api/registry.ts";
-import { MarketplacePage } from "/src/pages/MarketplacePage.tsx";
+import { matchPath, RouterProvider, useRouter } from "/src/app/router.tsx";
+import { MARKETPLACE_ITEM_ROUTE, MarketplacePage } from "/src/pages/MarketplacePage.tsx";
 
 const calls = [];
 window.__marketplaceCalls = calls;
@@ -343,10 +344,45 @@ function listProjection(entry) {
   };
 }
 
+const canonicalKindMetadata = {
+  agent: { group: "ai_agents", management_path: "/agents" },
+  agent_team: { group: "ai_agents", management_path: "/agent-teams" },
+  orchestrator: { group: "ai_agents", management_path: "/plugins" },
+  model_provider: { group: "models", management_path: "/models" },
+  tool: { group: "tools_integrations" },
+  skill: { group: "ai_agents" },
+  plugin: { group: "platform_extensions", management_path: "/plugins" },
+  connector: { group: "tools_integrations" },
+  application: {
+    group: "applications",
+    management_path: "/applications",
+    supports_update: false,
+  },
+  template: {
+    group: "content",
+    supports_install: false,
+    supports_update: false,
+    supports_uninstall: false,
+  },
+  workflow: {
+    group: "content",
+    supports_install: false,
+    supports_update: false,
+    supports_uninstall: false,
+  },
+  documentation: {
+    group: "content",
+    supports_install: false,
+    supports_update: false,
+    supports_uninstall: false,
+  },
+};
+
 function marketplaceKindResources() {
   const byKind = new Map();
   for (const entry of catalog) {
     if (byKind.has(entry.item_type)) continue;
+    const metadata = canonicalKindMetadata[entry.item_type] ?? {};
     byKind.set(entry.item_type, {
       id: entry.item_type,
       type: "marketplace-kind",
@@ -356,11 +392,11 @@ function marketplaceKindResources() {
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(" "),
       default_route: entry.route,
-      supports_install: entry.route !== "manual",
-      supports_update:
-        entry.item_type !== "application" && entry.route !== "manual",
-      supports_uninstall:
-        entry.route === "kind_handler" || entry.route === "plugin",
+      supports_install: metadata.supports_install ?? true,
+      supports_update: metadata.supports_update ?? true,
+      supports_uninstall: metadata.supports_uninstall ?? true,
+      group: metadata.group ?? null,
+      management_path: metadata.management_path ?? null,
     });
   }
   return [...byKind.values()].sort((left, right) => left.kind.localeCompare(right.kind));
@@ -765,4 +801,21 @@ const fetchImpl = async (input, init = {}) => {
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
 
-createRoot(root).render(<MarketplacePage client={new RegistryClient({ fetchImpl })} />);
+const client = new RegistryClient({ fetchImpl });
+
+function MarketplaceHarnessApp() {
+  const { path } = useRouter();
+  const detailMatch = matchPath(MARKETPLACE_ITEM_ROUTE, path);
+  return (
+    <MarketplacePage
+      client={client}
+      selectedResourceId={detailMatch?.resourceId}
+    />
+  );
+}
+
+createRoot(root).render(
+  <RouterProvider>
+    <MarketplaceHarnessApp />
+  </RouterProvider>,
+);

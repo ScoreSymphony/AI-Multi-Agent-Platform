@@ -23,7 +23,7 @@ import {
   type ResourceOption,
   useUnsavedChanges,
 } from "../components/ConfigurationFields";
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
+import { Card, DegradedState, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
 
 export function RoutingProfileConfigurationPage({
   core,
@@ -44,6 +44,7 @@ export function RoutingProfileConfigurationPage({
   const [baseline, setBaseline] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [dependencyFailures, setDependencyFailures] = useState<string[]>([]);
 
   const snapshot = configurationFingerprint({ name, description, projectId, policy });
   const dirty = baseline !== "" && baseline !== snapshot;
@@ -60,6 +61,12 @@ export function RoutingProfileConfigurationPage({
       projectResult.status === "fulfilled"
         ? projectResult.value.items.map((project) => ({ value: project.id, label: project.name }))
         : [],
+    );
+    setDependencyFailures(
+      [
+        modelResult.status === "rejected" ? "models" : null,
+        projectResult.status === "rejected" ? "projects" : null,
+      ].filter((value): value is string => value !== null),
     );
 
     if (!profileId) {
@@ -150,6 +157,13 @@ export function RoutingProfileConfigurationPage({
       </header>
 
       {error ? <ErrorState error={error} onRetry={() => setError(null)} /> : null}
+      {dependencyFailures.length ? (
+        <DegradedState
+          title="Partial routing configuration inputs"
+          detail={`Unavailable canonical selectors: ${dependencyFailures.join(", ")}. Empty selectors are not treated as authoritative inventory.`}
+        />
+      ) : null}
+      {busy ? <p role="status">Applying canonical routing configuration change…</p> : null}
 
       <Card title="Profile identity">
         <div className="configuration-grid">
@@ -317,6 +331,7 @@ export function CapabilityAssignmentConfigurationPage({
   const [baseline, setBaseline] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [dependencyFailures, setDependencyFailures] = useState<string[]>([]);
 
   const snapshot = configurationFingerprint(content);
   const dirty = baseline !== "" && baseline !== snapshot;
@@ -356,6 +371,14 @@ export function CapabilityAssignmentConfigurationPage({
           ? projectResult.value.items.map((project) => ({ value: project.id, label: project.name }))
           : [],
     });
+    setDependencyFailures(
+      [
+        capabilityResult.status === "rejected" ? "capabilities" : null,
+        agentResult.status === "rejected" ? "agents" : null,
+        teamResult.status === "rejected" ? "agent teams" : null,
+        projectResult.status === "rejected" ? "projects" : null,
+      ].filter((value): value is string => value !== null),
+    );
 
     if (!assignmentId) {
       const empty = emptyAssignmentContent();
@@ -475,6 +498,13 @@ export function CapabilityAssignmentConfigurationPage({
       </header>
 
       {error ? <ErrorState error={error} onRetry={() => setError(null)} /> : null}
+      {dependencyFailures.length ? (
+        <DegradedState
+          title="Partial capability assignment inputs"
+          detail={`Unavailable canonical selectors: ${dependencyFailures.join(", ")}. Empty selectors are not treated as authoritative inventory.`}
+        />
+      ) : null}
+      {busy ? <p role="status">Applying canonical capability assignment change…</p> : null}
 
       <Card title="Target">
         <div className="configuration-grid">

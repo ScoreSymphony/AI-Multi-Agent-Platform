@@ -12,30 +12,48 @@ import {
 
 interface RouterValue {
   path: string;
+  search: string;
   navigate: (path: string) => void;
+}
+
+interface RouterLocation {
+  path: string;
+  search: string;
 }
 
 const RouterContext = createContext<RouterValue | null>(null);
 
 export function RouterProvider({ children }: { children: ReactNode }) {
-  const [path, setPath] = useState(() => normalize(window.location.pathname));
+  const [location, setLocation] = useState<RouterLocation>(readBrowserLocation);
 
   useEffect(() => {
-    const onPopState = () => setPath(normalize(window.location.pathname));
+    const onPopState = () => setLocation(readBrowserLocation());
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   const navigate = useCallback((next: string) => {
-    const normalized = normalize(next);
-    if (normalized !== normalize(window.location.pathname)) {
-      window.history.pushState({}, "", normalized);
+    if (typeof window === "undefined") return;
+    const target = new URL(next, window.location.href);
+    if (target.origin !== window.location.origin) {
+      window.location.assign(target.href);
+      return;
     }
-    setPath(normalized);
+
+    const normalizedPath = normalize(target.pathname);
+    const nextHref = `${normalizedPath}${target.search}${target.hash}`;
+    const currentHref = `${normalize(window.location.pathname)}${window.location.search}${window.location.hash}`;
+    if (nextHref !== currentHref) {
+      window.history.pushState({}, "", nextHref);
+    }
+    setLocation({ path: normalizedPath, search: target.search });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
 
-  const value = useMemo(() => ({ path, navigate }), [path, navigate]);
+  const value = useMemo(
+    () => ({ path: location.path, search: location.search, navigate }),
+    [location.path, location.search, navigate],
+  );
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }
 
@@ -45,26 +63,63 @@ export function useRouter(): RouterValue {
   return value;
 }
 
-export function AppLink({ href, onClick, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) {
+export function AppLink({
+  href,
+  target,
+  onClick,
+  children,
+  dangerouslySetInnerHTML: _dangerouslySetInnerHTML,
+  ...rest
+}: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const { navigate } = useRouter();
+  const safeHref = normalizeAppLinkHref(href);
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey ||
-      !href ||
-      href.startsWith("http")
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+      || !safeHref
+      || (target !== undefined && target !== "_self")
     ) {
       return;
     }
+
+    const resolved = new URL(
+      safeHref,
+      typeof window === "undefined" ? "https://router.invalid/" : window.location.href,
+    );
+    if (
+      typeof window !== "undefined"
+      && resolved.origin !== window.location.origin
+    ) {
+      return;
+    }
+
     event.preventDefault();
-    navigate(href);
+    navigate(`${resolved.pathname}${resolved.search}${resolved.hash}`);
   };
-  return <a href={href} onClick={handleClick} {...rest} />;
+  return <a href={safeHref} target={target} onClick={handleClick} {...rest}>{children}</a>;
+}
+
+export function normalizeAppLinkHref(href: string | undefined): string | undefined {
+  if (!href) return href;
+  try {
+    const base = new URL("https://router.invalid/");
+    const resolved = new URL(href, base);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      return undefined;
+    }
+    if (resolved.origin === base.origin) {
+      return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+    return resolved.href;
+  } catch {
+    return undefined;
+  }
 }
 
 export function matchPath(pattern: string, path: string): Record<string, string> | null {
@@ -76,12 +131,24 @@ export function matchPath(pattern: string, path: string): Record<string, string>
     const expected = patternParts[index];
     const actual = pathParts[index];
     if (expected.startsWith(":")) {
-      params[expected.slice(1)] = decodeURIComponent(actual);
+      try {
+        params[expected.slice(1)] = decodeURIComponent(actual);
+      } catch {
+        return null;
+      }
     } else if (expected !== actual) {
       return null;
     }
   }
   return params;
+}
+
+function readBrowserLocation(): RouterLocation {
+  if (typeof window === "undefined") return { path: "/", search: "" };
+  return {
+    path: normalize(window.location.pathname),
+    search: window.location.search ?? "",
+  };
 }
 
 function normalize(path: string): string {

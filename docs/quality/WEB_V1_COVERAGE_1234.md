@@ -32,8 +32,8 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | First run / onboarding | `/onboarding` | `onboarding` + canonical Project/Workspace/Agent/Model/Task commands | Maintained guided path; final real-browser acceptance remains owned by #1164. |
 | Dashboard / status | `/` | health + recent canonical Task/Run state | Maintained overview with backend-owned state. |
 | Projects / Workspaces | `/projects`, `/projects/:id`, `/workspaces/:id` | canonical Project/Workspace APIs | Inventory/create/detail and stable deep links exist. Workspace deep links resolve back to the Projects navigation parent. |
-| Tasks / Plans / Steps / Runs / Results / Artifacts | `/tasks`, `/tasks/:id`, `/runs`, `/runs/:id`, `/plans/:id`, `/steps/:id`, `/results/:id`, `/artifacts/:id` | canonical kernel + reference collections | Task management and Run inspection are maintained; Plan/Step/Result/Artifact references have stable deep links and canonical Task/Plan relationships. |
-| Agents / Agent Teams | `/agents`, `/agents/:id`, `/agent-teams`, `/agent-teams/:id` | `agents`, `agent-teams`, `agent-runs` | Inventory/detail plus canonical configuration composition are maintained; no provider identity becomes lifecycle truth. |
+| Tasks / Plans / Steps / Runs / Results / Artifacts | `/tasks`, `/tasks/:id`, `/runs`, `/runs/:id`, `/plans`, `/plans/:id`, `/steps`, `/steps/:id`, `/results`, `/results/:id`, `/artifacts`, `/artifacts/:id` | canonical kernel + reference collections | Task management and Run inspection are maintained; active Run detail exposes the canonical cancel operation with explicit confirmation and a stable return to the Run inventory. Plan/Step/Result/Artifact now have stable overview routes as well as detail deep links; refresh preserves the selected domain because collection identity is encoded in the URL. The normal chain is navigable Task -> Plan -> Step -> filtered canonical Runs -> Result/Artifact, with Task/Run relationships linking directly to canonical references. |
+| Agents / Agent Teams | `/agents`, `/agents/:id`, `/agent-teams`, `/agent-teams/:id` | `agents`, `agent-teams`, `agent-runs`, canonical Task assignment projection | Inventory/create/detail/configure/clone are maintained. Detail views expose assigned canonical Tasks and their Plan/Run links without creating Agent-owned lifecycle state. Advertised `agent.delete` / `agent-team.delete` commands are surfaced only when present in the manifest and require explicit browser confirmation; server ownership/reference checks remain authoritative. |
 | Models / providers | `/models`, `/models/:id`, `/models/providers/:id` | model/provider inventory + canonical configuration commands | Inventory, health/configuration and stable detail routes exist. Routing-profile configuration is composed into the maintained Model surface. |
 | Tools / Capabilities / MCP | `/tools`, `/tools/:id`, `/tools/providers/:id` | `capabilities`, `capability-providers` | Capability/provider management is the product surface. MCP servers remain replaceable provider/adapter implementations and are intentionally not contacted directly by the browser. |
 | Files | `/files`, `/files/:id` | canonical `files` ResourceService | **Gap found and closed by #1234.** Authorized metadata, Project/owner scope, state, type, size/checksum and Artifact relationships are now reachable. Raw bytes, storage paths and provider-private identity remain intentionally non-Web. |
@@ -43,15 +43,47 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Approvals / Verification | `/approvals`, `/approvals/:id`, `/verification`, `/verification/:id` | canonical Approval/Verification resources + exact commands | Inspection, decision/review actions and evidence links are maintained. Missing decision commands degrade to read-only rather than fabricating authority. |
 | Automations | `/automations`, `/automations/:id` | `automations`, `automation-deliveries` + exact lifecycle commands | Create/update, pause/resume/disable, test, delivery history and retry are maintained. Scheduler evaluation and event/webhook ingestion remain system paths. |
 | Notifications | `/notifications` | `notifications` | Inventory and read/dismiss attention actions are maintained; a separate durable-detail lifecycle is not invented where the owner does not require one. |
-| Integrations / Connectors | `/integrations`, definition/connection detail routes | `connector-definitions`, `connections` | Connect/configure/enable/disable/health/sync/remove remain canonical. Connection removal now requires explicit confirmation. Plaintext secrets are never a browser field. |
+| Integrations / Connectors | `/integrations`, `/integrations/definitions/:id`, `/integrations/connections/:id` | `connector-definitions`, `connections` | Inventory, connect-time configuration, detail, enable/disable, health, sync, refresh and remove are maintained with stable deep links. The current canonical owner exposes no `connection.configure` / `connection.update` command, so post-connect configuration is deliberately not invented by Web; configuration is supplied to `connection.create` and later replacement is owner-defined. Connection removal requires explicit confirmation. Plaintext secrets are never a browser field. |
 | Repositories | `/repositories`, `/repositories/:id` | canonical repository collection/commands | **Gap found and closed by #1234.** The previous Web page exposed inventory/inspection plus fetch while the canonical V1 contract also supported registration and primary Git mutations. The maintained surface now provides managed local attach, Connection/provider discovery with optional attach, fetch, branch creation, checkout, commit, push and detach, all capability-/policy-gated through the Control Plane. |
-| Marketplace / Registry | `/marketplace` | `registry-items` + Marketplace commands | Existing unified Marketplace surface is maintained and uninstall now requires explicit confirmation. #1174 is consumed; final expanded-kind closure waits for #1221 rather than guessing an unstable contract. |
+| Marketplace / Registry | `/marketplace`, `/marketplace/items/:resourceId` | `registry-items`, `marketplace-kinds` + Marketplace commands | #1174 and the now-integrated #1221 contracts are consumed directly. Global discovery/filtering covers Agents, Agent Teams, Orchestrators, Executors, Model Providers, Capability Providers, selected platform-provider kinds and the earlier Tool/Skill/Plugin/Connector/Application/Content kinds, while future registered kinds remain generic. Source-qualified item details now have stable reloadable deep links. Install/update/uninstall stay delegated to canonical owner handlers; configuration/enable/disable remain on the advertised owner management surface rather than becoming Marketplace-owned lifecycle. Uninstall requires explicit confirmation. |
 | Import / Export | `/import-export`, package/preview/report deep links | `portability-packages`, `portability-import-previews`, `portability-import-reports`; `portability.export|package.validate|preview|import` | **Gap found and closed by #1234.** Export, package validation, server-owned preview and exact-preview import are reachable. Browser code cannot submit an ID mapping or mutation order. |
 | Templates / generated configuration | `/templates`, `/templates/:id`; generated Workflow/Capability Assignment/Model Routing Profile detail routes | canonical Template resources/commands plus owner-domain read projections | Maintained create/version/clone/fork/preview/apply paths; generated owner-domain resources use canonical deep links when a real route exists. |
 | Organizations / collaboration | `/organizations` | Organizations/Teams/Memberships/invitations/ownership/shares | #87 is closed and the maintained surface is active. Membership removal, invitation revocation and share revocation now require explicit confirmation. |
 | Applications | `/applications`, `/applications/:id` | canonical Application resources | **Gap found and closed by #1234.** Lifecycle and diagnostics already existed, but `application.configure` was API-only and removal had no confirmation. The detail surface now edits only manifest-declared mutable typed fields through the canonical configure command and requires confirmation before removal. |
 | Settings / user-manageable configuration / secret references | `/settings` plus Model/Tool/Integration/Onboarding configuration surfaces | browser auth plus canonical configuration/SecretReference contracts | User-manageable configuration is reachable in its owning domain. Resolved/plaintext secret values are intentionally not a browser-management resource. |
 | Usage / Observability / diagnostics | `/usage`, `/events`, `/observability`, dashboard health | canonical accounting/timeline/observability resources | Maintained operator-readable views. Backend-neutral telemetry is not promoted into canonical Task/Run lifecycle truth. |
+
+## Governance, automation and operations state matrix
+
+This focused matrix records the #1234 Governance/Automation/Operations audit. A check means
+the state is a deliberate Web behavior through the public Control Plane. `N/A` means the owning
+V1 contract deliberately does not expose that lifecycle operation; the browser must not invent it.
+
+| Domain | Route/navigation | List / empty / loading | Create / edit | Detail / deep link / parent | Mutations / pending | Validation | Backend / permission / offline | Refresh / stale reconciliation | Destructive confirmation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Approvals | ✓ `/approvals` | ✓ pending by default, optional terminal history | N/A — approvals are created by owning workflows | ✓ `/approvals/:id` | ✓ approve/deny only when both canonical commands are advertised; terminal records are read-only | ✓ exact approval/action/resource/policy/digest confirmation | ✓ shared typed error presentation distinguishes auth, approval, forbidden and unavailable | ✓ failed/racing decisions reload the canonical Approval while retaining stable retry identity | ✓ exact-decision confirmation is mandatory |
+| Verification | ✓ `/verification` | ✓ independent opaque-cursor pagination for pending reviews, requirements and history | N/A — verification requests are lifecycle-owned | ✓ `/verification/:id` | ✓ accept/reject/request-changes with idempotent retries; terminal records remove review actions | ✓ evidence IDs and server-owned policy validation | ✓ load, requirement and action failures remain visible; missing requirement alone is not treated as failure | ✓ failed/racing review commands reload canonical Verification/requirement/history | N/A — review outcome is an explicit decision, not deletion |
+| Automations | ✓ `/automations` | ✓ inventory pagination, empty/loading/error | ✓ create/update | ✓ `/automations/:id`, delivery history | ✓ pause, resume, disable, re-enable disabled state through canonical resume, revalidate invalid state, manual test and delivery retry | ✓ typed form/JSON validation plus canonical revalidation | ✓ shared typed errors; action failures reconcile canonical state | ✓ refresh inventory/detail/deliveries; failed lifecycle actions reload canonical Automation | ✓ disable confirmation; **Delete is N/A because V1 exposes no `automation.delete` command** |
+| Notifications | ✓ `/notifications` | ✓ cursor-paginated inbox, filters, empty/loading, live status | N/A — notifications are projections; preferences are editable | N/A — source links lead to owning canonical resource; no invented notification lifecycle page | ✓ mark read/all read, acknowledge, dismiss, archive, delivery retry, preference mutations | ✓ canonical preference validation | ✓ shared typed errors; live-stream failure degrades to refreshable inbox | ✓ explicit refresh + live canonical reload; pagination keeps all inbox records reachable | N/A — archive/dismiss are canonical attention states, not resource deletion |
+| Settings / configuration / SecretReferences | ✓ `/settings` plus owner-specific config routes | ✓ session/setup/release status loading/empty/error as applicable | ✓ only contracts explicitly declared user-manageable by their owner | ✓ owner-specific detail routes | ✓ browser session revoke, setup changes and already-maintained typed owner commands | ✓ owner manifests/schemas | ✓ shared typed errors | ✓ reload/retry in owning surfaces | ✓ session revoke; application removal and other destructive owner actions remain confirmed |
+| Usage | ✓ `/usage` | ✓ independent opaque-cursor pagination for records, aggregates and budgets; available collections remain usable independently | N/A — accounting is runtime-owned | N/A — operator-readable aggregation surface | N/A — no browser accounting authority | ✓ server-owned query/filter validation | ✓ per-collection errors retain canonical forbidden/approval/unavailable/backend semantics instead of collapsing them | ✓ refresh accounting collections | N/A |
+| Observability / Events | ✓ `/observability`, `/events` plus `/:taskId` deep links | ✓ recent Task chooser plus exact canonical Task ID for records outside the recent window; timeline and trace support opaque-cursor continuation with loading/empty/error states | N/A | ✓ stable Task-scoped operator permalinks and canonical Task links | N/A — telemetry is not lifecycle authority | ✓ exact Task ID and server-owned trace filters | ✓ typed read failures | ✓ explicit task/timeline refresh | N/A |
+| Diagnostics | ✓ dashboard health plus `/settings` release/setup status | ✓ operator-facing health/status only | N/A | N/A | N/A | N/A | ✓ canonical health/readiness/status failures | ✓ normal page/status refresh | N/A |
+
+Audit conclusions:
+
+- V1 has no public `automation.delete` or `automation.enable` command. Re-enabling a disabled
+  Automation is the existing canonical `automation.resume` transition; deletion is therefore
+  intentionally not fabricated in the Web client.
+- `automation.invalidate` / `automation.revalidate` are administrative lifecycle commands.
+  The ordinary browser does not invent invalidation, but it exposes canonical revalidation when an
+  Automation is already `invalid`, allowing an authorized operator to recover it.
+- Secret values remain outside browser management. User-manageable configuration stores/references
+  secrets only through the typed owning contract; plaintext/resolved secret material is not a V1 Web
+  resource.
+- Backup/restore, schema migration, HA failover, raw deployment logs, scheduler evaluation,
+  platform-event injection and webhook ingress remain operational/system boundaries rather than
+  newly exposed product buttons.
 
 ## Cross-cutting state coverage
 
@@ -70,8 +102,9 @@ page:
 - durable detail state is reloaded from canonical IDs instead of being kept only in transient
   frontend selection state;
 - deep links now map to their stable navigation parent, including Workspace -> Projects,
-  Plan/Step/Result/Artifact -> Files & Artifacts, generated Template resources -> Templates and
-  Import/Export package/preview/report -> Import / Export.
+  Plan/Step/Result/Artifact overview and detail routes -> Files & Artifacts, generated Template resources -> Templates and
+  Import/Export package/preview/report -> Import / Export;
+- Plan/Step/Result/Artifact collection selection is URL-owned on the stable overview routes, so browser reload and direct navigation do not fall back to a transient default tab.
 
 #1234 also adds a navigation-closure regression guard: every discoverable primary sidebar route must
 resolve to a maintained route and may not silently fall through to the generic
@@ -113,6 +146,33 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
    dependency pins had advanced beyond the documented values. `docs/FRONTEND.md` is reconciled in
    the same change.
 
+8. **Core reference refresh/deep-link gap** — Plan, Step, Result and Artifact had detail routes but their
+   only overview selection lived in transient state under `/files`. Added stable `/plans`, `/steps`,
+   `/results` and `/artifacts` over the same canonical collections, kept Files & Artifacts as the
+   navigation parent, linked Task/Run relationships directly to those canonical detail routes, and exposed
+   the canonical Step -> Run edge through Run subject filters. Agent and Agent Team details also project
+   their assigned canonical Tasks with Plan/Run links from Task truth rather than keeping a second runtime view.
+
+9. **Agent / Agent Team destructive-action gap** — the Control Plane already exposed named
+   `agent.delete` and `agent-team.delete` commands, but the maintained Web detail views did not surface
+   them. The typed configuration client now exposes those exact commands, the actions are manifest-gated,
+   and deletion requires explicit confirmation before the server performs owner/reference safety checks.
+
+10. **Task cancellation confirmation** — the maintained Task detail view exposed the canonical cancel
+    command directly. The action now requires an explicit confirmation before invoking the existing
+    Control Plane command; cancellation propagation and resulting lifecycle truth remain backend-owned.
+
+11. **Run lifecycle reachability gap** — the typed Web client already exposed canonical Run
+    cancellation, but Run detail was inspection-only and had no explicit return action. Active Run detail
+    now exposes confirmed `cancelRun(task_id, run_id)`, refresh, Task navigation and a stable Back to Runs
+    path; the Control Plane remains lifecycle authority.
+
+12. **Expanded Marketplace deep-link closure** — #1221 is now closed and integrated on the M3 collection branch.
+    The Marketplace already rendered its semantic kinds, owner metadata and lifecycle decisions, but
+    item detail was transient selection state inside `/marketplace`. Added source-qualified
+    `/marketplace/items/:resourceId` routes backed by canonical `registry-items` reads, preserving
+    reload/direct-link behavior without introducing Marketplace-owned runtime authority.
+
 ## Remaining #1234 work outside this branch
 
 This branch is intentionally a mergeable **coverage slice**, not the final #1234 closure branch.
@@ -136,16 +196,16 @@ the later collection branch, rather than leaving partial route/client work in th
 
 - **#1164** owns the maintained real-browser first-run/E2E workflow. #1234 consumes that evidence
   instead of creating a second competing harness.
-- **#1221** owns the final Marketplace expansion to Agents, Agent Teams, Orchestrators and platform
-  providers. #1234 can audit the current baseline but cannot freeze the expanded route/state matrix
-  before that issue stabilizes.
 - **#1174** is complete and is treated as the authoritative Marketplace-core baseline.
+- **#1221** is now closed and integrated through the M3 collection merge; its expanded semantic-kind
+  and canonical-owner contracts are consumed by the maintained Marketplace Web surface rather than
+  treated as a future dependency.
 - **#747** remains the final whole-product acceptance audit after #1234 and the other implementation
   work are complete.
 
-The implementation branch is therefore allowed to become merge-ready before #1164/#1221 close.
-#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164/#1221 are
-consumed and the exact final integrated Web state is rechecked.
+The implementation branch is therefore allowed to become merge-ready before #1164 closes; #1221 is already integrated.
+#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164 evidence is
+consumed and the exact final integrated Web state is rechecked. #1221 no longer blocks this matrix.
 
 ## Validation contract
 
@@ -160,5 +220,5 @@ frontend and repository checks, including:
 - maintained browser regression where selected by CI;
 - all branch-protection Required Checks.
 
-A green merge commit is implementation evidence, not a substitute for #1164/#1221 final dependency
+A green merge commit is implementation evidence, not a substitute for #1164 final dependency
 consumption or #747.

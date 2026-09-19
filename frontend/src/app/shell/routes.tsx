@@ -16,7 +16,7 @@ import { ImportExportPage, PortabilityDetailPage } from "../../pages/ImportExpor
 import { ConnectionDetailPage, ConnectorDefinitionDetailPage, IntegrationsPage } from "../../pages/IntegrationsPage";
 import { GovernancePage, ProposalGovernanceDetailPage, SpecificationGovernanceDetailPage } from "../../pages/GovernancePage";
 import { LEARNING_REQUIRED_RESOURCES, LearningDetailPage, LearningPage } from "../../pages/LearningPage";
-import { MarketplacePage } from "../../pages/MarketplacePage";
+import { MARKETPLACE_ITEM_ROUTE, MarketplacePage } from "../../pages/MarketplacePage";
 import { KnowledgeDetailPage, KnowledgePage, MemoryDetailPage, MemoryPage } from "../../pages/MemoryKnowledgePages";
 import { ModelDetailPage, ModelProviderDetailPage } from "../../pages/ModelPages";
 import { ModelsPage } from "../../pages/ModelInventoryPage";
@@ -25,11 +25,12 @@ import { ObservabilityPage } from "../../pages/ObservabilityPage";
 import { OnboardingPage } from "../../pages/OnboardingPage";
 import { OrganizationsPage } from "../../pages/OrganizationsPage";
 import { OverviewPage, UnavailablePage } from "../../pages/Pages";
+import { NotFoundPage } from "../../pages/NotFoundPage";
 import { PluginCandidateDetailPage, PluginDetailPage, PluginsPage } from "../../pages/PluginsPage";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../../pages/ProjectPages";
 import { ProjectsPage } from "../../pages/ProjectListPage";
 import { RepositoriesPage, RepositoryDetailPage } from "../../pages/RepositoriesPage";
-import { FileDetailPage, ReferencesPage } from "../../pages/ReferencePages";
+import { FileDetailPage, ReferenceCollectionPage, ReferencesPage } from "../../pages/ReferencePages";
 import { RunsPage } from "../../pages/RunListPage";
 import { SearchPage } from "../../pages/SearchPage";
 import { SettingsPage } from "../../pages/SettingsPage";
@@ -49,6 +50,7 @@ import { ManifestResourcePage, ManifestResourcesPage, type ManifestState } from 
 const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;
 const COMPUTE_RESOURCES = ["nodes", "workers", "worker-jobs"] as const;
 const INTEGRATION_RESOURCES = ["connector-definitions", "connections"] as const;
+const MARKETPLACE_RESOURCES = ["registry-items", "marketplace-kinds"] as const;
 const KNOWLEDGE_RESOURCES = ["knowledge", "knowledge-results"] as const;
 const APPLICATION_RESOURCES = ["applications", "application-instances", "application-logs"] as const;
 
@@ -113,6 +115,7 @@ export function renderShellRoute({
   const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
   const evaluationRunMatch = matchPath("/evaluations/runs/:evaluationRunId", path);
   const learningCandidateMatch = matchPath("/learning/:learningCandidateId", path);
+  const marketplaceItemMatch = matchPath(MARKETPLACE_ITEM_ROUTE, path);
   const computeNodeMatch = matchPath("/compute/nodes/:nodeId", path);
   const computeWorkerMatch = matchPath("/compute/workers/:workerId", path);
   const computeWorkerJobMatch = matchPath("/compute/jobs/:workerJobId", path);
@@ -126,9 +129,12 @@ export function renderShellRoute({
   const modelRoutingProfileMatch = matchPath("/model-routing-profiles/:profileId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
+  const eventTaskMatch = matchPath("/events/:taskId", path);
+  const observabilityTaskMatch = matchPath("/observability/:taskId", path);
   const portabilityPackageMatch = matchPath("/import-export/packages/:packageId", path);
   const portabilityPreviewMatch = matchPath("/import-export/previews/:previewId", path);
   const portabilityReportMatch = matchPath("/import-export/reports/:reportId", path);
+  const referenceCollection = referenceCollectionRoute(path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
@@ -165,12 +171,13 @@ export function renderShellRoute({
   if (capabilityAssignmentMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Capability Assignment" resource="capability-assignments"><CanonicalConfigurationDetailPage client={collections} collection="capability-assignments" resourceId={capabilityAssignmentMatch.assignmentId} /></ManifestResourcePage>;
   if (modelRoutingProfileMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Model Routing Profile" resource="model-routing-profiles"><CanonicalConfigurationDetailPage client={collections} collection="model-routing-profiles" resourceId={modelRoutingProfileMatch.profileId} /></ManifestResourcePage>;
   if (path === "/agents") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents"><AgentsPage client={client} /></ManifestResourcePage>;
-  if (agentMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents"><AgentDetailPage client={client} agentId={agentMatch.agentId} /></ManifestResourcePage>;
+  if (agentMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents"><AgentDetailPage client={client} agentId={agentMatch.agentId} canDelete={manifestCommands.includes("agent.delete")} /></ManifestResourcePage>;
   if (path === "/agent-teams") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamsPage client={client} /></ManifestResourcePage>;
-  if (agentTeamMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} /></ManifestResourcePage>;
+  if (agentTeamMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} canDelete={manifestCommands.includes("agent-team.delete")} /></ManifestResourcePage>;
   if (path === "/organizations") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Organizations" resource="organizations"><OrganizationsPage client={organizationClient} /></ManifestResourcePage>;
   if (path === "/files") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Files & artifacts" resource="files"><ReferencesPage client={client} files={filesClient} /></ManifestResourcePage>;
   if (fileMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="File" resource="files"><FileDetailPage client={filesClient} fileId={fileMatch.fileId} /></ManifestResourcePage>;
+  if (referenceCollection) return <ManifestResourcePage state={manifestState} manifest={manifest} label={referenceCollectionLabel(referenceCollection)} resource={referenceCollection}><ReferenceCollectionPage client={client} collection={referenceCollection} /></ManifestResourcePage>;
   if (referenceMatch) return <VerificationBoundReferenceDetailPage client={client} verificationClient={verificationClient} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   if (path === "/memory") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryPage client={memoryKnowledgeClient} /></ManifestResourcePage>;
   if (memoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryDetailPage client={memoryKnowledgeClient} memoryId={memoryMatch.memoryId} /></ManifestResourcePage>;
@@ -195,7 +202,8 @@ export function renderShellRoute({
   if (evaluationRunMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}><EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} /></ManifestResourcesPage>;
   if (path === "/learning") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Learning" resources={LEARNING_REQUIRED_RESOURCES}><LearningPage client={learningClient} /></ManifestResourcesPage>;
   if (learningCandidateMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Learning" resources={LEARNING_REQUIRED_RESOURCES}><LearningDetailPage client={learningClient} candidateId={learningCandidateMatch.learningCandidateId} commands={learningCapabilities.commands} postPromotionAvailable={learningCapabilities.postPromotionAvailable} /></ManifestResourcesPage>;
-  if (path === "/marketplace") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Marketplace" resource="registry-items"><MarketplacePage client={registryClient} /></ManifestResourcePage>;
+  if (path === "/marketplace") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Marketplace" resources={MARKETPLACE_RESOURCES}><MarketplacePage client={registryClient} /></ManifestResourcesPage>;
+  if (marketplaceItemMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Marketplace" resources={MARKETPLACE_RESOURCES}><MarketplacePage client={registryClient} selectedResourceId={marketplaceItemMatch.resourceId} /></ManifestResourcesPage>;
   if (path === "/compute") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputePage client={computeClient} /></ManifestResourcesPage>;
   if (computeNodeMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeNodeDetailPage client={computeClient} nodeId={computeNodeMatch.nodeId} /></ManifestResourcesPage>;
   if (computeWorkerMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeWorkerDetailPage client={computeClient} workerId={computeWorkerMatch.workerId} /></ManifestResourcesPage>;
@@ -214,11 +222,24 @@ export function renderShellRoute({
   if (approvalMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals"><ApprovalDetailPage client={approvalClient} approvalId={approvalMatch.approvalId} decisionState={approvalDecisionState} /></ManifestResourcePage>;
   if (path === "/notifications") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Notifications" resource="notifications"><NotificationsPage client={notificationClient} /></ManifestResourcePage>;
   if (path === "/events") return <ObservabilityPage client={client} view="events" />;
+  if (eventTaskMatch) return <ObservabilityPage client={client} view="events" initialTaskId={eventTaskMatch.taskId} />;
   if (path === "/observability") return <ObservabilityPage client={client} view="observability" />;
+  if (observabilityTaskMatch) return <ObservabilityPage client={client} view="observability" initialTaskId={observabilityTaskMatch.taskId} />;
   if (path === "/usage") return <UsagePage client={client} manifest={manifest} />;
   if (path === "/settings") return <SettingsPage session={session} />;
   if (navItem) return <UnavailablePage item={navItem} manifest={manifest} />;
-  return <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
+  return <NotFoundPage path={path} />;
+}
+
+function referenceCollectionRoute(path: string): ReferenceCollection | null {
+  for (const collection of ["artifacts", "results", "plans", "steps"] as const) {
+    if (path === `/${collection}`) return collection;
+  }
+  return null;
+}
+
+function referenceCollectionLabel(collection: ReferenceCollection): string {
+  return collection.charAt(0).toUpperCase() + collection.slice(1);
 }
 
 function referenceRoute(path: string): { collection: ReferenceCollection; resourceId: string } | null {

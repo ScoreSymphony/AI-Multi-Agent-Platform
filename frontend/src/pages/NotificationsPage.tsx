@@ -13,7 +13,9 @@ import {
   type LiveConnectionState,
 } from "../api/live";
 import type { JsonValue, Page } from "../api/types";
+import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
+import { PaginationControls } from "../components/Pagination";
 import {
   Card,
   CanonicalId,
@@ -52,12 +54,16 @@ export function NotificationsPage({ client }: { client: NotificationClient }) {
   const [severity, setSeverity] = useState<NotificationSeverity | "">("");
   const [state, setState] = useState<NotificationState | "">("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const pagination = useCursorPagination(
+    `notifications:${category || "all"}:${severity || "all"}:${state || "active"}:updated_at:desc`,
+  );
 
   const load = useCallback(async () => {
     try {
       const [notifications, loadedPreference] = await Promise.all([
         client.list({
-          limit: 100,
+          limit: 50,
+          cursor: pagination.cursor,
           sort: "updated_at",
           direction: "desc",
           filters: {
@@ -74,7 +80,7 @@ export function NotificationsPage({ client }: { client: NotificationClient }) {
     } catch (nextError) {
       setError(nextError);
     }
-  }, [category, client, severity, state]);
+  }, [category, client, pagination.cursor, severity, state]);
 
   useEffect(() => {
     void load();
@@ -197,6 +203,14 @@ export function NotificationsPage({ client }: { client: NotificationClient }) {
             busyId={busyId}
             client={client}
             mutate={mutate}
+          />
+          <PaginationControls
+            page={page}
+            pageNumber={pagination.pageNumber}
+            hasPrevious={pagination.hasPrevious}
+            onPrevious={pagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => pagination.next(page.next_cursor)}
           />
         </Card>
       ) : null}

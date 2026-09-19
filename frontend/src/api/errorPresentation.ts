@@ -44,7 +44,52 @@ export function describeError(error: unknown): ErrorPresentation {
     };
   }
 
-  if (error.body.code === "unavailable") {
+  if (error.status === 404 || error.body.code === "not_found") {
+    return {
+      title: "Not found",
+      message: error.body.message,
+      hint: "The canonical resource may have been removed or is no longer visible to the current actor.",
+    };
+  }
+
+  if (
+    error.status === 422
+    || error.body.category === "validation"
+    || [
+      "invalid_request",
+      "invalid_configuration",
+      "invalid_argument",
+      "validation_error",
+    ].includes(error.body.code)
+  ) {
+    return {
+      title: "Validation failed",
+      message: error.body.message,
+      hint: "Review the submitted values. Validation remains authoritative on the Control Plane.",
+    };
+  }
+
+  if (error.status === 409 || error.body.code === "conflict") {
+    return {
+      title: "State changed",
+      message: error.body.message,
+      hint: "Canonical state changed since this view was loaded. Refresh the resource before retrying the action.",
+    };
+  }
+
+  if (
+    error.status === 0
+    || error.body.category === "transport"
+    || ["network_failure", "request_timeout"].includes(error.body.code)
+  ) {
+    return {
+      title: "Control Plane unavailable",
+      message: error.body.message,
+      hint: error.body.retryable ? "The request can be retried without creating browser-owned lifecycle state." : undefined,
+    };
+  }
+
+  if (["unavailable", "model_unavailable"].includes(error.body.code)) {
     return {
       title: "Subsystem unavailable",
       message: error.body.message,
@@ -61,4 +106,8 @@ export function describeError(error: unknown): ErrorPresentation {
 
 function stringDetail(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function canRetryError(error: unknown): boolean {
+  return isControlPlaneError(error) && error.body.retryable;
 }

@@ -101,6 +101,10 @@ describe("#17 shell accessibility semantics", () => {
     expect(integrations).toContain("Checking Integrations availability");
     expect(integrations).not.toContain("Canonical Connector Definitions and Connections");
 
+    const marketplace = renderShell("/marketplace");
+    expect(marketplace).toContain("Checking Marketplace availability");
+    expect(marketplace).not.toContain("Unified component catalog");
+
     const evaluations = renderShell("/evaluations");
     expect(evaluations).toContain("Checking Evaluations availability");
     expect(evaluations).not.toContain("Quality and regression evidence");
@@ -142,6 +146,8 @@ describe("#17 shell accessibility semantics", () => {
         "approvals",
         "connector-definitions",
         "connections",
+        "registry-items",
+        "marketplace-kinds",
         "evaluation-suites",
         "evaluation-runs",
         "nodes",
@@ -174,6 +180,13 @@ describe("#17 shell accessibility semantics", () => {
     ).toBe("available");
     expect(
       manifestResourcesState("ready", manifest, ["connector-definitions", "missing-connections"]),
+    ).toBe("unavailable");
+
+    expect(
+      manifestResourcesState("ready", manifest, ["registry-items", "marketplace-kinds"]),
+    ).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, ["registry-items", "missing-marketplace-kinds"]),
     ).toBe("unavailable");
 
     expect(
@@ -218,6 +231,23 @@ describe("#17 shell accessibility semantics", () => {
 
     const result = renderShell("/results/result_1");
     expect(result).toMatch(/href="\/files"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/files"/);
+
+    const plans = renderShell("/plans");
+    expect(plans).toMatch(/href="\/files"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/files"/);
+    expect(plans).toContain("Checking Plans availability");
+    expect(plans).not.toContain("Unknown route");
+
+    const marketplace = renderShell("/marketplace/items/official%3A%3Aagent.example%401.0.0");
+    expect(marketplace).toMatch(/href="\/marketplace"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/marketplace"/);
+    expect(marketplace).toContain("Checking Marketplace availability");
+
+    const connectorDefinition = renderShell("/integrations/definitions/github%401.0.0");
+    expect(connectorDefinition).toMatch(/href="\/integrations"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/integrations"/);
+    expect(connectorDefinition).toContain("Checking Integrations availability");
+
+    const connection = renderShell("/integrations/connections/connection_1");
+    expect(connection).toMatch(/href="\/integrations"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/integrations"/);
+    expect(connection).toContain("Checking Integrations availability");
   });
 
   it("routes Settings to the real browser-session surface", () => {

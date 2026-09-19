@@ -144,7 +144,7 @@ The canonical `/files` read surface uses the same scope principle. The File Reso
 
 Tombstoned Files are excluded by the canonical FileProvider. Because the correctness-first Search path rebuilds from canonical sources before a query, a deleted/tombstoned File disappears from Search without a Search-owned deletion state or second lifecycle.
 
-Memory and Knowledge are intentionally not derived from private provider internals. The current Memory/Knowledge contracts do not yet provide the privacy-aware globally enumerable northbound content lifecycle required for Search. Global Search waits for that canonical contract rather than using implementation-private provider methods. The follow-up content lifecycle/enumeration work is tracked separately, including #251.
+Memory and Knowledge discovery is derived only from the privacy-aware canonical northbound resources introduced by #251/#13. Search can index safe discovery metadata for Memory, Knowledge Sources and Knowledge Documents without reading provider-private vector/index state or raw private content. The normal per-resource authorization checks run before counts, snippets or exact-ID results become caller-visible.
 
 ### Plugins and Plugin Candidates
 
@@ -342,7 +342,7 @@ The `/search` navigation entry is backed by a global Search page that:
 - reuses canonical provider-unavailable error presentation;
 - links known resource types to their canonical UI routes using the result's canonical type and ID.
 
-Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, Model, Model-Provider and Approval results can navigate to their existing canonical UI route. Other indexed types retain their canonical API reference even where the owning domain does not yet provide a dedicated frontend detail route. The Search frontend does not invent client-only identities or routes.
+Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, File, Memory, Knowledge Source, Capability, Capability Provider, Model, Model Provider, Node, Worker and Approval results can navigate to their existing canonical UI route. Other indexed types retain their canonical API reference where the owning domain deliberately has no dedicated frontend detail lifecycle. The Search frontend does not invent client-only identities or routes.
 
 ## Synchronization semantics
 
@@ -396,8 +396,10 @@ The secure Search foundation, Task/reference/Event indexing, progressive registr
 
 Remaining progressive work is intentionally gated on the owning canonical APIs and privacy contracts:
 
-- scoped Memory and Knowledge after privacy-aware canonical content enumeration exists (#251/#13);
-- Nodes/Workers after #14 stabilizes its northbound registry/resource contract;
+Memory/Knowledge and Nodes/Workers are no longer remaining integrations: they rebuild from their canonical northbound resources and preserve authorization-safe discovery. Worker Jobs intentionally remain outside global Search because dispatch/reservation evidence is not a discovery catalog.
+
+Remaining progressive integrations include:
+
 - Conversations/Messages with retention/deletion propagation (#72);
 - Notifications where useful after the currently reopened #75 is stable;
 - Templates (#78);

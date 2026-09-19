@@ -109,6 +109,12 @@ export interface CanonicalCapabilityAssignment {
   revision: CanonicalCapabilityAssignmentRevision;
 }
 
+export interface AgentDeletionReceipt {
+  id: string;
+  type: "agent" | "agent_team";
+  deleted: true;
+}
+
 export interface AgentScopeInput {
   project_id?: string | null;
   workspace_id?: string | null;
@@ -170,6 +176,10 @@ export class ConfigurationClient {
     });
   }
 
+  deleteAgent(agentId: string): Promise<AgentDeletionReceipt> {
+    return this.command<AgentDeletionReceipt>("agent.delete", agentId, {});
+  }
+
   cloneAgent(agentId: string, input: AgentCloneInput = {}): Promise<CanonicalAgent> {
     return this.command<CanonicalAgent>("agent.clone", agentId, {
       revision: input.revision,
@@ -199,6 +209,10 @@ export class ConfigurationClient {
       expected_revision: expectedRevision,
       ...compactScope(scope),
     });
+  }
+
+  deleteAgentTeam(teamId: string): Promise<AgentDeletionReceipt> {
+    return this.command<AgentDeletionReceipt>("agent-team.delete", teamId, {});
   }
 
   listRoutingProfiles(query: ListQuery = {}): Promise<Page<CanonicalModelRoutingProfile>> {

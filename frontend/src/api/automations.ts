@@ -75,6 +75,9 @@ export interface CanonicalAutomation {
   revision: number;
   last_evaluated_at: string | null;
   next_evaluation_at: string | null;
+  invalidation_reason_code?: string | null;
+  invalidated_at?: string | null;
+  state_before_invalid?: Exclude<AutomationState, "invalid"> | null;
 }
 
 export interface CanonicalAutomationDelivery {
@@ -175,6 +178,10 @@ export class AutomationClient {
 
   disable(automationId: string): Promise<CanonicalAutomation> {
     return this.command<CanonicalAutomation>("automation.disable", automationId);
+  }
+
+  revalidate(automationId: string): Promise<CanonicalAutomation> {
+    return this.command<CanonicalAutomation>("automation.revalidate", automationId);
   }
 
   test(

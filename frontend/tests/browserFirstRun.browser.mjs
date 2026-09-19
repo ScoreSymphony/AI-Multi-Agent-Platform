@@ -163,6 +163,52 @@ async function taskInventory(page) {
   });
 }
 
+async function standardAgentTeamInventory(page) {
+  return page.evaluate(async () => {
+    const [{ BrowserSessionClient }, { ControlPlaneClient }] = await Promise.all([
+      import("/src/api/browserSession.ts"),
+      import("/src/api/client.ts"),
+    ]);
+    const session = new BrowserSessionClient();
+    const client = new ControlPlaneClient({ transport: session.transport });
+    const teams = await client.listAgentTeams({ limit: 100 });
+    return teams.items.map((team) => ({
+      id: team.id,
+      starterKey: team.revision.profile.metadata.starter_key ?? null,
+      starterKind: team.revision.profile.metadata.starter_kind ?? null,
+    }));
+  });
+}
+
+async function readPublicApiResource(page, path) {
+  return page.evaluate(async (resourcePath) => {
+    const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
+    const session = new BrowserSessionClient();
+    return session.transport.request(resourcePath, { retry: "never" });
+  }, path);
+}
+
+async function publicApiCommand(page, path, body) {
+  return page.evaluate(async ({ commandPath, commandBody }) => {
+    const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
+    const session = new BrowserSessionClient();
+    return session.transport.request(commandPath, {
+      method: "POST",
+      body: commandBody,
+      idempotencyKey: crypto.randomUUID(),
+      retry: "never",
+    });
+  }, { commandPath: path, commandBody: body });
+}
+
+function requireCanonicalIdentity(resource, expectedId, label) {
+  if (typeof expectedId !== "string" || expectedId.length === 0 || !resource || resource.id !== expectedId) {
+    throw new Error(
+      `${label} did not resolve the expected canonical ID ${expectedId}: ${JSON.stringify(resource)}`,
+    );
+  }
+}
+
 async function refreshProviderHealthThroughBrowserClient(page, providerId) {
   return page.evaluate(async (id) => {
     const [{ BrowserSessionClient }, { ControlPlaneClient }] = await Promise.all([
@@ -302,7 +348,22 @@ try {
   await page.getByRole("heading", { name: "Create project", exact: true }).waitFor();
 
   await page.getByLabel("Project name", { exact: true }).fill("Browser first-run project");
+  const projectResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/v1/projects") && response.request().method() === "POST",
+  );
   await (await waitForButton(page, "Create project")).click();
+  const projectResponse = await projectResponsePromise;
+  if (!projectResponse.ok()) {
+    throw new Error(
+      `Project creation failed with ${projectResponse.status()}: ${await projectResponse.text()}`,
+    );
+  }
+  const createdProject = await projectResponse.json();
+  requireCanonicalIdentity(
+    await readPublicApiResource(page, `/projects/${createdProject.id}`),
+    createdProject.id,
+    "Browser-created Project through public API",
+  );
   await page.getByRole("heading", { name: "Create workspace", exact: true }).waitFor();
 
   const workspaceResponsePromise = page.waitForResponse(
@@ -313,6 +374,18 @@ try {
   if (!workspaceResponse.ok()) {
     throw new Error(
       `Workspace creation failed with ${workspaceResponse.status()}: ${await workspaceResponse.text()}`,
+    );
+  }
+  const createdWorkspace = await workspaceResponse.json();
+  const workspaceViaApi = await readPublicApiResource(page, `/workspaces/${createdWorkspace.id}`);
+  requireCanonicalIdentity(
+    workspaceViaApi,
+    createdWorkspace.id,
+    "Browser-created Workspace through public API",
+  );
+  if (workspaceViaApi.project_id !== createdProject.id) {
+    throw new Error(
+      `Browser-created Workspace changed Project identity across the public API: ${JSON.stringify(workspaceViaApi)}`,
     );
   }
   await page.getByRole("status").filter({ hasText: "Workspace created" }).waitFor();
@@ -393,6 +466,86 @@ try {
       `Official browser multi-agent first run failed with ${commandResponse.status()}: ${await commandResponse.text()}`,
     );
   }
+  const commandRequest = commandResponse.request();
+  if (!commandRequest.headers()["idempotency-key"]) {
+    throw new Error("Official browser first-run mutation omitted its public idempotency key");
+  }
+  const firstRunResult = await commandResponse.json();
+
+  // #1236: the browser result is only a projection. Every emitted identity must resolve through
+  // the public Control Plane and agree with the server-owned lifecycle state.
+  const taskViaApi = await readPublicApiResource(page, `/tasks/${firstRunResult.task_id}`);
+  requireCanonicalIdentity(taskViaApi, firstRunResult.task_id, "First-run Task");
+  if (
+    taskViaApi.status !== firstRunResult.task_status
+    || taskViaApi.plan_ref !== firstRunResult.plan_id
+    || taskViaApi.project_id !== firstRunResult.project_id
+  ) {
+    throw new Error(
+      `Browser/API Task state diverged after first run: browser=${JSON.stringify(firstRunResult)} api=${JSON.stringify(taskViaApi)}`,
+    );
+  }
+
+  const planViaApi = await readPublicApiResource(page, `/plans/${firstRunResult.plan_id}`);
+  requireCanonicalIdentity(planViaApi, firstRunResult.plan_id, "First-run Plan");
+  if (planViaApi.task_id !== firstRunResult.task_id) {
+    throw new Error(`First-run Plan resolved to a different Task: ${JSON.stringify(planViaApi)}`);
+  }
+
+  for (const step of firstRunResult.steps) {
+    requireCanonicalIdentity(
+      await readPublicApiResource(page, `/steps/${step.step_id}`),
+      step.step_id,
+      "First-run Step",
+    );
+    if (step.run_id) {
+      const runViaApi = await readPublicApiResource(page, `/runs/${step.run_id}`);
+      requireCanonicalIdentity(runViaApi, step.run_id, "First-run Run");
+      if (runViaApi.task_id !== firstRunResult.task_id || runViaApi.status !== step.run_status) {
+        throw new Error(
+          `Browser/API Run state diverged for ${step.run_id}: browser=${JSON.stringify(step)} api=${JSON.stringify(runViaApi)}`,
+        );
+      }
+    }
+  }
+
+  for (const [role, agent] of Object.entries(firstRunResult.agents)) {
+    const agentViaApi = await readPublicApiResource(page, `/agents/${agent.agent_id}`);
+    requireCanonicalIdentity(agentViaApi, agent.agent_id, `First-run ${role} Agent`);
+  }
+  for (const resultId of firstRunResult.result_ids) {
+    const resultViaApi = await readPublicApiResource(page, `/results/${resultId}`);
+    requireCanonicalIdentity(resultViaApi, resultId, "First-run Result");
+    if (resultViaApi.task_id !== firstRunResult.task_id) {
+      throw new Error(`First-run Result resolved to a different Task: ${JSON.stringify(resultViaApi)}`);
+    }
+  }
+  for (const artifactId of firstRunResult.artifact_ids) {
+    const artifactViaApi = await readPublicApiResource(page, `/artifacts/${artifactId}`);
+    requireCanonicalIdentity(artifactViaApi, artifactId, "First-run Artifact");
+    if (artifactViaApi.task_id !== firstRunResult.task_id) {
+      throw new Error(`First-run Artifact resolved to a different Task: ${JSON.stringify(artifactViaApi)}`);
+    }
+  }
+  for (const verification of firstRunResult.verification) {
+    const verificationViaApi = await readPublicApiResource(
+      page,
+      `/verifications/${verification.verification_id}`,
+    );
+    requireCanonicalIdentity(
+      verificationViaApi,
+      verification.verification_id,
+      "First-run Verification",
+    );
+    if (
+      verificationViaApi.task_id !== firstRunResult.task_id
+      || verificationViaApi.status !== verification.status
+    ) {
+      throw new Error(
+        `Browser/API Verification state diverged: browser=${JSON.stringify(verification)} api=${JSON.stringify(verificationViaApi)}`,
+      );
+    }
+  }
 
   const resultCard = page.getByRole("heading", {
     name: "Official multi-agent first-run result",
@@ -418,7 +571,11 @@ try {
   ]) {
     requireText(resultText.toLowerCase(), expected.toLowerCase(), "Official multi-agent browser result");
   }
-  await resultCard.getByRole("link", { name: "Open Task", exact: true }).waitFor();
+  const taskLink = resultCard.getByRole("link", { name: "Open Task", exact: true });
+  await taskLink.waitFor();
+  if ((await taskLink.getAttribute("href")) !== `/tasks/${firstRunResult.task_id}`) {
+    throw new Error("Official browser result did not deep-link the canonical Task ID");
+  }
   const producedResultLink = resultCard.getByRole("link", { name: "Open produced Result", exact: true });
   await producedResultLink.waitFor();
   if ((await resultCard.getByRole("link", { name: "Run", exact: true }).count()) < 4) {
@@ -437,12 +594,83 @@ try {
     );
   }
   const producedResultHref = await producedResultLink.getAttribute("href");
-  if (!producedResultHref?.startsWith("/results/")) {
-    throw new Error(`Produced Result link did not expose a canonical Result route: ${producedResultHref}`);
+  if (producedResultHref !== `/results/${firstRunResult.result_id}`) {
+    throw new Error(`Produced Result link did not expose the canonical Result route: ${producedResultHref}`);
+  }
+  const runHrefs = await resultCard.locator('a[href^="/runs/"]').evaluateAll(
+    (links) => links.map((link) => link.getAttribute("href")).filter(Boolean),
+  );
+  const expectedRunHrefs = firstRunResult.steps
+    .filter((step) => step.run_id)
+    .map((step) => `/runs/${step.run_id}`)
+    .sort();
+  if (JSON.stringify([...runHrefs].sort()) !== JSON.stringify(expectedRunHrefs)) {
+    throw new Error(
+      `Browser Run deep links diverged from canonical IDs: browser=${JSON.stringify(runHrefs)} expected=${JSON.stringify(expectedRunHrefs)}`,
+    );
+  }
+  const artifactHrefs = await resultCard.locator('a[href^="/artifacts/"]').evaluateAll(
+    (links) => links.map((link) => link.getAttribute("href")).filter(Boolean).sort(),
+  );
+  const expectedArtifactHrefs = firstRunResult.artifact_ids
+    .map((artifactId) => `/artifacts/${artifactId}`)
+    .sort();
+  if (JSON.stringify(artifactHrefs) !== JSON.stringify(expectedArtifactHrefs)) {
+    throw new Error(
+      `Browser Artifact deep links diverged from canonical IDs: browser=${JSON.stringify(artifactHrefs)} expected=${JSON.stringify(expectedArtifactHrefs)}`,
+    );
+  }
+  const createdTask = tasksAfterSuccess.find(
+    (task) => !tasksBeforeFailure.some((before) => before.id === task.id),
+  );
+  if (!createdTask) {
+    throw new Error("Official browser first run did not expose the newly created canonical Task");
   }
 
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
+  const standardBootstrapResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/v1/commands/standard-agent.bootstrap")
+      && response.request().method() === "POST",
+  );
   await (await waitForButton(page, "Bootstrap standard Agents")).click();
+  const standardBootstrapResponse = await standardBootstrapResponsePromise;
+  if (!standardBootstrapResponse.ok()) {
+    throw new Error(
+      `Standard Agent/Team bootstrap failed with ${standardBootstrapResponse.status()}: ${await standardBootstrapResponse.text()}`,
+    );
+  }
+  const standardBootstrapResult = await standardBootstrapResponse.json();
+  const expectedTeamKeys = [
+    ...(standardBootstrapResult.installed_team_keys ?? []),
+    ...(standardBootstrapResult.preserved_team_keys ?? []),
+  ].sort();
+  if (expectedTeamKeys.length === 0) {
+    throw new Error(
+      `Standard bootstrap exposed no canonical Agent Team keys: ${JSON.stringify(standardBootstrapResult)}`,
+    );
+  }
+  const standardTeams = await standardAgentTeamInventory(page);
+  for (const teamKey of expectedTeamKeys) {
+    const team = standardTeams.find(
+      (candidate) => candidate.starterKey === teamKey && candidate.starterKind === "team",
+    );
+    if (!team) {
+      throw new Error(
+        `Standard Agent Team ${teamKey} was not visible through the public agent-teams collection: ${JSON.stringify(standardTeams)}`,
+      );
+    }
+    const teamViaApi = await readPublicApiResource(page, `/agent-teams/${team.id}`);
+    requireCanonicalIdentity(teamViaApi, team.id, `Standard Agent Team ${teamKey}`);
+    if (
+      teamViaApi.revision?.profile?.metadata?.starter_key !== teamKey
+      || teamViaApi.revision?.profile?.metadata?.starter_kind !== "team"
+    ) {
+      throw new Error(
+        `Standard Agent Team metadata diverged through the public API: ${JSON.stringify(teamViaApi)}`,
+      );
+    }
+  }
   await (await waitForButton(page, "Create editable General Assistant")).click();
 
   await page.getByRole("heading", { name: "Optional single-Agent first task", exact: true }).waitFor();
@@ -484,6 +712,53 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 
+  // #1236 reverse direction: mutate canonical state through the public API, then prove the
+  // maintained Web detail route observes that server-owned state after a real reload.
+  const apiCreatedTask = await publicApiCommand(page, "/tasks", {
+    title: "API-to-Web refresh parity",
+    objective: "Prove the browser reload cannot override newer canonical server state.",
+    owner_type: taskViaApi.owner.type,
+    owner_id: taskViaApi.owner.id,
+    project_id: firstRunResult.project_id,
+  });
+  requireCanonicalIdentity(apiCreatedTask, apiCreatedTask.id, "API-created Task");
+  if (apiCreatedTask.status !== "draft") {
+    throw new Error(`API-created parity Task did not start as draft: ${JSON.stringify(apiCreatedTask)}`);
+  }
+
+  await page.goto(`${frontendUrl}/tasks/${apiCreatedTask.id}`);
+  await page.getByRole("heading", { name: "API-to-Web refresh parity", exact: true }).waitFor();
+  await page.locator(".detail-status .status").filter({ hasText: "draft" }).waitFor();
+
+  const cancelledViaApi = await publicApiCommand(
+    page,
+    `/tasks/${apiCreatedTask.id}:cancel`,
+    undefined,
+  );
+  requireCanonicalIdentity(cancelledViaApi, apiCreatedTask.id, "API-cancelled Task");
+  if (cancelledViaApi.status !== "cancelled") {
+    throw new Error(`Public API cancellation did not return canonical cancelled state: ${JSON.stringify(cancelledViaApi)}`);
+  }
+
+  await page.reload();
+  await page.getByRole("heading", { name: "API-to-Web refresh parity", exact: true }).waitFor();
+  await page.locator(".detail-status .status").filter({ hasText: "cancelled" }).waitFor();
+  const renderedRevision = await page
+    .locator("dt", { hasText: "revision" })
+    .locator("xpath=following-sibling::dd[1]")
+    .innerText();
+  if (renderedRevision.trim() !== String(cancelledViaApi.revision)) {
+    throw new Error(
+      `Reloaded Web revision ${renderedRevision} did not match canonical revision ${cancelledViaApi.revision}`,
+    );
+  }
+  const refreshedViaApi = await readPublicApiResource(page, `/tasks/${apiCreatedTask.id}`);
+  if (refreshedViaApi.status !== "cancelled" || refreshedViaApi.revision !== cancelledViaApi.revision) {
+    throw new Error(
+      `Reloaded Web state did not agree with the latest canonical Task revision: web/API=${JSON.stringify(refreshedViaApi)} mutation=${JSON.stringify(cancelledViaApi)}`,
+    );
+  }
+
   const bootstrapStatus = await page.evaluate(async () => {
     const response = await fetch("/api/v1/auth/bootstrap-status");
     return response.json();
@@ -499,6 +774,117 @@ try {
   await page.goto(frontendUrl);
   await signIn(page);
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+
+  // Keep representative cross-domain navigation in the maintained browser-first-run harness.
+  // Historical context: #1234 consumes #1164 rather than creating a competing E2E architecture.
+  // Deep-linked canonical detail state must survive reload, Search filters must
+  // survive reload/back navigation, and an unknown URL must remain distinct from an optional
+  // provider/resource-unavailable state.
+  const taskPath = `/tasks/${encodeURIComponent(createdTask.id)}`;
+  await page.goto(`${frontendUrl}${taskPath}`);
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
+  await page.reload();
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
+
+  const searchPath = "/search?q=Browser&types=task";
+  await page.goto(`${frontendUrl}${searchPath}`);
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query was not restored from the deep-link URL");
+  }
+  if ((await page.locator('input[name="types"]').inputValue()) !== "task") {
+    throw new Error("Global Search type filter was not restored from the deep-link URL");
+  }
+  await page.reload();
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query did not survive browser reload");
+  }
+
+  await page.goto(`${frontendUrl}/definitely-missing-route`);
+  await page.getByRole("heading", { name: "Page not found", exact: true }).waitFor();
+  await page.getByRole("link", { name: "Return to platform overview", exact: true }).waitFor();
+  await page.goBack();
+  await page.waitForURL(`${frontendUrl}${searchPath}`);
+  if ((await page.locator('input[name="q"]').inputValue()) !== "Browser") {
+    throw new Error("Global Search query did not survive browser Back navigation");
+  }
+
+  // A direct deep link with revoked/insufficient permission must fail closed as Access denied,
+  // not as an empty resource or a retryable provider outage.
+  const taskDetailApi = `**/api/v1/tasks/${createdTask.id}`;
+  const denyTaskDetail = async (route) => {
+    await route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "forbidden",
+        category: "authorization",
+        message: "browser acceptance permission denial",
+        request_id: "request_browser_permission_denied",
+        correlation_id: "correlation_browser_permission_denied",
+        retryable: false,
+      }),
+    });
+  };
+  await page.route(taskDetailApi, denyTaskDetail);
+  await page.goto(`${frontendUrl}${taskPath}`);
+  const deniedAlert = page.getByRole("alert").filter({ hasText: "Access denied" });
+  await deniedAlert.waitFor();
+  if ((await deniedAlert.getByRole("button", { name: "Retry", exact: true }).count()) !== 0) {
+    throw new Error("Non-retryable permission denial exposed a Retry action");
+  }
+  await page.unroute(taskDetailApi, denyTaskDetail);
+
+  // A resource that disappeared behind a once-valid deep link must be an explicit Not found state.
+  const missingTaskDetail = async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "not_found",
+        category: "request",
+        message: "browser acceptance resource missing",
+        request_id: "request_browser_not_found",
+        correlation_id: "correlation_browser_not_found",
+        retryable: false,
+      }),
+    });
+  };
+  await page.route(taskDetailApi, missingTaskDetail);
+  await page.reload();
+  const missingAlert = page.getByRole("alert").filter({ hasText: "Not found" });
+  await missingAlert.waitFor();
+  if ((await missingAlert.getByRole("button", { name: "Retry", exact: true }).count()) !== 0) {
+    throw new Error("Non-retryable missing-resource state exposed a Retry action");
+  }
+  await page.unroute(taskDetailApi, missingTaskDetail);
+  await page.reload();
+  await page.locator(`main[data-route="${taskPath}"]`).waitFor();
+  await page.locator(`code[title="${createdTask.id}"]`).first().waitFor();
+
+  // Force both transport attempts for manifest discovery to fail once. The maintained shell must
+  // expose a retryable Control Plane outage and recover in-place when the next manifest read works.
+  let manifestFailures = 0;
+  const manifestApi = "**/api/v1/";
+  const failManifestTemporarily = async (route) => {
+    if (manifestFailures < 2) {
+      manifestFailures += 1;
+      await route.abort("connectionfailed");
+      return;
+    }
+    await route.continue();
+  };
+  await page.route(manifestApi, failManifestTemporarily);
+  await page.goto(`${frontendUrl}/tools`);
+  const manifestAlert = page.getByRole("alert").filter({ hasText: "Control Plane unavailable" });
+  await manifestAlert.waitFor();
+  await manifestAlert.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.locator(".api-indicator").filter({ hasText: "/api/v1" }).waitFor();
+  await manifestAlert.waitFor({ state: "detached" });
+  await page.unroute(manifestApi, failManifestTemporarily);
 } catch (error) {
   await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
   if (page) {

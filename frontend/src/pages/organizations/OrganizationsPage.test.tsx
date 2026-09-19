@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { ControlPlaneError } from "../../api/client";
 import { describe, expect, it, vi } from "vitest";
 import {
   OrganizationClient,
@@ -18,6 +19,17 @@ import {
   OrganizationsPage,
   PersonalOrganizationScope,
 } from "./OrganizationsPage";
+
+function retryableBackendError(message: string): ControlPlaneError {
+  return new ControlPlaneError(503, {
+    code: "unavailable",
+    category: "backend",
+    message,
+    request_id: "request_regression_retry",
+    correlation_id: "correlation_regression_retry",
+    retryable: true,
+  });
+}
 
 function organization(overrides: Partial<CanonicalOrganization> = {}): CanonicalOrganization {
   return {
@@ -122,7 +134,7 @@ describe("Organizations page regression coverage", () => {
     const retry = vi.fn();
     const html = renderToStaticMarkup(
       <OrganizationsFeedback
-        error={new Error("organization service unavailable")}
+        error={retryableBackendError("organization service unavailable")}
         mutationError={new Error("membership update rejected")}
         onRetry={retry}
       />,
