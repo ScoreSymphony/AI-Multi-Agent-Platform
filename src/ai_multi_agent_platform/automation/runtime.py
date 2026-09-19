@@ -463,11 +463,15 @@ class AutomationRuntime:
             name="automation-reference-runtime",
         )
 
+    def request_stop(self) -> None:
+        """Prevent another autonomous tick without cancelling the current owner operation."""
+        self._stop_event.set()
+
     async def stop(self) -> None:
+        self.request_stop()
         runner = self._runner
         if runner is None:
             return
-        self._stop_event.set()
         await runner
         self._runner = None
 
