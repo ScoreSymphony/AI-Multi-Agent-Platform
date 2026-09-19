@@ -163,6 +163,35 @@ async function taskInventory(page) {
   });
 }
 
+async function readPublicApiResource(page, path) {
+  return page.evaluate(async (resourcePath) => {
+    const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
+    const session = new BrowserSessionClient();
+    return session.transport.request(resourcePath, { retry: "never" });
+  }, path);
+}
+
+async function publicApiCommand(page, path, body) {
+  return page.evaluate(async ({ commandPath, commandBody }) => {
+    const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
+    const session = new BrowserSessionClient();
+    return session.transport.request(commandPath, {
+      method: "POST",
+      body: commandBody,
+      idempotencyKey: crypto.randomUUID(),
+      retry: "never",
+    });
+  }, { commandPath: path, commandBody: body });
+}
+
+function requireCanonicalIdentity(resource, expectedId, label) {
+  if (!resource || resource.id !== expectedId) {
+    throw new Error(
+      `${label} did not resolve the expected canonical ID ${expectedId}: ${JSON.stringify(resource)}`,
+    );
+  }
+}
+
 async function refreshProviderHealthThroughBrowserClient(page, providerId) {
   return page.evaluate(async (id) => {
     const [{ BrowserSessionClient }, { ControlPlaneClient }] = await Promise.all([
@@ -302,7 +331,22 @@ try {
   await page.getByRole("heading", { name: "Create project", exact: true }).waitFor();
 
   await page.getByLabel("Project name", { exact: true }).fill("Browser first-run project");
+  const projectResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/v1/projects") && response.request().method() === "POST",
+  );
   await (await waitForButton(page, "Create project")).click();
+  const projectResponse = await projectResponsePromise;
+  if (!projectResponse.ok()) {
+    throw new Error(
+      `Project creation failed with ${projectResponse.status()}: ${await projectResponse.text()}`,
+    );
+  }
+  const createdProject = await projectResponse.json();
+  requireCanonicalIdentity(
+    await readPublicApiResource(page, `/projects/${createdProject.id}`),
+    createdProject.id,
+    "Browser-created Project through public API",
+  );
   await page.getByRole("heading", { name: "Create workspace", exact: true }).waitFor();
 
   const workspaceResponsePromise = page.waitForResponse(
@@ -313,6 +357,18 @@ try {
   if (!workspaceResponse.ok()) {
     throw new Error(
       `Workspace creation failed with ${workspaceResponse.status()}: ${await workspaceResponse.text()}`,
+    );
+  }
+  const createdWorkspace = await workspaceResponse.json();
+  const workspaceViaApi = await readPublicApiResource(page, `/workspaces/${createdWorkspace.id}`);
+  requireCanonicalIdentity(
+    workspaceViaApi,
+    createdWorkspace.id,
+    "Browser-created Workspace through public API",
+  );
+  if (workspaceViaApi.project_id !== createdProject.id) {
+    throw new Error(
+      `Browser-created Workspace changed Project identity across the public API: ${JSON.stringify(workspaceViaApi)}`,
     );
   }
   await page.getByRole("status").filter({ hasText: "Workspace created" }).waitFor();
@@ -393,6 +449,86 @@ try {
       `Official browser multi-agent first run failed with ${commandResponse.status()}: ${await commandResponse.text()}`,
     );
   }
+  const commandRequest = commandResponse.request();
+  if (!commandRequest.headers()["idempotency-key"]) {
+    throw new Error("Official browser first-run mutation omitted its public idempotency key");
+  }
+  const firstRunResult = await commandResponse.json();
+
+  // #1236: the browser result is only a projection. Every emitted identity must resolve through
+  // the public Control Plane and agree with the server-owned lifecycle state.
+  const taskViaApi = await readPublicApiResource(page, `/tasks/${firstRunResult.task_id}`);
+  requireCanonicalIdentity(taskViaApi, firstRunResult.task_id, "First-run Task");
+  if (
+    taskViaApi.status !== firstRunResult.task_status
+    || taskViaApi.plan_ref !== firstRunResult.plan_id
+    || taskViaApi.project_id !== firstRunResult.project_id
+  ) {
+    throw new Error(
+      `Browser/API Task state diverged after first run: browser=${JSON.stringify(firstRunResult)} api=${JSON.stringify(taskViaApi)}`,
+    );
+  }
+
+  const planViaApi = await readPublicApiResource(page, `/plans/${firstRunResult.plan_id}`);
+  requireCanonicalIdentity(planViaApi, firstRunResult.plan_id, "First-run Plan");
+  if (planViaApi.task_id !== firstRunResult.task_id) {
+    throw new Error(`First-run Plan resolved to a different Task: ${JSON.stringify(planViaApi)}`);
+  }
+
+  for (const step of firstRunResult.steps) {
+    requireCanonicalIdentity(
+      await readPublicApiResource(page, `/steps/${step.step_id}`),
+      step.step_id,
+      "First-run Step",
+    );
+    if (step.run_id) {
+      const runViaApi = await readPublicApiResource(page, `/runs/${step.run_id}`);
+      requireCanonicalIdentity(runViaApi, step.run_id, "First-run Run");
+      if (runViaApi.task_id !== firstRunResult.task_id || runViaApi.status !== step.run_status) {
+        throw new Error(
+          `Browser/API Run state diverged for ${step.run_id}: browser=${JSON.stringify(step)} api=${JSON.stringify(runViaApi)}`,
+        );
+      }
+    }
+  }
+
+  for (const [role, agent] of Object.entries(firstRunResult.agents)) {
+    const agentViaApi = await readPublicApiResource(page, `/agents/${agent.agent_id}`);
+    requireCanonicalIdentity(agentViaApi, agent.agent_id, `First-run ${role} Agent`);
+  }
+  for (const resultId of firstRunResult.result_ids) {
+    const resultViaApi = await readPublicApiResource(page, `/results/${resultId}`);
+    requireCanonicalIdentity(resultViaApi, resultId, "First-run Result");
+    if (resultViaApi.task_id !== firstRunResult.task_id) {
+      throw new Error(`First-run Result resolved to a different Task: ${JSON.stringify(resultViaApi)}`);
+    }
+  }
+  for (const artifactId of firstRunResult.artifact_ids) {
+    const artifactViaApi = await readPublicApiResource(page, `/artifacts/${artifactId}`);
+    requireCanonicalIdentity(artifactViaApi, artifactId, "First-run Artifact");
+    if (artifactViaApi.task_id !== firstRunResult.task_id) {
+      throw new Error(`First-run Artifact resolved to a different Task: ${JSON.stringify(artifactViaApi)}`);
+    }
+  }
+  for (const verification of firstRunResult.verification) {
+    const verificationViaApi = await readPublicApiResource(
+      page,
+      `/verifications/${verification.verification_id}`,
+    );
+    requireCanonicalIdentity(
+      verificationViaApi,
+      verification.verification_id,
+      "First-run Verification",
+    );
+    if (
+      verificationViaApi.task_id !== firstRunResult.task_id
+      || verificationViaApi.status !== verification.status
+    ) {
+      throw new Error(
+        `Browser/API Verification state diverged: browser=${JSON.stringify(verification)} api=${JSON.stringify(verificationViaApi)}`,
+      );
+    }
+  }
 
   const resultCard = page.getByRole("heading", {
     name: "Official multi-agent first-run result",
@@ -418,7 +554,11 @@ try {
   ]) {
     requireText(resultText.toLowerCase(), expected.toLowerCase(), "Official multi-agent browser result");
   }
-  await resultCard.getByRole("link", { name: "Open Task", exact: true }).waitFor();
+  const taskLink = resultCard.getByRole("link", { name: "Open Task", exact: true });
+  await taskLink.waitFor();
+  if ((await taskLink.getAttribute("href")) !== `/tasks/${firstRunResult.task_id}`) {
+    throw new Error("Official browser result did not deep-link the canonical Task ID");
+  }
   const producedResultLink = resultCard.getByRole("link", { name: "Open produced Result", exact: true });
   await producedResultLink.waitFor();
   if ((await resultCard.getByRole("link", { name: "Run", exact: true }).count()) < 4) {
@@ -437,8 +577,31 @@ try {
     );
   }
   const producedResultHref = await producedResultLink.getAttribute("href");
-  if (!producedResultHref?.startsWith("/results/")) {
-    throw new Error(`Produced Result link did not expose a canonical Result route: ${producedResultHref}`);
+  if (producedResultHref !== `/results/${firstRunResult.result_id}`) {
+    throw new Error(`Produced Result link did not expose the canonical Result route: ${producedResultHref}`);
+  }
+  const runHrefs = await resultCard.locator('a[href^="/runs/"]').evaluateAll(
+    (links) => links.map((link) => link.getAttribute("href")).filter(Boolean),
+  );
+  const expectedRunHrefs = firstRunResult.steps
+    .filter((step) => step.run_id)
+    .map((step) => `/runs/${step.run_id}`)
+    .sort();
+  if (JSON.stringify([...runHrefs].sort()) !== JSON.stringify(expectedRunHrefs)) {
+    throw new Error(
+      `Browser Run deep links diverged from canonical IDs: browser=${JSON.stringify(runHrefs)} expected=${JSON.stringify(expectedRunHrefs)}`,
+    );
+  }
+  const artifactHrefs = await resultCard.locator('a[href^="/artifacts/"]').evaluateAll(
+    (links) => links.map((link) => link.getAttribute("href")).filter(Boolean).sort(),
+  );
+  const expectedArtifactHrefs = firstRunResult.artifact_ids
+    .map((artifactId) => `/artifacts/${artifactId}`)
+    .sort();
+  if (JSON.stringify(artifactHrefs) !== JSON.stringify(expectedArtifactHrefs)) {
+    throw new Error(
+      `Browser Artifact deep links diverged from canonical IDs: browser=${JSON.stringify(artifactHrefs)} expected=${JSON.stringify(expectedArtifactHrefs)}`,
+    );
   }
 
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
@@ -483,6 +646,44 @@ try {
   // Completed setup survives reload and no longer routes back to onboarding.
   await page.reload();
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+
+  // #1236 reverse direction: mutate canonical state through the public API, then prove the
+  // maintained Web detail route observes that server-owned state after a real reload.
+  const apiCreatedTask = await publicApiCommand(page, "/tasks", {
+    title: "API-to-Web refresh parity",
+    objective: "Prove the browser reload cannot override newer canonical server state.",
+    owner_type: taskViaApi.owner.type,
+    owner_id: taskViaApi.owner.id,
+    project_id: firstRunResult.project_id,
+  });
+  requireCanonicalIdentity(apiCreatedTask, apiCreatedTask.id, "API-created Task");
+  if (apiCreatedTask.status !== "draft") {
+    throw new Error(`API-created parity Task did not start as draft: ${JSON.stringify(apiCreatedTask)}`);
+  }
+
+  await page.goto(`${frontendUrl}/tasks/${apiCreatedTask.id}`);
+  await page.getByRole("heading", { name: "API-to-Web refresh parity", exact: true }).waitFor();
+  await page.locator(".detail-status .status").filter({ hasText: "draft" }).waitFor();
+
+  const cancelledViaApi = await publicApiCommand(
+    page,
+    `/tasks/${apiCreatedTask.id}:cancel`,
+    undefined,
+  );
+  requireCanonicalIdentity(cancelledViaApi, apiCreatedTask.id, "API-cancelled Task");
+  if (cancelledViaApi.status !== "cancelled") {
+    throw new Error(`Public API cancellation did not return canonical cancelled state: ${JSON.stringify(cancelledViaApi)}`);
+  }
+
+  await page.reload();
+  await page.getByRole("heading", { name: "API-to-Web refresh parity", exact: true }).waitFor();
+  await page.locator(".detail-status .status").filter({ hasText: "cancelled" }).waitFor();
+  const refreshedViaApi = await readPublicApiResource(page, `/tasks/${apiCreatedTask.id}`);
+  if (refreshedViaApi.status !== "cancelled" || refreshedViaApi.revision !== cancelledViaApi.revision) {
+    throw new Error(
+      `Reloaded Web state did not agree with the latest canonical Task revision: web/API=${JSON.stringify(refreshedViaApi)} mutation=${JSON.stringify(cancelledViaApi)}`,
+    );
+  }
 
   const bootstrapStatus = await page.evaluate(async () => {
     const response = await fetch("/api/v1/auth/bootstrap-status");
