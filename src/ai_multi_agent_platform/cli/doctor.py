@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-
 _DOCTOR_READINESS_STATES = frozenset(
     {
         "ready",

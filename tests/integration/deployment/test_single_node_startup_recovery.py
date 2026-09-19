@@ -9,6 +9,8 @@ import pytest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.server import (
     _run_startup_recovery,
+)
+from ai_multi_agent_platform.deployment.server import (
     main as server_main,
 )
 from ai_multi_agent_platform.deployment.startup_recovery import (

@@ -23,7 +23,6 @@ from ai_multi_agent_platform.distributed import (
     WorkerRecord,
     WorkerStatus,
 )
-from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.distributed.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
@@ -34,6 +33,7 @@ from ai_multi_agent_platform.distributed.high_availability import (
     NotLeaderError,
     ReconciliationResult,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.testing import FakeLifecycleBackend
 
 NOW = datetime(2026, 9, 6, 2, 0, tzinfo=UTC)

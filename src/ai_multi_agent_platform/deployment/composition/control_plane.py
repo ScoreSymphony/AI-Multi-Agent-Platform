@@ -11,6 +11,7 @@ from ai_multi_agent_platform.agents import register_standard_agent_control_plane
 from ai_multi_agent_platform.agents.routing_profile_control_plane import (
     register_routing_profile_aware_agent_control_plane,
 )
+from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.control_plane import (
     ControlPlaneASGI,
     evaluation_command_handlers,
@@ -18,7 +19,6 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.first_user_bootstrap import AuthenticatedControlPlaneHTTP
-from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
