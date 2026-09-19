@@ -389,7 +389,8 @@ export function TaskDetailPage({
         {!timelineLoading && timelineError ? <ErrorState error={timelineError} onRetry={() => void load()} /> : null}
         {!timelineLoading && !timelineError && events.length === 0 ? (
           <EmptyState title="No events yet" />
-        ) : !timelineLoading && !timelineError ? (
+        ) : null}
+        {!timelineLoading && !timelineError && events.length > 0 ? (
           <ol className="timeline">
             {events.map((event) => (
               <li key={event.id}>
