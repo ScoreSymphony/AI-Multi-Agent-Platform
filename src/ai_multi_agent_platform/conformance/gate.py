@@ -249,10 +249,10 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "J-cli",
             "CLI client",
             (
-                "CLI preserves shared canonical Task/Run/Result state, pagination/filter/sort "
-                "queries, canonical error/status categories, authorization/approval, "
-                "mutation idempotency and official first-run command identity through versioned "
-                "Control Plane paths"
+                "CLI preserves shared canonical Task/Run/Result and Marketplace state, "
+                "pagination/filter/sort queries, canonical error/status categories, "
+                "authorization/approval, mutation idempotency and official first-run command "
+                "identity through versioned Control Plane paths"
             ),
             _pytest(
                 "tests/integration/cli/test_client_state_parity.py::"
@@ -265,6 +265,14 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error",
                 "tests/integration/cli/test_client_state_parity.py::"
                 "test_cli_preserves_not_found_and_conflict_error_categories",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_preserves_shared_marketplace_pagination_filter_sort_and_identity",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_marketplace_install_then_reads_shared_canonical_owner_state",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_preserves_shared_marketplace_deprecated_and_unsupported_state",
+                "tests/integration/cli/test_client_state_parity.py::"
+                "test_cli_preserves_shared_marketplace_failure_categories",
                 "tests/integration/cli/test_control_plane_flows.py::"
                 "test_cli_and_public_api_share_the_same_canonical_task_state",
                 "tests/integration/cli/test_control_plane_flows.py::"
@@ -281,10 +289,11 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "J-web",
             "Web client",
             (
-                "Web preserves the same canonical Task/Run/Result state, pagination/filter/sort "
-                "queries, canonical error/status categories, authorization/approval, "
-                "mutation idempotency, deep-link resolution, reload behavior and official "
-                "first-run command identity through the same versioned API paths"
+                "Web preserves the same canonical Task/Run/Result and Marketplace state, "
+                "pagination/filter/sort queries, canonical error/status categories, "
+                "authorization/approval, mutation idempotency, deep-link resolution, reload "
+                "behavior and official first-run command identity through the same versioned "
+                "API paths"
             ),
             (
                 "npm",
@@ -295,6 +304,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "--run",
                 "src/api/canonicalStateParity.test.ts",
                 "src/api/errorPresentation.test.ts",
+                "src/pages/MarketplacePage.test.tsx",
                 "src/api/onboarding.multiAgent.test.ts",
             ),
         ),
