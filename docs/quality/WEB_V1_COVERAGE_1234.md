@@ -9,7 +9,7 @@ not authority to mutate a resource; authorization, approval, lifecycle and persi
 server-owned.
 
 The dedicated cross-domain state/navigation matrix is maintained in
-`WEB_STATE_NAVIGATION_MATRIX_1234.md`. It records loading, empty, validation, backend-error,
+`WEB_STATE_NAVIGATION_MATRIX.md`. It records loading, empty, validation, backend-error,
 permission, offline, refresh, deep-link and Back behavior without duplicating owner-domain feature
 work.
 
