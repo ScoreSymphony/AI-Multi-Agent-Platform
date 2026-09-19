@@ -8,14 +8,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from ai_multi_agent_platform.distributed.postgres_control_plane_coordination import (
-    PostgresCoordinationProvider,
-)
 from ai_multi_agent_platform.distributed.high_availability import (
     CoordinationUnavailable,
     FencingToken,
     LeadershipConflict,
     StaleFencingToken,
+)
+from ai_multi_agent_platform.distributed.postgres_control_plane_coordination import (
+    PostgresCoordinationProvider,
 )
 
 TTL = timedelta(seconds=10)

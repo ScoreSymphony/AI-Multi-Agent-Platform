@@ -9,10 +9,10 @@ from datetime import timedelta
 
 import pytest
 
+from ai_multi_agent_platform.distributed.high_availability import FencingToken, StaleFencingToken
 from ai_multi_agent_platform.distributed.postgres_control_plane_coordination import (
     PostgresCoordinationProvider,
 )
-from ai_multi_agent_platform.distributed.high_availability import FencingToken, StaleFencingToken
 
 _DSN_ENV = "AI_PLATFORM_TEST_HA_POSTGRES_DSN"
 

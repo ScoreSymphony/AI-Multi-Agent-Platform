@@ -41,7 +41,6 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 
-
 NOW = datetime(2026, 9, 19, 1, 30, tzinfo=UTC)
 
 

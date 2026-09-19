@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ai_multi_agent_platform.distributed.runtime import DispatchState
 from ai_multi_agent_platform.distributed.high_availability.reconciliation_policy import (
     derive_reconciliation_result,
 )
+from ai_multi_agent_platform.distributed.runtime import DispatchState
 
 
 def test_unchanged_runtime_state_produces_no_recovery_or_stale_items() -> None:
