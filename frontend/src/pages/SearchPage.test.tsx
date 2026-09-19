@@ -29,6 +29,33 @@ describe("SearchPage", () => {
     expect(searchResultPath({ resource_type: "run", resource_id: "run_1" })).toBe(
       "/runs/run_1",
     );
+    expect(searchResultPath({ resource_type: "file", resource_id: "file_1" })).toBe(
+      "/files/file_1",
+    );
+    expect(searchResultPath({ resource_type: "memory", resource_id: "memory_1" })).toBe(
+      "/memory/memory_1",
+    );
+    expect(
+      searchResultPath({ resource_type: "knowledge-source", resource_id: "knowledge_1" }),
+    ).toBe("/knowledge/knowledge_1");
+    expect(searchResultPath({ resource_type: "capability", resource_id: "tool/1" })).toBe(
+      "/tools/tool%2F1",
+    );
+    expect(
+      searchResultPath({ resource_type: "capability-provider", resource_id: "mcp/provider" }),
+    ).toBe("/tools/providers/mcp%2Fprovider");
+    expect(searchResultPath({ resource_type: "model", resource_id: "model_1" })).toBe(
+      "/models/model_1",
+    );
+    expect(
+      searchResultPath({ resource_type: "model-provider", resource_id: "provider_1" }),
+    ).toBe("/models/providers/provider_1");
+    expect(searchResultPath({ resource_type: "node", resource_id: "node_1" })).toBe(
+      "/compute/nodes/node_1",
+    );
+    expect(searchResultPath({ resource_type: "worker", resource_id: "worker_1" })).toBe(
+      "/compute/workers/worker_1",
+    );
     expect(searchResultPath({ resource_type: "approval", resource_id: "approval_1" })).toBe(
       "/approvals/approval_1",
     );
