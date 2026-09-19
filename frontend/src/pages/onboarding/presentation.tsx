@@ -51,6 +51,10 @@ export function MultiAgentFirstResult({ result }: { result: MultiAgentFirstRunRe
         <AppLink href={`/tasks/${result.task_id}`}>Open Task</AppLink>
         {result.result_id ? <AppLink href={`/results/${result.result_id}`}>Open produced Result</AppLink> : null}
       </div>
+      <div className="context-summary">
+        <span>Participating roles</span>
+        <strong>{Object.keys(result.agents).sort().join(" · ")}</strong>
+      </div>
       <p>Plan <CanonicalId value={result.plan_id} /> uses the canonical #889 dependency graph. Root research and approach steps can run independently before execution fans in and the reviewer checks the exact output.</p>
       <div className="table-wrap">
         <table>
