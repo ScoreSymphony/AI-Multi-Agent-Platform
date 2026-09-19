@@ -146,6 +146,10 @@ class ControlPlane(_BaseControlPlane):
     async def start_notification_runtime(self) -> None:
         await self._notification_runtime.start()
 
+    def request_notification_runtime_stop(self) -> None:
+        """Quiesce future Notification ticks while preserving the current projection pass."""
+        self._notification_runtime.request_stop()
+
     async def stop_notification_runtime(self) -> None:
         await self._notification_runtime.stop()
 

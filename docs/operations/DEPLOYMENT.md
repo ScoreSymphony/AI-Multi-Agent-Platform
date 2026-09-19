@@ -91,6 +91,7 @@ export AI_MAP_HOST="127.0.0.1"
 export AI_MAP_PORT="8000"
 export AI_MAP_SECURE_COOKIE="true"
 export AI_MAP_LOG_LEVEL="info"
+export AI_MAP_SHUTDOWN_TIMEOUT_SECONDS="30"
 ```
 
 The deployment loader imports only explicitly supported environment variables. It does not
@@ -267,9 +268,18 @@ storage.
 
 ## Shutdown
 
-Use the service manager's normal graceful stop or `Ctrl+C` for a foreground process. Uvicorn
-handles ASGI process shutdown; canonical durable state has already been committed through the
-platform persistence boundaries rather than being owned by the web-server process.
+Use the service manager's normal graceful stop or `Ctrl+C` for a foreground process. The
+single-node server first enters the #1152 process-local drain gate, rejects new authoritative
+mutations, reports `draining`/not-ready, and gives already-admitted work only the configured
+`AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` budget to settle. Uvicorn connection shutdown and ASGI
+lifespan/resource teardown share that bound.
+
+If the bound expires, process-local teardown is forced without inventing canonical terminal
+Task/Run/Step outcomes. The next process rebuilds from the same durable data root and the #707
+startup reconciliation remains the sole ordinary restart authority.
+
+See [Single-node graceful drain and shutdown recovery](SINGLE_NODE_DRAIN_SHUTDOWN.md) for the
+in-flight disposition matrix, forced-stop behavior, telemetry and operator recovery procedure.
 
 ## Update and backup hooks
 

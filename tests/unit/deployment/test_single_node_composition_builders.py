@@ -21,6 +21,7 @@ from ai_multi_agent_platform.deployment.composition import (
     build_verification,
 )
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
+from ai_multi_agent_platform.deployment.drain import SingleNodeDrainController
 from ai_multi_agent_platform.deployment.single_node import build_single_node_deployment
 
 
@@ -60,7 +61,17 @@ def test_major_single_node_builders_compose_without_optional_adapters(tmp_path: 
         execution,
         kernel,
     )
-    health = build_health(config, storage, execution, observability)
+    drain = SingleNodeDrainController(
+        timeout_seconds=config.shutdown_timeout_seconds,
+        telemetry=observability.telemetry,
+    )
+    health = build_health(
+        config,
+        storage,
+        execution,
+        observability,
+        draining=lambda: drain.draining,
+    )
     control_plane = build_control_plane(
         config,
         storage,
@@ -75,7 +86,7 @@ def test_major_single_node_builders_compose_without_optional_adapters(tmp_path: 
         evaluation,
         health,
     )
-    http = build_http(config, security, control_plane)
+    http = build_http(config, security, control_plane, drain)
 
     assert security.secrets is None
     assert kernel.kernel is not None

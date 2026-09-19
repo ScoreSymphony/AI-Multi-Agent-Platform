@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform import __version__
@@ -54,6 +55,11 @@ from ai_multi_agent_platform.verification.control_plane import register_verifica
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
 
 from ..config import SingleNodeConfig
+from ..drain import (
+    DrainAwareAuthenticatedControlPlaneHTTP,
+    SingleNodeDrainASGI,
+    SingleNodeDrainController,
+)
 from ..persistence_health import SingleNodePersistenceHealthProvider
 from .execution import EvaluationBundle, ExecutionBundle, KernelBundle, VerificationBundle
 from .foundation import ObservabilityBundle, SecurityBundle, StorageBundle
@@ -129,6 +135,8 @@ def build_health(
     storage: StorageBundle,
     execution: ExecutionBundle,
     observability: ObservabilityBundle,
+    *,
+    draining: Callable[[], bool] | None = None,
 ) -> HealthBundle:
     """Build required single-node health dependencies explicitly."""
 
@@ -163,6 +171,7 @@ def build_health(
                 ),
             ),
             telemetry=observability.telemetry,
+            draining=draining,
         ),
         persistence=persistence,
     )
@@ -384,13 +393,15 @@ def build_http(
     config: SingleNodeConfig,
     security: SecurityBundle,
     control_plane: ControlPlaneBundle,
+    drain: SingleNodeDrainController,
 ) -> HttpBundle:
-    """Build northbound authenticated HTTP/ASGI only after Control Plane completion."""
+    """Build northbound authenticated HTTP/ASGI with the process-local drain gate."""
 
-    http = AuthenticatedControlPlaneHTTP(
+    http = DrainAwareAuthenticatedControlPlaneHTTP(
         control_plane.control_plane,
         security.authentication,
         authorization=security.authorization,
         secure_cookie=config.secure_cookie,
+        drain=drain,
     )
-    return HttpBundle(http=http, app=ControlPlaneASGI(http))
+    return HttpBundle(http=http, app=SingleNodeDrainASGI(http, drain))
