@@ -395,7 +395,18 @@ def test_cli_preserves_shared_canonical_core_error_semantics(tmp_path: Path) -> 
         assert observed["category"] == error_body["category"]
         assert observed["retryable"] == error_body["retryable"]
         assert observed.get("details") == error_body.get("details")
-        assert transport.calls == [(expected_method, f"http://control-plane.invalid{path}")]
+        assert len(transport.calls) == 1
+        observed_method, observed_url = transport.calls[0]
+        assert observed_method == expected_method
+        parsed = urlparse(observed_url)
+        assert parsed.path == path
+        if case_name == "invalid_cursor":
+            assert parse_qs(parsed.query) == {
+                "limit": ["50"],
+                "cursor": ["not-a-valid-cursor"],
+                "sort": ["id"],
+                "direction": ["asc"],
+            }
 
 
 
