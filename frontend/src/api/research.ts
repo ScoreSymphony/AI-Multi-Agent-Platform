@@ -153,11 +153,12 @@ export const RESEARCH_COLLECTIONS = [
 ] as const;
 
 export class ResearchClient {
+  private readonly transport: ApiTransport;
   private readonly collections: ControlPlaneCollectionClient;
 
   constructor(options: ResearchClientOptions = {}) {
-    const transport = options.transport ?? new ApiTransport(options);
-    this.collections = new ControlPlaneCollectionClient({ transport });
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.collections = new ControlPlaneCollectionClient({ transport: this.transport });
   }
 
   listItems(query: ListQuery = {}): Promise<Page<CanonicalResearchItem>> {
@@ -198,5 +199,46 @@ export class ResearchClient {
 
   getEvidence(id: string): Promise<CanonicalResearchEvidence> {
     return this.collections.get("research-evidence", id);
+  }
+
+  createItem(payload: Record<string, JsonValue>): Promise<CanonicalResearchItem> {
+    return this.command("research.create", "research-items", payload);
+  }
+
+  addSource(researchItemId: string, payload: Record<string, JsonValue>): Promise<CanonicalResearchSource> {
+    return this.command("research.source.add", researchItemId, payload);
+  }
+
+  observeSource(sourceId: string, payload: Record<string, JsonValue>): Promise<CanonicalResearchObservation> {
+    return this.command("research.source.observe", sourceId, payload);
+  }
+
+  addClaim(researchItemId: string, payload: Record<string, JsonValue>): Promise<CanonicalResearchClaim> {
+    return this.command("research.claim.add", researchItemId, payload);
+  }
+
+  addEvidence(claimId: string, payload: Record<string, JsonValue>): Promise<CanonicalResearchEvidence> {
+    return this.command("research.evidence.add", claimId, payload);
+  }
+
+  revalidateEvidence(
+    evidenceId: string,
+    sourceObservationId: string,
+  ): Promise<CanonicalResearchEvidence> {
+    return this.command("research.evidence.revalidate", evidenceId, {
+      source_observation_id: sourceObservationId,
+    });
+  }
+
+  private command<T>(
+    command: string,
+    resourceRef: string,
+    payload: Record<string, JsonValue>,
+  ): Promise<T> {
+    return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
+      method: "POST",
+      idempotencyKey: crypto.randomUUID(),
+      body: { resource_ref: resourceRef, ...payload },
+    });
   }
 }
