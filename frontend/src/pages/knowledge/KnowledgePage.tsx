@@ -23,6 +23,8 @@ export function KnowledgePage({ client }: { client: MemoryKnowledgeClient }) {
   const sourcePagination = useCursorPagination(`knowledge:${projectId.trim()}`);
 
   const loadSources = useCallback(async () => {
+    setSources(null);
+    setError(null);
     try {
       setSources(await client.listKnowledge({
         projectId: blankToUndefined(projectId),
