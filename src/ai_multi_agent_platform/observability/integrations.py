@@ -187,11 +187,14 @@ class AggregatedHealthProvider(ProviderContract):
     def health_timeout_seconds(self) -> float:
         """Upper bound used by the outer Control Plane health probe."""
 
-        return sum(
-            item.timeout_seconds * (item.max_retries + 1)
-            + item.backoff_seconds * sum(range(1, item.max_retries + 1))
-            for item in self._dependencies
-        ) + 0.1
+        return (
+            sum(
+                item.timeout_seconds * (item.max_retries + 1)
+                + item.backoff_seconds * sum(range(1, item.max_retries + 1))
+                for item in self._dependencies
+            )
+            + 0.1
+        )
 
     def set_operational_state(
         self,
@@ -318,9 +321,7 @@ class AggregatedHealthProvider(ProviderContract):
                 state = _readiness_from_provider(status)
                 detail = status.value
                 error_code = (
-                    None
-                    if state is not ReadinessState.UNAVAILABLE
-                    else ErrorCode.UNAVAILABLE.value
+                    None if state is not ReadinessState.UNAVAILABLE else ErrorCode.UNAVAILABLE.value
                 )
                 retryable = state is ReadinessState.UNAVAILABLE
             except asyncio.CancelledError:
@@ -556,11 +557,7 @@ class AggregatedHealthProvider(ProviderContract):
             event_name="platform.operational_state.changed",
             component=FailureComponent.INFRASTRUCTURE_UNKNOWN,
             context=TelemetryContext(provider_id=self._provider_id),
-            outcome=(
-                TelemetryOutcome.SUCCEEDED
-                if current is None
-                else TelemetryOutcome.FAILED
-            ),
+            outcome=(TelemetryOutcome.SUCCEEDED if current is None else TelemetryOutcome.FAILED),
             attributes=attributes,
         )
 
