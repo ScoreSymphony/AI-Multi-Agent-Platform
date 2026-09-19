@@ -48,6 +48,8 @@ export function MemoryPage({ client }: { client: MemoryKnowledgeClient }) {
   const pagination = useCursorPagination(`memory:${queryKey}`);
 
   const load = useCallback(async () => {
+    setPage(null);
+    setError(null);
     try {
       const next = await client.listMemory({
         scope,
