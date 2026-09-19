@@ -63,39 +63,14 @@ export function useRouter(): RouterValue {
   return value;
 }
 
-type AppLinkProps = {
-  href?: string;
-  target?: AnchorHTMLAttributes<HTMLAnchorElement>["target"];
-  rel?: string;
-  className?: string;
-  title?: string;
-  id?: string;
-  role?: AnchorHTMLAttributes<HTMLAnchorElement>["role"];
-  tabIndex?: number;
-  "aria-label"?: string;
-  "aria-current"?: AnchorHTMLAttributes<HTMLAnchorElement>["aria-current"];
-  "aria-describedby"?: string;
-  "aria-disabled"?: AnchorHTMLAttributes<HTMLAnchorElement>["aria-disabled"];
-  onClick?: AnchorHTMLAttributes<HTMLAnchorElement>["onClick"];
-  children?: ReactNode;
-};
-
 export function AppLink({
   href,
   target,
-  rel,
-  className,
-  title,
-  id,
-  role,
-  tabIndex,
-  "aria-label": ariaLabel,
-  "aria-current": ariaCurrent,
-  "aria-describedby": ariaDescribedBy,
-  "aria-disabled": ariaDisabled,
   onClick,
   children,
-}: AppLinkProps) {
+  dangerouslySetInnerHTML: _dangerouslySetInnerHTML,
+  ...rest
+}: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const { navigate } = useRouter();
   const safeHref = normalizeAppLinkHref(href);
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -127,25 +102,7 @@ export function AppLink({
     event.preventDefault();
     navigate(`${resolved.pathname}${resolved.search}${resolved.hash}`);
   };
-  return (
-    <a
-      aria-current={ariaCurrent}
-      aria-describedby={ariaDescribedBy}
-      aria-disabled={ariaDisabled}
-      aria-label={ariaLabel}
-      className={className}
-      href={safeHref}
-      id={id}
-      onClick={handleClick}
-      rel={rel}
-      role={role}
-      tabIndex={tabIndex}
-      target={target}
-      title={title}
-    >
-      {children}
-    </a>
-  );
+  return <a href={safeHref} target={target} onClick={handleClick} {...rest}>{children}</a>;
 }
 
 export function normalizeAppLinkHref(href: string | undefined): string | undefined {
@@ -153,13 +110,16 @@ export function normalizeAppLinkHref(href: string | undefined): string | undefin
   try {
     const base = new URL("https://router.invalid/");
     const resolved = new URL(href, base);
-    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
-      return undefined;
-    }
     if (resolved.origin === base.origin) {
       return `${resolved.pathname}${resolved.search}${resolved.hash}`;
     }
-    return resolved.href;
+    if (resolved.protocol === "https:") {
+      return `https://${resolved.host}${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+    if (resolved.protocol === "http:") {
+      return `http://${resolved.host}${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
