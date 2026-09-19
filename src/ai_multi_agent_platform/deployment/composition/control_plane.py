@@ -17,10 +17,12 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.first_user_bootstrap import AuthenticatedControlPlaneHTTP
+from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
 )
+from ai_multi_agent_platform.kernel import SqliteKernelRepository
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
@@ -57,6 +59,28 @@ from .execution import EvaluationBundle, ExecutionBundle, KernelBundle, Verifica
 from .foundation import ObservabilityBundle, SecurityBundle, StorageBundle
 from .repositories import RepositoryFoundationBundle, RepositoryRuntimeBundle
 from .services import PlatformServicesBundle, RuntimeServicesBundle
+
+
+class _KernelPersistenceHealthProvider(ProviderContract):
+    """Expose canonical kernel persistence readiness through the provider-neutral health seam."""
+
+    def __init__(self, repository: SqliteKernelRepository) -> None:
+        self._repository = repository
+        self._descriptor = ProviderDescriptor(
+            provider_id="kernel-persistence",
+            provider_type="persistence",
+            supported_operations=("readiness",),
+            health=HealthStatus.HEALTHY,
+            available=True,
+        )
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return self._descriptor
+
+    async def health(self) -> HealthStatus:
+        await self._repository.readiness_probe()
+        return HealthStatus.HEALTHY
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +141,11 @@ def build_health(
         provider=AggregatedHealthProvider(
             (
                 ProviderHealthDependency(
+                    _KernelPersistenceHealthProvider(storage.kernel_repository),
+                    required=True,
+                    name="kernel-persistence",
+                ),
+                ProviderHealthDependency(
                     execution.orchestrator,
                     required=True,
                     name="orchestrator",
@@ -132,7 +161,8 @@ def build_health(
                     required=True,
                     name="persistence",
                 ),
-            )
+            ),
+            telemetry=observability.telemetry,
         ),
         persistence=persistence,
     )

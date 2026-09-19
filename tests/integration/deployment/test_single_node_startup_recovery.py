@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.deployment.server import main as server_main
+from ai_multi_agent_platform.deployment.server import (
+    _run_startup_recovery,
+    main as server_main,
+)
 from ai_multi_agent_platform.deployment.startup_recovery import (
     STARTUP_RECOVERY_DIR,
     STARTUP_RECOVERY_REPORT,
@@ -16,6 +19,7 @@ from ai_multi_agent_platform.deployment.startup_recovery import (
     require_blocked_startup_run,
 )
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
+from ai_multi_agent_platform.observability import ReadinessState
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 from ai_multi_agent_platform.upgrade.versioning import (
     JsonVersionStateStore,
@@ -39,6 +43,17 @@ class _StartupDistributedRuntime:
     async def reconcile(self) -> tuple[object, ...]:
         self.calls += 1
         return (object(),)
+
+
+class _BlockingStartupCoordinator:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def reconcile_all(self) -> tuple[object, ...]:
+        self.started.set()
+        await self.release.wait()
+        return ()
 
 
 async def _prepare_orphaned_run(root: Path) -> tuple[str, str]:
@@ -132,6 +147,67 @@ def test_startup_recovery_composes_existing_runtime_reconcilers(tmp_path: Path) 
         assert report is not None
         assert report["plans_reconciled"] == 2
         assert report["distributed_jobs_reconciled"] == 1
+
+    asyncio.run(scenario())
+
+
+def test_server_startup_recovery_projects_reconciling_until_completion(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        root = tmp_path / "reconciling-health"
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=root, secure_cookie=False)
+        )
+        coordinator = _BlockingStartupCoordinator()
+        deployment.coordination = coordinator  # type: ignore[assignment]
+
+        recovery_task = asyncio.create_task(_run_startup_recovery(deployment))
+        await coordinator.started.wait()
+
+        await deployment.health_provider.health()
+        assert deployment.health_provider.service_health.readiness is ReadinessState.RECONCILING
+        runtime = next(
+            dependency
+            for dependency in deployment.health_provider.service_health.dependencies
+            if dependency.name == "platform-runtime"
+        )
+        assert runtime.required is True
+        assert runtime.state is ReadinessState.RECONCILING
+
+        coordinator.release.set()
+        recovery = await recovery_task
+        assert recovery.ready_for_service is True
+
+        await deployment.health_provider.health()
+        assert deployment.health_provider.service_health.readiness is ReadinessState.READY
+
+    asyncio.run(scenario())
+
+
+def test_server_startup_recovery_projects_operator_required_for_orphaned_run(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        root = tmp_path / "operator-required-health"
+        await _prepare_orphaned_run(root)
+        restarted = build_single_node_deployment(
+            SingleNodeConfig(data_dir=root, secure_cookie=False)
+        )
+
+        recovery = await _run_startup_recovery(restarted)
+        assert recovery.ready_for_service is False
+
+        await restarted.health_provider.health()
+        assert (
+            restarted.health_provider.service_health.readiness
+            is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
+        )
+        runtime = next(
+            dependency
+            for dependency in restarted.health_provider.service_health.dependencies
+            if dependency.name == "platform-runtime"
+        )
+        assert runtime.required is True
+        assert runtime.state is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
 
     asyncio.run(scenario())
 

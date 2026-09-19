@@ -72,6 +72,31 @@ class SqliteKernelRepository(EventRepository):
                 "ON kernel_events(stream_id, sequence)"
             )
 
+    async def readiness_probe(self) -> None:
+        """Verify canonical Task/Run persistence can still acquire a write transaction."""
+
+        await self._run_sqlite(
+            self._readiness_probe_sync,
+            message="kernel persistence readiness probe failed",
+            write=True,
+        )
+
+    def _readiness_probe_sync(self) -> None:
+        path = Path(self._path)
+        if not path.is_file():
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "kernel persistence database is unavailable",
+            )
+
+        connection = sqlite3.connect(self._path, timeout=0.1)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("SELECT 1 FROM kernel_events LIMIT 1").fetchone()
+            connection.rollback()
+        finally:
+            connection.close()
+
     async def read_events(self, stream_id: str) -> tuple[PlatformEvent, ...]:
         return await self._run_sqlite(
             lambda: self._read_events_sync(stream_id),

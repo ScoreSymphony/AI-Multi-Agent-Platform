@@ -151,10 +151,14 @@ Liveness and readiness are distinct:
 - `alive`: process/component is running;
 - `ready`: it can accept intended work;
 - `degraded`: usable with impaired optional dependency/capability;
+- `reconciling`: alive but canonical recovery/reconciliation has not yet restored write authority;
 - `unavailable`: a required dependency prevents intended work;
+- `operator_intervention_required`: canonical recovery cannot safely infer an outcome and requires a supported operator action;
 - `draining`: alive but intentionally not accepting new work.
 
-`AggregatedHealthProvider` maps required-vs-optional provider health into the Control Plane seam so an optional adapter failure does not automatically make the entire platform unavailable.
+`AggregatedHealthProvider` maps required-vs-optional provider health into the Control Plane seam so an optional adapter failure does not automatically make the entire platform unavailable. Health probes have explicit per-dependency timeout/retry bounds, propagate caller cancellation unchanged, and retain failure/recovery transition counts as diagnostic evidence rather than canonical lifecycle state.
+
+The Control Plane exposes the backend-neutral `readiness_state` plus structured dependency diagnostics. Only `ready` and `degraded` are authoritative-ready states; `reconciling`, `unavailable`, `operator_intervention_required` and `draining` fail readiness closed.
 
 ## Usage/accounting boundary
 

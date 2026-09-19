@@ -81,6 +81,21 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
     def descriptor(self) -> ProviderDescriptor:
         return self._descriptor
 
+    async def health(self) -> HealthStatus:
+        """Probe the required local persistence seams without mutating canonical file state."""
+
+        def probe() -> HealthStatus:
+            if not self._root.is_dir():
+                return HealthStatus.UNAVAILABLE
+            with self._connect() as connection:
+                connection.execute("SELECT 1").fetchone()
+            return HealthStatus.HEALTHY
+
+        try:
+            return await self._async_io.run(probe)
+        except (ContractError, OSError, sqlite3.Error):
+            return HealthStatus.UNAVAILABLE
+
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.execute(

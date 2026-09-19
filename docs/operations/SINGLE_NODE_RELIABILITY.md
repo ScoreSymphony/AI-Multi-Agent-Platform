@@ -140,8 +140,8 @@ This startup slice does **not** close #707. Remaining reliability work includes,
 - graceful drain/shutdown hardening;
 - stale non-Worker session cleanup outside the #1155 File/Workspace storage slice;
 - external-side-effect recovery is tracked separately by #1154 and documented in `EXTERNAL_EFFECT_RECOVERY.md`;
-- provider/dependency failure isolation beyond persistence and bounded lifecycle retries;
-- health/readiness integration while reconciliation is in progress;
-- operator diagnostics beyond startup/persistence diagnostics;
+- provider/dependency failure isolation beyond persistence and bounded lifecycle retries — owned by follow-up #1156;
+- health/readiness integration while reconciliation is in progress — owned by follow-up #1156;
+- operator diagnostics beyond startup/persistence diagnostics — owned by follow-up #1156;
 - repeated hard-kill/restart endurance testing;
 - broader platform-conformance reliability evidence consuming the reusable #1155 persistence fixtures and the #1154 external-effect failure injector.
