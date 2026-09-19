@@ -185,7 +185,7 @@ async function publicApiCommand(page, path, body) {
 }
 
 function requireCanonicalIdentity(resource, expectedId, label) {
-  if (!resource || resource.id !== expectedId) {
+  if (typeof expectedId !== "string" || expectedId.length === 0 || !resource || resource.id !== expectedId) {
     throw new Error(
       `${label} did not resolve the expected canonical ID ${expectedId}: ${JSON.stringify(resource)}`,
     );
@@ -678,6 +678,15 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "API-to-Web refresh parity", exact: true }).waitFor();
   await page.locator(".detail-status .status").filter({ hasText: "cancelled" }).waitFor();
+  const renderedRevision = await page
+    .locator("dt", { hasText: "revision" })
+    .locator("xpath=following-sibling::dd[1]")
+    .innerText();
+  if (renderedRevision.trim() !== String(cancelledViaApi.revision)) {
+    throw new Error(
+      `Reloaded Web revision ${renderedRevision} did not match canonical revision ${cancelledViaApi.revision}`,
+    );
+  }
   const refreshedViaApi = await readPublicApiResource(page, `/tasks/${apiCreatedTask.id}`);
   if (refreshedViaApi.status !== "cancelled" || refreshedViaApi.revision !== cancelledViaApi.revision) {
     throw new Error(
