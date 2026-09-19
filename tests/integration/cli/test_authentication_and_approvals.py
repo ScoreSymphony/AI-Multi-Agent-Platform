@@ -325,14 +325,17 @@ def test_approval_cli_approves_exact_action_idempotently_without_payload_leak(
     assert post[4]["requested_action_digest"] == action.digest
 
     code, repeated, error = _invoke(config, transport, *arguments)
-    assert code == 2
-    assert repeated == {}
-    assert "approval is not pending: approved" in error["message"]
+    assert code == 0 and not error
+    assert repeated["data"]["status"] == "approved"
+    assert repeated["data"]["requested_action_digest"] == action.digest
 
-    # The repeated CLI invocation observes the terminal Approval via GET and sends no
-    # second mutation once the CLI preflight sees the terminal state.
-    client_call = transport.calls[-1]
-    assert client_call[0:2] == ("GET", f"/api/v1/approvals/{approval_id}")
+    # An explicit replay with the same Idempotency-Key reaches the canonical command
+    # boundary and receives the same decision instead of being reclassified locally.
+    replay_get, replay_post = transport.calls[-2:]
+    assert replay_get[0:2] == ("GET", f"/api/v1/approvals/{approval_id}")
+    assert replay_post[0:2] == ("POST", "/api/v1/commands/approval.approve")
+    assert replay_post[3]["idempotency-key"] == "approval-decision-1"
+    assert replay_post[4]["requested_action_digest"] == action.digest
 
 
 def test_approval_contract_rejects_wrong_digest_unauthorized_actor_and_nonpending(
