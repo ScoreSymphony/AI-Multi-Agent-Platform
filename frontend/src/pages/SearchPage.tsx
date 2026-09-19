@@ -311,8 +311,9 @@ function csv(form: FormData, name: string): string[] | undefined {
   return values.length ? Array.from(new Set(values)) : undefined;
 }
 
-export function searchRequestFromQuery(search: string): SearchRequest {
-  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+export function searchRequestFromQuery(search: string | null | undefined): SearchRequest {
+  const normalizedSearch = search ?? "";
+  const params = new URLSearchParams(normalizedSearch.startsWith("?") ? normalizedSearch.slice(1) : normalizedSearch);
   const limitValue = Number(params.get("limit") ?? DEFAULT_SEARCH.limit);
   const mode = params.get("mode");
   const sort = params.get("sort");
