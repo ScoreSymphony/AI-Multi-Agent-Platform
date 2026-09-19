@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+
 from .contracts import Executor
 
 
@@ -12,7 +14,22 @@ class ExecutorRegistry:
     def register(self, name: str, executor: Executor) -> None:
         if not name.strip():
             raise ValueError("executor name must not be blank")
+        current = self._executors.get(name)
+        if current is executor:
+            return
+        if current is not None:
+            raise ContractError(ErrorCode.CONFLICT, f"executor is already registered: {name}")
         self._executors[name] = executor
+
+    def unregister(self, name: str) -> Executor:
+        try:
+            return self._executors.pop(name)
+        except KeyError as exc:
+            raise ContractError(ErrorCode.NOT_FOUND, f"executor is not registered: {name}") from exc
+
+    @property
+    def executor_ids(self) -> tuple[str, ...]:
+        return tuple(sorted(self._executors))
 
     def select(self, name: str) -> Executor:
         try:

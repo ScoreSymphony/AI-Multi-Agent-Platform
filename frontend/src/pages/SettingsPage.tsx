@@ -112,6 +112,7 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
   }
 
   async function revoke(sessionId: string) {
+    if (!window.confirm(`Revoke browser session ${sessionId}?`)) return;
     setMutating(true);
     try {
       await session.revokeSession(sessionId);

@@ -160,7 +160,7 @@ same controlled Git environment and executable resolution as backup provenance.
 
 ### Repository-intelligence ProjectAtlas candidate
 
-`src/ai_multi_agent_platform/repository_intelligence/projectatlas.py` does not currently run Git
+`src/ai_multi_agent_platform/repositories/intelligence/projectatlas.py` does not currently run Git
 directly. Its runtime probe executes only the configured absolute ProjectAtlas binary with a
 minimal state-root environment. Source/index operations remain disabled, so there is currently no
 productive ProjectAtlas repository Git path to admit into this regression surface.

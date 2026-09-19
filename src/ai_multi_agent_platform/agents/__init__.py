@@ -51,7 +51,12 @@ from .models import (
 )
 from .persistence import AGENT_REPOSITORY_SCHEMA_VERSION, JsonAgentRepository
 from .repository import AgentRepository, InMemoryAgentRepository
-from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestratorMapper
+from .runtime import (
+    AgentOrchestratorMapper,
+    AgentOrchestratorMapperRegistry,
+    AgentRuntime,
+    ReferenceOrchestratorMapper,
+)
 from .routing_profile_runtime import DurableRoutingProfileAgentRuntime
 from .service import AgentService
 from .capability_turn import AgentCapabilityTurn, AgentCapabilityTurnResult
@@ -182,6 +187,7 @@ __all__ = [
     "AgentMatchingRequirements",
     "AgentModelPolicy",
     "AgentOrchestratorMapper",
+    "AgentOrchestratorMapperRegistry",
     "AgentParticipantRef",
     "AgentPolicyHooks",
     "AgentProfile",

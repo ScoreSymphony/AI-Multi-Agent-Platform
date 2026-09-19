@@ -166,11 +166,15 @@ class NotificationRuntime:
         self._stop.clear()
         self._task = asyncio.create_task(self._run(), name="notification-runtime")
 
+    def request_stop(self) -> None:
+        """Prevent another autonomous projection/reminder tick without cancelling this one."""
+        self._stop.set()
+
     async def stop(self) -> None:
+        self.request_stop()
         task = self._task
         if task is None:
             return
-        self._stop.set()
         await task
         self._task = None
 

@@ -12,7 +12,7 @@ import pytest
 from ai_multi_agent_platform.distributed.postgres_control_plane_coordination import (
     PostgresCoordinationProvider,
 )
-from ai_multi_agent_platform.high_availability import FencingToken, StaleFencingToken
+from ai_multi_agent_platform.distributed.high_availability import FencingToken, StaleFencingToken
 
 _DSN_ENV = "AI_PLATFORM_TEST_HA_POSTGRES_DSN"
 
@@ -26,7 +26,7 @@ def _acquire_in_process(
     results: multiprocessing.queues.Queue,
 ) -> None:
     async def scenario() -> tuple[str, int | None]:
-        from ai_multi_agent_platform.high_availability import LeadershipConflict
+        from ai_multi_agent_platform.distributed.high_availability import LeadershipConflict
 
         provider = PostgresCoordinationProvider(dsn, lease_name=lease_name)
         start.wait(timeout=10)

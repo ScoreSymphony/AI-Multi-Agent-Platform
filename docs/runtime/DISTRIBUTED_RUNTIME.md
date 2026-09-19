@@ -157,7 +157,7 @@ Reference scheduler tests may construct a runtime without an authorization provi
 - secret references rather than secret values;
 - actor/cancellation/timeout/idempotency/trace context.
 
-`LocalWorker` implements the same `WorkerDispatcher` boundary that a remote transport adapter implements. It delegates execution to the existing `LifecycleBackend`, so ReferenceExecutor, Forge or another executor remain behind the established execution seam.
+`LocalWorker` implements the same `WorkerDispatcher` boundary that a remote transport adapter implements. It delegates execution to the existing `LifecycleBackend`, so the reference executor or another supported executor remains behind the established execution seam.
 
 Duplicate delivery of the same exact `worker_job_id` is idempotent. Reusing that ID with a different payload is rejected.
 

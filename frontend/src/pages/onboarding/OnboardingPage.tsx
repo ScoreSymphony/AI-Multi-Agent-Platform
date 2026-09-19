@@ -233,7 +233,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
         <ul>
           <li>Local and self-hosted model configurations are distinct from remote configurations.</li>
           <li>Remote/paid provider auto-selection: <strong>{String(status.automatic_paid_provider_selection)}</strong>.</li>
-          <li>Hermes, Forge and LiteLLM are not required by the official first-run workflow.</li>
+          <li>Hermes and LiteLLM are not required by the official first-run workflow; the retired Forge runtime is not part of it.</li>
           <li>Secret values are never entered into setup-session persistence; credential-bearing endpoints use only canonical SecretReference metadata.</li>
           <li>All mutations pass through BrowserSession CSRF handling and Control Plane idempotency keys.</li>
         </ul>

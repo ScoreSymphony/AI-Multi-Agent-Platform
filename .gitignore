@@ -13,6 +13,8 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/coverage/
+mobile/.expo/
+mobile/coverage/
 
 # Build
 build/

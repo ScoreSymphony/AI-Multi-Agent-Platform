@@ -24,7 +24,7 @@ from ai_multi_agent_platform.distributed import (
     WorkerStatus,
 )
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.high_availability import (
+from ai_multi_agent_platform.distributed.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
     ControlPlaneRole,

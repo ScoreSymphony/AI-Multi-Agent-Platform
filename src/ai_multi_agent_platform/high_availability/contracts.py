@@ -1,6 +1,6 @@
 """Compatibility exports for canonical Control Plane HA contracts."""
 
-from ai_multi_agent_platform.distributed.control_plane_ha import (
+from ai_multi_agent_platform.distributed.high_availability.contracts import (
     AuthorityGrant,
     AvailabilityMode,
     ControlPlaneHAStatus,

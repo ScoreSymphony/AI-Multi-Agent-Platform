@@ -15,6 +15,13 @@ from .hermes_config import (
 )
 from .hermes_http import HermesHttpResponse, HermesHttpTransport, UrllibHermesHttpTransport
 from .hermes_mapping import HermesAgentMapper
+from .hermes_plugin import (
+    HERMES_EXTENSION_ID,
+    HERMES_PLUGIN_ID,
+    HERMES_PLUGIN_VERSION,
+    HermesOrchestratorPlugin,
+    hermes_plugin_manifest,
+)
 from .litellm import (
     LiteLLMMode,
     LiteLLMModelProvider,
@@ -53,6 +60,9 @@ __all__ = [
     "EVALUATION_ARTIFACT_SHA256",
     "HERMES_ADAPTER_ID",
     "HERMES_CONFIGURATION_SCHEMA",
+    "HERMES_EXTENSION_ID",
+    "HERMES_PLUGIN_ID",
+    "HERMES_PLUGIN_VERSION",
     "HERMES_PINNED_REVISION",
     "HERMES_UPSTREAM_REPOSITORY",
     "HermesAdapterConfig",
@@ -63,6 +73,7 @@ __all__ = [
     "HermesHttpResponse",
     "HermesHttpTransport",
     "HermesOrchestrator",
+    "HermesOrchestratorPlugin",
     "HermesRetryBehavior",
     "HermesRuntimeMode",
     "HermesRunSnapshot",
@@ -90,5 +101,6 @@ __all__ = [
     "UrllibOpenAICompatibleTransport",
     "build_container_command",
     "digest_tree",
+    "hermes_plugin_manifest",
     "sanitized_environment",
 ]

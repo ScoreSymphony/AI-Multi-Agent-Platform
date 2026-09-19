@@ -243,6 +243,24 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm run build
+      - name: Install optional mobile client dependencies
+        working-directory: mobile
+        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Typecheck optional mobile client
+        working-directory: mobile
+        run: npm run typecheck
+      - name: Test optional mobile client
+        working-directory: mobile
+        run: npm test
+      - name: Validate Expo mobile configuration
+        working-directory: mobile
+        run: npm run check:expo
+      - name: Export Android mobile smoke bundle
+        working-directory: mobile
+        run: npm run smoke:android
+      - name: Export iOS mobile smoke bundle
+        working-directory: mobile
+        run: npm run smoke:ios
       - name: Install Chromium regression runner
         shell: bash
         run: |
@@ -255,9 +273,9 @@ jobs:
       - name: Run real browser session regression
         run: node tests/browserSession.browser.mjs
       - name: Run clean browser-first deployment regression
+        run: node tests/browserFirstRun.browser.mjs
         env:
           BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/browser-first-run-artifacts
-        run: node tests/browserFirstRun.browser.mjs
       - name: Upload browser first-run failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7

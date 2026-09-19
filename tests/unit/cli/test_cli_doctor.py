@@ -166,6 +166,14 @@ def test_doctor_reports_blocking_when_canonical_readiness_fails(tmp_path: Path) 
                     "type": "model",
                     "status": "unavailable",
                     "available": True,
+                    "diagnostics": [
+                        {
+                            "dependency": "persistence",
+                            "provider_id": "single-node-persistence",
+                            "status": "unavailable",
+                            "required": True,
+                        }
+                    ],
                 }
             ],
         },
@@ -181,10 +189,11 @@ def test_doctor_reports_blocking_when_canonical_readiness_fails(tmp_path: Path) 
         check.get("name") == "readiness" and check.get("status") == "blocking"
         for check in payload["data"]["checks"]
     )
-    assert any(
-        check.get("provider_id") == "provider_model" and check.get("status") == "blocking"
-        for check in payload["data"]["checks"]
+    provider_check = next(
+        check for check in payload["data"]["checks"] if check.get("provider_id") == "provider_model"
     )
+    assert provider_check["status"] == "blocking"
+    assert provider_check["diagnostics"][0]["dependency"] == "persistence"
 
 
 def test_doctor_treats_invalid_health_schema_as_blocking(tmp_path: Path) -> None:

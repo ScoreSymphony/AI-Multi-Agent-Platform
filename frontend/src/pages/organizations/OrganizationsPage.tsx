@@ -307,7 +307,7 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
           <OrganizationSummary
             organization={selectedOrganization}
             team={selectedTeam}
-            onArchive={() => void mutate("organization.archive", () => client.archiveOrganization(selectedOrganization.id))}
+            onArchive={() => { if (window.confirm(`Archive organization ${selectedOrganization.id}?`)) void mutate("organization.archive", () => client.archiveOrganization(selectedOrganization.id)); }}
             archiving={busy === "organization.archive"}
           />
 
@@ -357,7 +357,7 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
               busy={busy}
               onAssign={(membership, roles, policies) => void mutate(`membership.assign:${membership.id}`, () => client.assignMembership(membership.id, { role_refs: roles, policy_refs: policies }))}
               onSuspend={(membership) => void mutate(`membership.suspend:${membership.id}`, () => client.suspendMembership(membership.id))}
-              onRemove={(membership) => void mutate(`membership.remove:${membership.id}`, () => client.removeMembership(membership.id))}
+              onRemove={(membership) => { if (window.confirm(`Remove membership ${membership.id}?`)) void mutate(`membership.remove:${membership.id}`, () => client.removeMembership(membership.id)); }}
             />
           </Card>
 
@@ -379,7 +379,7 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
               teams={data.teams.items}
               busy={busy}
               onAccept={(invitation) => void mutate(`invitation.accept:${invitation.id}`, () => client.acceptInvitation(invitation.id))}
-              onRevoke={(invitation) => void mutate(`invitation.revoke:${invitation.id}`, () => client.revokeInvitation(invitation.id))}
+              onRevoke={(invitation) => { if (window.confirm(`Revoke invitation ${invitation.id}?`)) void mutate(`invitation.revoke:${invitation.id}`, () => client.revokeInvitation(invitation.id)); }}
             />
           </Card>
 

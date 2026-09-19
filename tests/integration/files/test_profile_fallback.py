@@ -64,8 +64,8 @@ def test_active_profile_reports_degraded_state_and_safe_auto_fallback(tmp_path: 
         lifecycle=ComponentLifecycle.RECOMMENDED,
         modes=frozenset({SetupMode.AUTO, SetupMode.LOCAL, SetupMode.MULTI_NODE}),
     )
-    forge = _component("forge")
-    discovery = MutableDiscovery((reference, forge))
+    removed = _component("removed-executor")
+    discovery = MutableDiscovery((reference, removed))
     service = OnboardingComponentSetupService(
         discovery,
         JsonSetupProfileStore(tmp_path / "component-profiles.json"),
@@ -76,9 +76,9 @@ def test_active_profile_reports_degraded_state_and_safe_auto_fallback(tmp_path: 
             _context(),
             COMPONENT_SETUP_RESOURCE_ID,
             {
-                "profile_id": "forge-profile",
+                "profile_id": "removed-profile",
                 "mode": "advanced",
-                "defaults": {"executor": "forge"},
+                "defaults": {"executor": "removed-executor"},
             },
         )
     )
@@ -86,7 +86,7 @@ def test_active_profile_reports_degraded_state_and_safe_auto_fallback(tmp_path: 
     discovery.components = (reference,)
     status = service.status()
 
-    assert status["active_profile_id"] == "forge-profile"
+    assert status["active_profile_id"] == "removed-profile"
     profiles = status["profiles"]
     assert isinstance(profiles, list)
     profile = profiles[0]
@@ -97,7 +97,7 @@ def test_active_profile_reports_degraded_state_and_safe_auto_fallback(tmp_path: 
     assert validation["issues"] == [
         {
             "category": "executor",
-            "component_id": "forge",
+            "component_id": "removed-executor",
             "compatibility": "unavailable",
             "reasons": ["selected component is not currently discovered"],
         }
@@ -108,5 +108,5 @@ def test_active_profile_reports_degraded_state_and_safe_auto_fallback(tmp_path: 
     }
 
     persisted = JsonSetupProfileStore(tmp_path / "component-profiles.json").load()
-    assert persisted.active_profile_id == "forge-profile"
-    assert persisted.profiles[0].defaults == {ComponentCategory.EXECUTOR: "forge"}
+    assert persisted.active_profile_id == "removed-profile"
+    assert persisted.profiles[0].defaults == {ComponentCategory.EXECUTOR: "removed-executor"}

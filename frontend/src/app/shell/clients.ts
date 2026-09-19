@@ -8,6 +8,7 @@ import { ControlPlaneCollectionClient } from "../../api/collections";
 import { ConversationClient } from "../../api/conversations";
 import { ComputeClient } from "../../api/compute";
 import { EvaluationClient } from "../../api/evaluations";
+import { FilesClient } from "../../api/files";
 import { GoalClient } from "../../api/goals";
 import { GovernanceClient } from "../../api/governance";
 import { IntegrationsClient } from "../../api/integrations";
@@ -17,6 +18,7 @@ import { NotificationClient } from "../../api/notifications";
 import { OnboardingClient } from "../../api/onboarding";
 import { OrganizationClient } from "../../api/organizations";
 import { PluginsClient } from "../../api/plugins";
+import { PortabilityClient } from "../../api/portability";
 import { RegistryClient } from "../../api/registry";
 import { RepositoryCollectionClient } from "../../api/repositories";
 import { SetupClient } from "../../api/setup";
@@ -38,6 +40,7 @@ export function useShellClients(baseUrl: string) {
   const goalClient = useMemo(() => new GoalClient({ transport }), [transport]);
   const computeClient = useMemo(() => new ComputeClient({ transport }), [transport]);
   const evaluationClient = useMemo(() => new EvaluationClient({ transport }), [transport]);
+  const filesClient = useMemo(() => new FilesClient({ transport }), [transport]);
   const governanceClient = useMemo(() => new GovernanceClient({ transport }), [transport]);
   const integrationsClient = useMemo(() => new IntegrationsClient({ transport }), [transport]);
   const learningClient = useMemo(() => new LearningClient({ transport }), [transport]);
@@ -45,6 +48,7 @@ export function useShellClients(baseUrl: string) {
   const notificationClient = useMemo(() => new NotificationClient({ transport }), [transport]);
   const organizationClient = useMemo(() => new OrganizationClient({ transport }), [transport]);
   const pluginsClient = useMemo(() => new PluginsClient({ transport }), [transport]);
+  const portabilityClient = useMemo(() => new PortabilityClient({ transport }), [transport]);
   const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
   const templateClient = useMemo(() => new TemplateClient({ transport }), [transport]);
   const verificationClient = useMemo(() => new VerificationClient({ transport }), [transport]);
@@ -63,6 +67,7 @@ export function useShellClients(baseUrl: string) {
     goalClient,
     computeClient,
     evaluationClient,
+    filesClient,
     governanceClient,
     integrationsClient,
     learningClient,
@@ -70,6 +75,7 @@ export function useShellClients(baseUrl: string) {
     notificationClient,
     organizationClient,
     pluginsClient,
+    portabilityClient,
     registryClient,
     templateClient,
     verificationClient,

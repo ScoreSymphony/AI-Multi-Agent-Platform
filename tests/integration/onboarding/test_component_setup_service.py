@@ -143,7 +143,7 @@ def test_profile_revision_increments_when_defaults_change(tmp_path: Path) -> Non
     discovery = MutableDiscovery(
         (
             _component("reference-executor", ComponentCategory.EXECUTOR),
-            _component("forge", ComponentCategory.EXECUTOR),
+            _component("alternate-executor", ComponentCategory.EXECUTOR),
         )
     )
     service = _service(tmp_path, discovery)
@@ -166,14 +166,14 @@ def test_profile_revision_increments_when_defaults_change(tmp_path: Path) -> Non
             {
                 "profile_id": "advanced",
                 "mode": "advanced",
-                "defaults": {"executor": "forge"},
+                "defaults": {"executor": "alternate-executor"},
             },
         )
     )
 
     assert first["revision"] == 1
     assert second["revision"] == 2
-    assert second["defaults"] == {"executor": "forge"}
+    assert second["defaults"] == {"executor": "alternate-executor"}
 
 
 def test_advanced_profile_can_select_experimental_component_explicitly(tmp_path: Path) -> None:
@@ -258,16 +258,16 @@ def test_security_blocked_component_cannot_be_saved_even_in_advanced_mode(tmp_pa
 
 
 def test_removed_provider_remains_persisted_but_cannot_be_reactivated(tmp_path: Path) -> None:
-    discovery = MutableDiscovery((_component("forge", ComponentCategory.EXECUTOR),))
+    discovery = MutableDiscovery((_component("retired-executor", ComponentCategory.EXECUTOR),))
     service = _service(tmp_path, discovery)
     asyncio.run(
         service.save_profile(
             _context(),
             COMPONENT_SETUP_RESOURCE_ID,
             {
-                "profile_id": "forge-profile",
+                "profile_id": "retired-profile",
                 "mode": "advanced",
-                "defaults": {"executor": "forge"},
+                "defaults": {"executor": "retired-executor"},
             },
         )
     )
@@ -278,14 +278,14 @@ def test_removed_provider_remains_persisted_but_cannot_be_reactivated(tmp_path: 
             service.select_profile(
                 _context(),
                 COMPONENT_SETUP_RESOURCE_ID,
-                {"profile_id": "forge-profile"},
+                {"profile_id": "retired-profile"},
             )
         )
 
     assert exc_info.value.code is ErrorCode.INVALID_REQUEST
     profiles = service.status()["profiles"]
     assert isinstance(profiles, list)
-    assert profiles[0]["defaults"] == {"executor": "forge"}
+    assert profiles[0]["defaults"] == {"executor": "retired-executor"}
 
 
 def test_new_provider_is_visible_without_profile_migration(tmp_path: Path) -> None:
@@ -304,14 +304,14 @@ def test_new_provider_is_visible_without_profile_migration(tmp_path: Path) -> No
     )
     discovery.components = (
         _component("reference", ComponentCategory.EXECUTOR),
-        _component("forge", ComponentCategory.EXECUTOR),
+        _component("new-executor", ComponentCategory.EXECUTOR),
     )
 
     status = service.status()
 
     components = status["components"]
     assert isinstance(components, list)
-    assert [item["component_id"] for item in components] == ["forge", "reference"]
+    assert [item["component_id"] for item in components] == ["new-executor", "reference"]
     profiles = status["profiles"]
     assert isinstance(profiles, list)
     assert profiles[0]["defaults"] == {"executor": "reference"}

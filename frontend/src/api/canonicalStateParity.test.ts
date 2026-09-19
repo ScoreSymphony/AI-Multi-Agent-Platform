@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { matchPath } from "../app/router";
+
+import canonicalApiError from "./__fixtures__/canonical-api-error.json";
+import canonicalCoreLifecycleRoutes from "./__fixtures__/canonical-core-lifecycle-routes.json";
+import canonicalErrorCases from "./__fixtures__/canonical-error-cases.json";
 import canonicalResult from "./__fixtures__/canonical-result.json";
+import canonicalRetryableApiError from "./__fixtures__/canonical-retryable-api-error.json";
 import canonicalRun from "./__fixtures__/canonical-run.json";
 import canonicalTask from "./__fixtures__/canonical-task.json";
+import canonicalTaskPage from "./__fixtures__/canonical-task-page.json";
 import workflowProgress from "./__fixtures__/workflow-progress.json";
 import { ControlPlaneClient } from "./client";
 import { getPlanCoordination } from "./workflowProgress";
@@ -72,6 +79,220 @@ describe("canonical CLI/Web resource parity", () => {
     expect(canonicalTask.result_ids).toEqual([canonicalResult.id]);
     expect(canonicalTask.status).toBe(canonicalRun.status);
     expect(canonicalTask.correlation_id).toBe(canonicalRun.correlation_id);
+  });
+
+  it("preserves shared pagination, filter and sort semantics for Task lists", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalTaskPage), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    const observed = await client.listTasks({
+      limit: 1,
+      cursor: "cursor_client_parity",
+      sort: "updated_at",
+      direction: "desc",
+      q: "Shared canonical",
+      filters: { status: "succeeded" },
+      fields: ["id", "status"],
+    });
+
+    expect(observed).toEqual(canonicalTaskPage);
+    expect(observed.items).toEqual([canonicalTask]);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const parsed = new URL(url, "http://control-plane.invalid");
+    expect(parsed.pathname).toBe("/api/v1/tasks");
+    expect(parsed.searchParams.get("limit")).toBe("1");
+    expect(parsed.searchParams.get("cursor")).toBe("cursor_client_parity");
+    expect(parsed.searchParams.get("sort")).toBe("updated_at");
+    expect(parsed.searchParams.get("direction")).toBe("desc");
+    expect(parsed.searchParams.get("q")).toBe("Shared canonical");
+    expect(parsed.searchParams.get("filter[status]")).toBe("succeeded");
+    expect(parsed.searchParams.get("fields")).toBe("id,status");
+    expect(init.method).toBe("GET");
+  });
+
+  it("preserves canonical authorization error semantics instead of inventing Web errors", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalApiError), {
+        status: 403,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": canonicalApiError.request_id,
+          "x-correlation-id": canonicalApiError.correlation_id,
+        },
+      }),
+    );
+    const client = new ControlPlaneClient({
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+      maxReadRetries: 0,
+    });
+
+    await expect(client.getTask(canonicalTask.id)).rejects.toMatchObject({
+      status: 403,
+      body: canonicalApiError,
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+
+  it("uses the shared public routes for core Task and Run lifecycle mutations", async () => {
+    const fetchSpy = vi.fn().mockImplementation(async () => (
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    ));
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.queueTask(canonicalTask.id);
+    await client.startTask(canonicalTask.id);
+    await client.cancelTask(canonicalTask.id);
+    await client.retryTask(canonicalTask.id);
+    await client.cancelRun(canonicalTask.id, canonicalRun.id);
+
+    const observedRoutes = fetchSpy.mock.calls.map(([url, init]) => ({
+      method: (init as RequestInit).method,
+      path: url as string,
+    }));
+    expect(observedRoutes).toEqual(Object.values(canonicalCoreLifecycleRoutes));
+  });
+
+
+  it("resolves a canonical Task deep link through the public API", async () => {
+    const deepLink = `/tasks/${canonicalTask.id}`;
+    const match = matchPath("/tasks/:taskId", deepLink);
+    expect(match).not.toBeNull();
+    expect(match?.taskId).toBe(canonicalTask.id);
+
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalTask), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    const observed = await client.getTask(match!.taskId);
+
+    expect(observed.id).toBe(canonicalTask.id);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(`/api/v1/tasks/${canonicalTask.id}`);
+  });
+
+  it("reloads canonical Task state instead of retaining a Web-owned lifecycle snapshot", async () => {
+    const refreshedTask = {
+      ...canonicalTask,
+      revision: canonicalTask.revision + 1,
+      status: "failed",
+      updated_at: "2026-09-03T17:02:00+00:00",
+    };
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(canonicalTask), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(refreshedTask), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    const initial = await client.getTask(canonicalTask.id);
+    const refreshed = await client.getTask(canonicalTask.id);
+
+    expect(initial.revision).toBe(canonicalTask.revision);
+    expect(refreshed.revision).toBe(canonicalTask.revision + 1);
+    expect(refreshed.status).toBe("failed");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      `/api/v1/tasks/${canonicalTask.id}`,
+      `/api/v1/tasks/${canonicalTask.id}`,
+    ]);
+  });
+
+
+  it("sends one idempotent mutation attempt even when the canonical error is retryable", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalRetryableApiError), {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": canonicalRetryableApiError.request_id,
+          "x-correlation-id": canonicalRetryableApiError.correlation_id,
+        },
+      }),
+    );
+    const client = new ControlPlaneClient({
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+      maxReadRetries: 5,
+      retryDelayMs: 0,
+    });
+
+    await expect(client.queueTask(canonicalTask.id)).rejects.toMatchObject({
+      status: 503,
+      body: canonicalRetryableApiError,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/v1/tasks/${canonicalTask.id}:queue`);
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+  });
+
+
+  it("preserves canonical not-found semantics", async () => {
+    const fixture = canonicalErrorCases.not_found;
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(fixture.body), {
+        status: fixture.status,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": fixture.body.request_id,
+          "x-correlation-id": fixture.body.correlation_id,
+        },
+      }),
+    );
+    const client = new ControlPlaneClient({
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+      maxReadRetries: 0,
+    });
+
+    await expect(client.getTask(canonicalTask.id)).rejects.toMatchObject({
+      status: fixture.status,
+      body: fixture.body,
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it("preserves canonical conflict semantics for lifecycle mutations", async () => {
+    const fixture = canonicalErrorCases.conflict;
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(fixture.body), {
+        status: fixture.status,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": fixture.body.request_id,
+          "x-correlation-id": fixture.body.correlation_id,
+        },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await expect(client.queueTask(canonicalTask.id)).rejects.toMatchObject({
+      status: fixture.status,
+      body: fixture.body,
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
   });
 
   it("reads the shared #560 workflow snapshot with explicit wait and retry terminal semantics", async () => {

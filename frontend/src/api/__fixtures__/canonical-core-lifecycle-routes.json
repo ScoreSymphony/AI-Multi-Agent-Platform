@@ -1,0 +1,22 @@
+{
+  "task_queue": {
+    "method": "POST",
+    "path": "/api/v1/tasks/task_123e4567-e89b-42d3-a456-426614174000:queue"
+  },
+  "task_start": {
+    "method": "POST",
+    "path": "/api/v1/tasks/task_123e4567-e89b-42d3-a456-426614174000:start"
+  },
+  "task_cancel": {
+    "method": "POST",
+    "path": "/api/v1/tasks/task_123e4567-e89b-42d3-a456-426614174000:cancel"
+  },
+  "task_retry": {
+    "method": "POST",
+    "path": "/api/v1/tasks/task_123e4567-e89b-42d3-a456-426614174000:retry"
+  },
+  "run_cancel": {
+    "method": "POST",
+    "path": "/api/v1/tasks/task_123e4567-e89b-42d3-a456-426614174000/runs/run_123e4567-e89b-42d3-a456-426614174001:cancel"
+  }
+}

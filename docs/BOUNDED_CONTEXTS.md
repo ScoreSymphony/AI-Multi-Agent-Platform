@@ -67,7 +67,8 @@ context.
 
 This group covers durable platform data, context assembly, search, source repositories and research
 work. Repository intelligence is a repository subdomain rather than an independent root architecture
-concept.
+concept. Its canonical implementation now lives under `repositories.intelligence`; the historical
+root package is compatibility-only.
 
 ### 5. Security and governance
 
@@ -90,13 +91,12 @@ navigation.
 
 **Durable owner:** `distributed`.
 
-**Migration namespace:** `high_availability` -> `distributed`.
+**Migration namespace:** `high_availability` -> `distributed.high_availability`.
 
 Node, Worker, scheduling, transport, leadership, fencing and failover belong to one distributed-runtime
-context. The Control Plane HA contracts are already canonical at `distributed.control_plane_ha` and
-`high_availability.contracts` is a compatibility re-export. Remaining HA service, integration,
-telemetry and worker-transport code still has active runtime consumers, so its migration must remain
-staged and evidence-driven rather than forcing a new directory shape.
+context. Control Plane HA contracts remain canonical at `distributed.control_plane_ha`; the broader
+HA implementation now lives under `distributed.high_availability`. The historical
+`high_availability` root is compatibility-only.
 
 ### 8. Distribution, application delivery and managed applications
 
@@ -212,8 +212,8 @@ to be eliminated in one risky refactor.
 | --- | --- | --- | --- |
 | `task_reassignment` | `task_management.reassignment` | compatibility-only since #726; internal Control Plane caller migrated in #895 | Remove only after supported external callers have migrated and the normal public-import deprecation window permits removal. |
 | `capability_assignments` | `capabilities.assignments` | compatibility-only in #895 | Same public-import deprecation rule; canonical code must not import the shim. |
-| `repository_intelligence` | `repositories.intelligence` | planned, compatibility-sensitive | Move provider-neutral implementation only with production consumer migration and preserved plugin/import-string compatibility. |
-| `high_availability` | `distributed` | partially migrated, higher risk | Contracts are already canonical at `distributed.control_plane_ha`; move remaining code only with HA restart/fencing/failover coverage and no deployment-ownership inversion. |
+| `repository_intelligence` | `repositories.intelligence` | compatibility-only under #1241 | Canonical callers and ProjectAtlas entrypoint migrated; remove the root only after the public-import deprecation window. |
+| `high_availability` | `distributed.high_availability` | compatibility-only under #1241 | Canonical callers migrated; contracts remain backed by `distributed.control_plane_ha`; remove the root only after the public-import deprecation window. |
 
 ## Staged migration order
 
@@ -222,11 +222,11 @@ to be eliminated in one risky refactor.
 2. **Compatibility-edge cleanup** — move internal callers from historical compatibility paths to the
    canonical owners so migration namespaces do not remain part of the canonical dependency SCC merely
    because first-party code still imports them.
-3. **Repository intelligence** — migrate provider-neutral repository intelligence beneath
-   `repositories` only when the production consumers and ProjectAtlas import-string compatibility are
-   preserved explicitly.
-4. **High availability** — continue the existing partial migration beneath `distributed` only after
-   targeted restart/failover tests prove no lifecycle regression.
+3. **Repository intelligence** — completed under #1241: provider-neutral implementation and
+   ProjectAtlas import strings are canonical under `repositories.intelligence`, with the root retained
+   only for compatibility.
+4. **High availability** — completed under #1241: implementation is canonical beneath
+   `distributed.high_availability`, with the root retained only for compatibility.
 5. **Broader subdomain nesting** — consider additional physical moves only when dependency evidence
    shows a clear benefit. Documentation grouping alone is preferable to mass path churn for stable
    canonical owners.

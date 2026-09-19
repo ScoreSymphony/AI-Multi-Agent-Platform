@@ -52,6 +52,7 @@ class StartupRecoveryExtensionReport:
     items_checked: int
     failures: tuple[dict[str, Any], ...] = ()
     ready_for_service: bool = True
+    evidence: tuple[dict[str, Any], ...] = ()
 
 
 class StartupRecoveryExtension(Protocol):
@@ -184,6 +185,7 @@ async def reconcile_single_node_startup(
                 "failure_count": len(report.failures),
                 "ready_for_service": report.ready_for_service,
                 "failures": list(report.failures),
+                **({"evidence": list(report.evidence)} if report.evidence else {}),
             }
             for report in extension_recoveries
         ],

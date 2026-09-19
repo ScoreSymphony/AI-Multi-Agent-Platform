@@ -57,8 +57,8 @@ rewrites production pins, commits changes or deploys an update.
 
 The repository CI also treats `upstream/*.yaml` as the governance authority for important upstream
 pins. Tests fail if the reviewed compatibility snapshot, packaged snapshot, Hermes runtime pin,
-Hermes/Forge CI checkout revisions, LiteLLM optional dependency pin or governed direct dependency
-pins drift away from the reviewed revisions.
+Hermes runtime/conformance revisions, LiteLLM optional dependency pins or governed direct dependency
+pins drift away from the reviewed revisions. Historical Forge pins are not active release inputs.
 
 `platform-release upstream-discover-git` is an optional provider-neutral Git-remote discovery
 adapter. It uses immutable remote HEADs only as advisory observations. A changed revision is

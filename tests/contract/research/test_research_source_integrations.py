@@ -8,7 +8,7 @@ import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import OwnerRef
-from ai_multi_agent_platform.repository_intelligence.models import (
+from ai_multi_agent_platform.repositories.intelligence.models import (
     RepositoryIntelligenceFreshness,
     RepositoryIntelligenceProvenance,
 )

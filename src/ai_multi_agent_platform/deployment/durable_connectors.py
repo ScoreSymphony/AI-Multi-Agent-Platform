@@ -61,6 +61,7 @@ from .handoff_composition import HandoffDeploymentComposition
 from .single_node import SingleNodeDeployment as BaseSingleNodeDeployment
 from .single_node import SingleNodeSmokeResult, build_single_node_deployment_from_foundation
 from .startup_recovery import StartupRecoveryExtension
+from .transient_recovery import SingleNodeTransientStateRecoveryExtension
 
 
 @dataclass(slots=True)
@@ -140,6 +141,7 @@ def build_single_node_deployment(
         egress=egress,
         planning=planning,
     )
+    base.persistence_health.require_full_store_inventory()
     register_durable_template_environment(base, connector_foundation.registry)
     return _extend_base_deployment(
         base,
@@ -164,7 +166,7 @@ def _extend_base_deployment(
 ) -> SingleNodeDeployment:
     """Promote the base deployment to the durable public profile explicitly."""
 
-    return SingleNodeDeployment(
+    deployment = SingleNodeDeployment(
         config=base.config,
         kernel_repository=base.kernel_repository,
         scopes=base.scopes,
@@ -185,6 +187,8 @@ def _extend_base_deployment(
         capabilities=base.capabilities,
         capability_assignments=base.capability_assignments,
         models=base.models,
+        orchestrators=base.orchestrators,
+        executors=base.executors,
         routing_profile_repository=base.routing_profile_repository,
         routing_profiles=base.routing_profiles,
         model_runtime=base.model_runtime,
@@ -202,6 +206,8 @@ def _extend_base_deployment(
         observability_exporter=base.observability_exporter,
         telemetry=base.telemetry,
         health_provider=base.health_provider,
+        persistence_health=base.persistence_health,
+        drain=base.drain,
         distributed_runtime=base.distributed_runtime,
         pre_authorization_lifecycle=base.pre_authorization_lifecycle,
         lifecycle_binding=base.lifecycle_binding,
@@ -232,8 +238,16 @@ def _extend_base_deployment(
         handoffs=extensions.handoffs,
         automatic_reviewer=automatic_review.workflow,
         reviewer_recovery=automatic_review.recovery,
-        startup_recovery_extensions=(),
+        startup_recovery_extensions=extensions.context.startup_recovery_extensions,
     )
+    deployment.startup_recovery_extensions = (
+        *deployment.startup_recovery_extensions,
+        SingleNodeTransientStateRecoveryExtension(
+            automation=deployment.control_plane.automation_service,
+            authentication_sessions=deployment.authentication.store.sessions,
+        ),
+    )
+    return deployment
 
 
 __all__ = [

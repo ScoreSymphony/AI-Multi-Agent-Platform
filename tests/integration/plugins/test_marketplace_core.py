@@ -86,7 +86,34 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
     registry = marketplace_kind_registry_with_builtins()
     kinds = {descriptor.kind_value for descriptor in registry.list()}
 
-    assert {"tool", "skill", "plugin", "connector", "application", "template"} <= kinds
+    assert {
+        "agent",
+        "agent_team",
+        "orchestrator",
+        "executor",
+        "model_provider",
+        "capability_provider",
+        "memory_provider",
+        "file_provider",
+        "knowledge_provider",
+        "observability_exporter",
+        "automation_provider",
+        "evaluator",
+        "tool",
+        "skill",
+        "plugin",
+        "connector",
+        "application",
+        "template",
+    } <= kinds
+    assert registry.require("agent").default_route is DistributionRoute.KIND_HANDLER
+    assert registry.require("agent").management_path == "/agents"
+    assert registry.require("agent_team").management_path == "/agent-teams"
+    assert registry.require("orchestrator").group == "ai_agents"
+    assert registry.require("orchestrator").management_path == "/plugins"
+    assert registry.require("model_provider").group == "models"
+    assert registry.require("model_provider").management_path == "/models"
+    assert registry.require("executor").group == "platform_extensions"
     assert registry.require("application").default_route is DistributionRoute.KIND_HANDLER
     assert (
         registry.require(RegistryItemType.TOOL).default_route is DistributionRoute.PORTABLE_IMPORT
@@ -96,6 +123,24 @@ def test_builtin_marketplace_kinds_include_new_first_class_families() -> None:
         is DistributionRoute.PORTABLE_IMPORT
     )
     assert registry.require(RegistryItemType.APPLICATION).supports_update is False
+
+
+@pytest.mark.parametrize(
+    "runtime_kind",
+    (
+        "agent_run",
+        "agent_runtime",
+        "task",
+        "run",
+        "worker",
+        "node",
+        "orchestration_session",
+        "provider_runtime",
+    ),
+)
+def test_runtime_instance_kinds_are_not_marketplace_content(runtime_kind: str) -> None:
+    with pytest.raises(ValueError, match="runtime instance kind"):
+        _item(runtime_kind)
 
 
 def test_manifest_backed_tool_and_connector_use_owner_handlers_and_preserve_legacy_routes() -> None:
@@ -120,6 +165,40 @@ def test_manifest_backed_tool_and_connector_use_owner_handlers_and_preserve_lega
     assert connector.route is DistributionRoute.KIND_HANDLER
     assert legacy_tool.route is DistributionRoute.PORTABLE_IMPORT
     assert legacy_connector.route is DistributionRoute.PORTABLE_IMPORT
+
+
+def test_unwired_semantic_provider_kind_fails_closed_without_private_owner(tmp_path: Path) -> None:
+    item = _item(
+        RegistryItemType.MEMORY_PROVIDER,
+        manifest=RegistryManifestReference(
+            kind=RegistryItemType.MEMORY_PROVIDER,
+            reference="manifests/memory-provider.json",
+            schema_version="1",
+        ),
+    )
+    artifact = b"memory-provider-package"
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "unsupported-semantic-kind.json"),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("1.0.0"),
+    )
+
+    assert preview.route is DistributionRoute.KIND_HANDLER
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "handler_unavailable"
+        and finding.subject == RegistryItemType.MEMORY_PROVIDER.value
+        for finding in preview.findings
+    )
+    assert service.installed(item.item_id) is None
 
 
 def test_new_marketplace_kind_can_be_registered_without_enum_change() -> None:

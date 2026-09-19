@@ -87,7 +87,15 @@ This slice deliberately distinguishes the outcomes already supported by the cano
 
 A reconciliation exception itself is fail-closed: `platform-server serve` does not open the HTTP serving path when a required recovery owner cannot complete its pass.
 
-Broader #707 work will extend this policy to additional session/materialization transient state, persistence failures and uncertain external side effects. Those must remain explicit instead of being collapsed into a generic `retry everything` rule.
+Broader #707 work extends this policy through focused follow-ups. #1155 owns the local
+persistence/filesystem slice documented in
+`docs/operations/PERSISTENCE_FAILURE_RECOVERY.md`: required persistence participates in
+readiness, crash-interrupted File/Workspace state is recovered only with ownership evidence, and
+unknown/corrupt canonical state remains fail-closed. The uncertain external-side-effect gap is
+handled by #1154; see [External side-effect recovery](EXTERNAL_EFFECT_RECOVERY.md) for the durable
+dispatch journal, provider reconciliation contract, manual-review path and operator diagnostics.
+These recovery owners remain explicit rather than being collapsed into a generic `retry everything`
+rule.
 
 ## Idempotency and fail-closed behavior
 
@@ -125,16 +133,23 @@ No leader election, standby Control Plane, fencing epoch or shared HA persistenc
 
 The reliability principle is intentionally stronger than "HA will recover it later": a single Control Plane should first be able to crash, restart and return to a deterministic canonical state on its own.
 
-## Remaining #707 scope
+## Relationship to graceful shutdown
 
-This startup slice does **not** close #707. Remaining reliability work includes, among other items:
+#1152 owns the process-local graceful-drain/shutdown path layered in front of this recovery
+authority. Drain never persists a second lifecycle: work that does not settle before the bounded
+shutdown deadline remains canonical owner state for this startup reconciliation pass.
 
-- graceful drain/shutdown hardening;
-- stale non-Worker session/materialization cleanup;
-- explicit uncertain-side-effect recovery states;
-- persistence/filesystem fault injection and recovery;
-- provider/dependency failure isolation and bounded retries;
-- health/readiness integration while reconciliation is in progress;
-- operator diagnostics beyond the startup report;
+See `SINGLE_NODE_DRAIN_SHUTDOWN.md` for the shutdown-side disposition policy.
+
+## Remaining reliability scope
+
+The startup-recovery slice remains intentionally narrower than all reliability work. Remaining
+items outside the completed #1152 drain boundary include, among other items:
+
+- stale non-Worker session cleanup outside the #1155 File/Workspace storage slice;
+- external-side-effect recovery is tracked separately by #1154 and documented in `EXTERNAL_EFFECT_RECOVERY.md`;
+- provider/dependency failure isolation beyond persistence and bounded lifecycle retries — owned by follow-up #1156;
+- health/readiness integration while reconciliation is in progress — owned by follow-up #1156;
+- operator diagnostics beyond startup/persistence diagnostics — owned by follow-up #1156;
 - repeated hard-kill/restart endurance testing;
-- reusable failure-injection fixtures and platform-conformance reliability evidence.
+- broader platform-conformance reliability evidence consuming the reusable #1155 persistence fixtures and the #1154 external-effect failure injector.

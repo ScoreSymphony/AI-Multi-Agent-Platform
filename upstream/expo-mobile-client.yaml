@@ -1,0 +1,35 @@
+name: "Expo / React Native mobile client runtime"
+purpose: "Optional Android/iOS northbound client for canonical Control Plane workflows"
+status: integrated
+integration_categories:
+  - "library dependency"
+canonical_upstream: "https://github.com/expo/expo; https://github.com/facebook/react-native"
+pinned_revision: "expo 57.0.17; react-native 0.86.3; expo-secure-store 57.0.4"
+verified_license: "MIT"
+license_verification_date: "2026-09-19"
+last_review_date: "2026-09-19"
+platform_adapter_or_boundary: "mobile/ -> public /api/v1 Control Plane only"
+local_source_path: ""
+source_origin_path: ""
+modified_locally: false
+modification_summary: ""
+required_notices: []
+compatibility_constraints:
+  - "Expo SDK 57 stable line"
+  - "React Native 0.86 stable line"
+  - "Android 7+"
+  - "iOS 16.4+"
+security_constraints:
+  - "Remote Control Plane URLs require HTTPS"
+  - "Bearer credential persisted only through expo-secure-store"
+  - "Deep links are allowlisted resource references and never commands"
+deployment_constraints:
+  - "Optional mobile build only; no server runtime dependency"
+resource_constraints:
+  - "Node/npm required for client development and export smoke"
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Explicit dependency PR; review Expo/React Native release and security notes; run mobile typecheck, tests, config validation and Android/iOS export smoke."
+exit_replacement_strategy: "Replace mobile implementation behind the unchanged public Control Plane; no canonical platform-state migration required."
+adr: "docs/adr/0016-optional-mobile-control-plane-client.md"
+notes: "No upstream source is copied or vendored."
