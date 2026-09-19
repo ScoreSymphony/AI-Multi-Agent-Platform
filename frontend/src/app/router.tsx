@@ -67,9 +67,12 @@ export function AppLink({
   href,
   target,
   onClick,
+  children,
+  dangerouslySetInnerHTML: _dangerouslySetInnerHTML,
   ...rest
 }: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const { navigate } = useRouter();
+  const safeHref = normalizeAppLinkHref(href);
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (
@@ -79,15 +82,15 @@ export function AppLink({
       || event.ctrlKey
       || event.shiftKey
       || event.altKey
-      || !href
+      || !safeHref
       || (target !== undefined && target !== "_self")
     ) {
       return;
     }
 
     const resolved = new URL(
-      href,
-      typeof window === "undefined" ? "http://router.invalid/" : window.location.href,
+      safeHref,
+      typeof window === "undefined" ? "https://router.invalid/" : window.location.href,
     );
     if (
       typeof window !== "undefined"
@@ -99,7 +102,27 @@ export function AppLink({
     event.preventDefault();
     navigate(`${resolved.pathname}${resolved.search}${resolved.hash}`);
   };
-  return <a href={href} target={target} onClick={handleClick} {...rest} />;
+  return <a href={safeHref} target={target} onClick={handleClick} {...rest}>{children}</a>;
+}
+
+export function normalizeAppLinkHref(
+  href: string | undefined,
+  baseHref = typeof window === "undefined" ? "https://router.invalid/" : window.location.href,
+): string | undefined {
+  if (!href) return href;
+  try {
+    const base = new URL(baseHref);
+    const resolved = new URL(href, base);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      return undefined;
+    }
+    if (resolved.origin === base.origin) {
+      return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+    return resolved.href;
+  } catch {
+    return undefined;
+  }
 }
 
 export function matchPath(pattern: string, path: string): Record<string, string> | null {
