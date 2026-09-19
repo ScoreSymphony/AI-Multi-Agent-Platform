@@ -6,12 +6,33 @@ from dataclasses import replace
 
 import pytest
 
+from ai_multi_agent_platform.adapters.hermes import (
+    HERMES_ADAPTER_ID,
+    HermesAdapterConfig,
+    HermesOrchestrator,
+)
+from ai_multi_agent_platform.adapters.hermes_plugin import (
+    HermesOrchestratorPlugin,
+    hermes_plugin_manifest,
+)
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
+    AgentMarketplaceKindHandler,
+    AgentTeamMarketplaceKindHandler,
     ApplicationMarketplaceKindHandler,
     PluginExtensionMarketplaceKindHandler,
     PluginMarketplaceKindHandler,
     SkillMarketplaceKindHandler,
 )
+from ai_multi_agent_platform.agents.models import (
+    AgentInstructions,
+    AgentProfile,
+    AgentRevisionRef,
+    AgentTeamMember,
+    AgentTeamProfile,
+    InstructionSource,
+)
+from ai_multi_agent_platform.agents.repository import InMemoryAgentRepository
+from ai_multi_agent_platform.agents.service import AgentService
 from ai_multi_agent_platform.applications import (
     ApplicationDesiredState,
     ApplicationHealthStatus,
@@ -35,30 +56,59 @@ from ai_multi_agent_platform.connectors import (
     ReferenceConnectorProvider,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
+from ai_multi_agent_platform.control_plane.plugin_module import (
+    PluginControlPlaneBinding,
+    _manifest_digest,
+)
 from ai_multi_agent_platform.distribution import (
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
     MarketplaceKindHandlerRegistry,
     PluginRegistryArtifactInstaller,
+    RegistryDependency,
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
     RegistryPluginReconciliationError,
+    RegistryQuery,
     RegistrySource,
     TrustStatus,
     ValidationContext,
     reconcile_registry_plugins,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.execution import ExecutorRegistry, ReferenceExecutor
+from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.orchestration import (
+    OrchestratorRegistry,
+    OrchestratorSelection,
+    ReferenceOrchestrator,
+)
 from ai_multi_agent_platform.plugins import (
     ConnectorRegistryBinder,
+    DiscoveredPlugin,
+    ExecutorRegistryBinder,
     ExtensionRegistration,
     ExtensionType,
+    ModelProviderRegistryBinder,
+    OrchestratorRegistryBinder,
+    PluginCatalog,
+    PluginContext,
     PluginExtensionSpec,
+    PluginHealth,
+    PluginHealthReport,
     PluginRegistry,
+    StaticPluginSource,
     reference_manifest,
+)
+from ai_multi_agent_platform.portability import (
+    AgentPortableCodec,
+    AgentTeamPortableCodec,
+    snapshot_agent,
+    snapshot_agent_team,
 )
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
 from ai_multi_agent_platform.skills.models import (
@@ -70,6 +120,7 @@ from ai_multi_agent_platform.skills.models import (
 )
 from ai_multi_agent_platform.skills.repository import InMemorySkillRepository
 from ai_multi_agent_platform.skills.service import SkillService
+from ai_multi_agent_platform.testing import FakeModelProvider
 
 pytestmark = pytest.mark.asyncio
 
@@ -124,6 +175,1068 @@ class _PluginRouter:
     async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
         del item, artifact
         raise AssertionError("Plugin compatibility test must not use portable import")
+
+
+def _agent_profile(name: str) -> AgentProfile:
+    return AgentProfile(
+        name=name,
+        role="researcher",
+        instructions=AgentInstructions(
+            role=InstructionSource(content="Research through canonical platform capabilities.")
+        ),
+    )
+
+
+def _portable_agent_artifact(repository: InMemoryAgentRepository, agent_id: str) -> bytes:
+    exported = AgentPortableCodec().serialize(snapshot_agent(repository, agent_id))
+    return json.dumps(exported.payload, sort_keys=True).encode("utf-8")
+
+
+def _portable_team_artifact(repository: InMemoryAgentRepository, team_id: str) -> bytes:
+    exported = AgentTeamPortableCodec().serialize(snapshot_agent_team(repository, team_id))
+    return json.dumps(exported.payload, sort_keys=True).encode("utf-8")
+
+
+async def test_malformed_skill_candidate_fails_preview_without_owner_mutation(
+    tmp_path,
+) -> None:
+    item = _item(
+        RegistryItemType.SKILL,
+        item_id="malformed.skill",
+        version="1.0.0",
+    )
+    artifact = b"{}"
+    skills = SkillService(InMemorySkillRepository())
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "malformed-skill.json"),
+        kind_handlers=MarketplaceKindHandlerRegistry((SkillMarketplaceKindHandler(skills),)),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("0.0.1"),
+    )
+
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "owner_candidate_invalid"
+        and "invalid canonical Skill artifact" in finding.message
+        for finding in preview.findings
+    )
+    assert skills.repository.list_skills() == ()
+    assert service.installed(item.item_id) is None
+
+
+async def test_agent_handler_installs_canonical_revisions_without_runtime_instance() -> None:
+    owner = OwnerRef(type="user", id="marketplace-agent-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    first = source.create_agent(_agent_profile("Research Agent v1"), owner_ref=owner)
+    second = source.update_agent(first.agent_id, _agent_profile("Research Agent v2"))
+
+    item = _item(
+        RegistryItemType.AGENT,
+        item_id=second.agent_id,
+        version="1.0.0",
+    )
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    handler = AgentMarketplaceKindHandler(target)
+
+    installed = await handler.install(
+        item,
+        _portable_agent_artifact(source_repository, second.agent_id),
+    )
+
+    assert installed.agent_id == second.agent_id
+    assert installed.revision == 2
+    assert target.get_agent_revision(second.agent_id, 1).profile.name == "Research Agent v1"
+    assert target.get_agent_revision(second.agent_id).profile.name == "Research Agent v2"
+    assert target_repository.list_agent_runs() == ()
+    assert handler.describe(item)["owner_domain"] == "agents"
+
+    retried_install = await handler.install(
+        item,
+        _portable_agent_artifact(source_repository, second.agent_id),
+    )
+    assert retried_install.revision == 2
+    assert target_repository.list_agent_revisions(second.agent_id) == (
+        target.get_agent_revision(second.agent_id, 1),
+        target.get_agent_revision(second.agent_id, 2),
+    )
+
+    third = source.update_agent(second.agent_id, _agent_profile("Research Agent v3"))
+    updated_item = replace(
+        item,
+        version="1.1.0",
+        source=RegistrySource(item.source.repository, f"{item.item_id}@1.1.0"),
+    )
+    updated = await handler.update(
+        updated_item,
+        _portable_agent_artifact(source_repository, third.agent_id),
+    )
+    assert updated.revision == 3
+    assert updated.profile.name == "Research Agent v3"
+
+    retried_update = await handler.update(
+        updated_item,
+        _portable_agent_artifact(source_repository, third.agent_id),
+    )
+    assert retried_update.revision == 3
+    assert len(target_repository.list_agent_revisions(second.agent_id)) == 3
+
+    await handler.uninstall(updated_item)
+    await handler.uninstall(updated_item)
+    with pytest.raises(ContractError) as missing:
+        target.get_agent_revision(second.agent_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+    assert target_repository.list_agent_runs() == ()
+
+
+async def test_agent_team_handler_uses_canonical_team_owner_and_member_validation() -> None:
+    owner = OwnerRef(type="user", id="marketplace-team-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    member = source.create_agent(_agent_profile("Team Researcher"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Research Team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    agent_item = _item(
+        RegistryItemType.AGENT,
+        item_id=member.agent_id,
+        version="1.0.0",
+    )
+    await AgentMarketplaceKindHandler(target).install(
+        agent_item,
+        _portable_agent_artifact(source_repository, member.agent_id),
+    )
+
+    team_item = _item(
+        RegistryItemType.AGENT_TEAM,
+        item_id=team.team_id,
+        version="1.0.0",
+    )
+    handler = AgentTeamMarketplaceKindHandler(target)
+    installed = await handler.install(
+        team_item,
+        _portable_team_artifact(source_repository, team.team_id),
+    )
+
+    assert installed.team_id == team.team_id
+    assert installed.profile.members[0].agent.agent_id == member.agent_id
+    assert handler.describe(team_item)["member_count"] == 1
+    assert target_repository.list_agent_runs() == ()
+
+    retried_team = await handler.install(
+        team_item,
+        _portable_team_artifact(source_repository, team.team_id),
+    )
+    assert retried_team.revision == 1
+    assert len(target_repository.list_team_revisions(team.team_id)) == 1
+
+    await handler.uninstall(team_item)
+    await handler.uninstall(team_item)
+    with pytest.raises(ContractError) as missing:
+        target.get_team_revision(team.team_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_agent_and_team_full_marketplace_flow_uses_canonical_owner(tmp_path) -> None:
+    owner = OwnerRef(type="user", id="marketplace-agent-team-e2e-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    member = source.create_agent(_agent_profile("Research Agent"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Research Team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+
+    agent_item = replace(
+        _item(
+            RegistryItemType.AGENT,
+            item_id=member.agent_id,
+            version="1.0.0",
+        ),
+        name="Research Agent",
+        description="Portable canonical Research Agent definition.",
+    )
+    team_item = replace(
+        _item(
+            RegistryItemType.AGENT_TEAM,
+            item_id=team.team_id,
+            version="1.0.0",
+        ),
+        name="Research Team",
+        description="Portable canonical Research Agent Team definition.",
+        dependencies=(
+            RegistryDependency(
+                agent_item.item_id,
+                item_kind=RegistryItemType.AGENT,
+            ),
+        ),
+    )
+    artifacts = {
+        (agent_item.item_id, agent_item.version): _portable_agent_artifact(
+            source_repository,
+            member.agent_id,
+        ),
+        (team_item.item_id, team_item.version): _portable_team_artifact(
+            source_repository,
+            team.team_id,
+        ),
+    }
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    service = DistributionService(
+        LocalRegistryProvider((agent_item, team_item), artifacts),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "agent-team-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (
+                AgentMarketplaceKindHandler(target),
+                AgentTeamMarketplaceKindHandler(target),
+            )
+        ),
+    )
+    context = ValidationContext("0.0.1")
+
+    discovered = service.search(
+        RegistryQuery(
+            text="Research",
+            item_types=frozenset({RegistryItemType.AGENT, RegistryItemType.AGENT_TEAM}),
+        )
+    )
+    assert {candidate.item_id for candidate in discovered} == {
+        agent_item.item_id,
+        team_item.item_id,
+    }
+
+    agent_preview = service.preview(agent_item.item_id, agent_item.version, context)
+    assert agent_preview.activation_allowed is True
+    installed_agent = await service.activate(agent_preview, context, authorized=True)
+    assert installed_agent.agent_id == member.agent_id
+    assert installed_agent.revision == member.revision
+    assert service.installed(agent_item.item_id) is not None
+    assert target.get_agent_revision(member.agent_id).profile.name == "Research Agent"
+    assert target_repository.list_agent_runs() == ()
+
+    team_preview = service.preview(team_item.item_id, team_item.version, context)
+    assert team_preview.activation_allowed is True
+    assert team_preview.decision.dependencies[0].item_kind == RegistryItemType.AGENT.value
+    installed_team = await service.activate(team_preview, context, authorized=True)
+    assert installed_team.team_id == team.team_id
+    assert installed_team.profile.members[0].agent.agent_id == member.agent_id
+    assert service.installed(team_item.item_id) is not None
+    assert target.get_team_revision(team.team_id).profile.name == "Research Team"
+    assert target_repository.list_agent_runs() == ()
+
+    await service.uninstall(team_item.item_id, authorized=True)
+    await service.uninstall(agent_item.item_id, authorized=True)
+    assert service.installed(team_item.item_id) is None
+    assert service.installed(agent_item.item_id) is None
+    with pytest.raises(ContractError) as missing_team:
+        target.get_team_revision(team.team_id)
+    assert missing_team.value.code is ErrorCode.NOT_FOUND
+    with pytest.raises(ContractError) as missing_agent:
+        target.get_agent_revision(member.agent_id)
+    assert missing_agent.value.code is ErrorCode.NOT_FOUND
+    assert target_repository.list_agent_runs() == ()
+
+
+async def test_agent_pack_uses_agent_dependencies_and_canonical_team_owner(tmp_path) -> None:
+    owner = OwnerRef(type="user", id="marketplace-agent-pack-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    researcher = source.create_agent(_agent_profile("Pack Researcher"), owner_ref=owner)
+    reviewer = source.create_agent(_agent_profile("Pack Reviewer"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Research Pack",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(researcher.agent_id, researcher.revision),
+                    role="researcher",
+                ),
+                AgentTeamMember(
+                    agent=AgentRevisionRef(reviewer.agent_id, reviewer.revision),
+                    role="reviewer",
+                ),
+            ),
+            leader_agent_id=researcher.agent_id,
+        ),
+        owner_ref=owner,
+    )
+
+    researcher_item = replace(
+        _item(
+            RegistryItemType.AGENT,
+            item_id=researcher.agent_id,
+            version="1.0.0",
+        ),
+        name="Pack Researcher",
+    )
+    reviewer_item = replace(
+        _item(
+            RegistryItemType.AGENT,
+            item_id=reviewer.agent_id,
+            version="1.0.0",
+        ),
+        name="Pack Reviewer",
+    )
+    team_item = replace(
+        _item(
+            RegistryItemType.AGENT_TEAM,
+            item_id=team.team_id,
+            version="1.0.0",
+        ),
+        name="Research Pack",
+        dependencies=(
+            RegistryDependency(
+                researcher_item.item_id,
+                item_kind=RegistryItemType.AGENT,
+            ),
+            RegistryDependency(
+                reviewer_item.item_id,
+                item_kind=RegistryItemType.AGENT,
+            ),
+        ),
+    )
+    artifacts = {
+        (researcher_item.item_id, researcher_item.version): _portable_agent_artifact(
+            source_repository,
+            researcher.agent_id,
+        ),
+        (reviewer_item.item_id, reviewer_item.version): _portable_agent_artifact(
+            source_repository,
+            reviewer.agent_id,
+        ),
+        (team_item.item_id, team_item.version): _portable_team_artifact(
+            source_repository,
+            team.team_id,
+        ),
+    }
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    service = DistributionService(
+        LocalRegistryProvider((researcher_item, reviewer_item, team_item), artifacts),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "agent-pack-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (
+                AgentMarketplaceKindHandler(target),
+                AgentTeamMarketplaceKindHandler(target),
+            )
+        ),
+    )
+    context = ValidationContext("0.0.1")
+
+    blocked_team = service.preview(team_item.item_id, team_item.version, context)
+    assert blocked_team.activation_allowed is False
+    assert {
+        (step.item_id, step.item_kind)
+        for step in blocked_team.decision.install_order
+    } == {
+        (researcher_item.item_id, RegistryItemType.AGENT.value),
+        (reviewer_item.item_id, RegistryItemType.AGENT.value),
+        (team_item.item_id, RegistryItemType.AGENT_TEAM.value),
+    }
+
+    for agent_item in (researcher_item, reviewer_item):
+        preview = service.preview(agent_item.item_id, agent_item.version, context)
+        assert preview.activation_allowed is True
+        await service.activate(preview, context, authorized=True)
+
+    team_preview = service.preview(team_item.item_id, team_item.version, context)
+    assert team_preview.activation_allowed is True
+    assert {
+        dependency.item_id for dependency in team_preview.decision.dependencies
+    } == {researcher_item.item_id, reviewer_item.item_id}
+    installed_team = await service.activate(team_preview, context, authorized=True)
+
+    assert installed_team.team_id == team.team_id
+    assert {
+        member.agent.agent_id for member in installed_team.profile.members
+    } == {researcher.agent_id, reviewer.agent_id}
+    assert {revision.agent_id for revision in target_repository.list_agents()} == {
+        researcher.agent_id,
+        reviewer.agent_id,
+    }
+    assert target.get_team_revision(team.team_id).profile.name == "Research Pack"
+    assert target_repository.list_agent_runs() == ()
+
+    blocked_member_removal = service.preview_uninstall(researcher_item.item_id)
+    assert blocked_member_removal.activation_allowed is False
+
+    await service.uninstall(team_item.item_id, authorized=True)
+    await service.uninstall(researcher_item.item_id, authorized=True)
+    await service.uninstall(reviewer_item.item_id, authorized=True)
+    assert target_repository.list_teams() == ()
+    assert target_repository.list_agents() == ()
+    assert target_repository.list_agent_runs() == ()
+
+
+async def test_agent_team_handler_fails_without_member_and_leaves_no_partial_team() -> None:
+    owner = OwnerRef(type="user", id="marketplace-team-failure-owner")
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    member = source.create_agent(_agent_profile("Missing Team Researcher"), owner_ref=owner)
+    team = source.create_team(
+        AgentTeamProfile(
+            name="Unresolved Research Team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+    target_repository = InMemoryAgentRepository()
+    target = AgentService(target_repository)
+    team_item = _item(
+        RegistryItemType.AGENT_TEAM,
+        item_id=team.team_id,
+        version="1.0.0",
+    )
+    handler = AgentTeamMarketplaceKindHandler(target)
+
+    with pytest.raises(ContractError) as missing_member:
+        await handler.install(
+            team_item,
+            _portable_team_artifact(source_repository, team.team_id),
+        )
+
+    assert missing_member.value.code is ErrorCode.NOT_FOUND
+    with pytest.raises(ContractError) as missing_team:
+        target.get_team_revision(team.team_id)
+    assert missing_team.value.code is ErrorCode.NOT_FOUND
+    assert target_repository.list_agent_runs() == ()
+
+
+class _HermesPluginRuntime:
+    def __init__(self, manifest, hermes: HermesOrchestrator) -> None:
+        self.manifest = manifest
+        self.hermes = hermes
+        self.stopped = False
+
+    async def initialize(self, context: PluginContext) -> tuple[ExtensionRegistration, ...]:
+        assert context.configuration == {}
+        return (ExtensionRegistration(spec=self.manifest.extensions[0], instance=self.hermes),)
+
+    async def health(self) -> PluginHealthReport:
+        return PluginHealthReport(PluginHealth.HEALTHY)
+
+    async def shutdown(self) -> None:
+        self.stopped = True
+
+
+async def test_hermes_marketplace_kind_uses_plugin_lifecycle_and_orchestrator_registry() -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="hermes.orchestrator-plugin",
+        name="Hermes",
+        description="Replaceable Hermes orchestrator adapter.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="orchestrator.hermes",
+                extension_type=ExtensionType.ORCHESTRATOR,
+                metadata={
+                    "agent_support": True,
+                    "team_support": True,
+                    "planning": True,
+                    "replanning": True,
+                    "cancellation": True,
+                    "reconciliation": True,
+                },
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    reference = ReferenceOrchestrator()
+    orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.ORCHESTRATOR,
+        extension_type=ExtensionType.ORCHESTRATOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+
+    installed = await handler.install(item, _plugin_artifact(manifest))
+    assert installed.state.value == "installed"
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+
+    plugin_registry.configure(manifest.plugin_id, {})
+    hermes = HermesOrchestrator(
+        HermesAdapterConfig(enabled=True),
+        secret_resolver=lambda _: None,
+    )
+    runtime = _HermesPluginRuntime(manifest, hermes)
+    enabled = await plugin_registry.enable(manifest.plugin_id, runtime)
+
+    assert enabled.state.value == "enabled"
+    assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+
+    await plugin_registry.disable(manifest.plugin_id)
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+    assert runtime.stopped is True
+
+
+class _SingleExtensionRuntime:
+    def __init__(self, manifest, instance: object) -> None:
+        self.manifest = manifest
+        self.instance = instance
+
+    async def initialize(self, context: PluginContext) -> tuple[ExtensionRegistration, ...]:
+        assert context.configuration == {}
+        return (ExtensionRegistration(spec=self.manifest.extensions[0], instance=self.instance),)
+
+    async def health(self) -> PluginHealthReport:
+        return PluginHealthReport(PluginHealth.HEALTHY)
+
+    async def shutdown(self) -> None:
+        return None
+
+
+async def test_hermes_marketplace_install_activates_through_canonical_control_plane(
+    tmp_path,
+) -> None:
+    manifest = hermes_plugin_manifest()
+    reference = ReferenceOrchestrator()
+    orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.ORCHESTRATOR,
+        extension_type=ExtensionType.ORCHESTRATOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    assert item.item_id == manifest.plugin_id
+    assert item.item_id != HERMES_ADAPTER_ID
+    assert HERMES_ADAPTER_ID not in json.dumps(
+        handler.describe_candidate(item, _plugin_artifact(manifest))
+    )
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): _plugin_artifact(manifest)},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "hermes-control-plane-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    validation = ValidationContext("0.0.1")
+    installed = await service.activate(
+        service.preview(item.item_id, item.version, validation),
+        validation,
+        authorized=True,
+    )
+    assert installed.state.value == "installed"
+    assert service.installed(item.item_id) is not None
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+
+    catalog = PluginCatalog(
+        StaticPluginSource(
+            DiscoveredPlugin(
+                manifest=manifest,
+                runtime_factory=HermesOrchestratorPlugin,
+                install_source="bundled:hermes-adapter",
+            )
+        )
+    )
+
+    async def grants(context: RequestContext, candidate_manifest):
+        del context
+        assert candidate_manifest == manifest
+        return candidate_manifest.requested_permissions
+
+    binding = PluginControlPlaneBinding(
+        plugin_registry,
+        plugin_catalog=catalog,
+        plugin_permission_resolver=grants,
+    )
+    context = RequestContext("hermes-plugin", "hermes-plugin")
+    configured = await binding.configure(
+        context,
+        manifest.plugin_id,
+        {
+            "configuration": {
+                "enabled": True,
+                "base_url": "http://127.0.0.1:1",
+                "request_timeout_seconds": 0.05,
+            }
+        },
+    )
+    assert configured["state"] == "configured"
+
+    enabled = await binding.enable(
+        context,
+        manifest.plugin_id,
+        {"manifest_digest": _manifest_digest(manifest)},
+    )
+    assert enabled["state"] == "enabled"
+    assert enabled["granted_permissions"] == ["network_access", "secret_consumption"]
+    selected = orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID))
+    assert isinstance(selected, HermesOrchestrator)
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+
+    disabled = await binding.disable(context, manifest.plugin_id, {})
+    assert disabled["state"] == "disabled"
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert reference.descriptor.provider_id in orchestrators.orchestrator_ids
+
+    await service.uninstall(item.item_id, authorized=True)
+    assert service.installed(item.item_id) is None
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(manifest.plugin_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_owner(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="hermes.orchestrator-plugin",
+        name="Hermes",
+        description="Replaceable Hermes orchestrator adapter.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="orchestrator.hermes",
+                extension_type=ExtensionType.ORCHESTRATOR,
+                metadata={
+                    "agent_support": True,
+                    "team_support": True,
+                    "planning": True,
+                    "replanning": True,
+                    "cancellation": True,
+                    "reconciliation": True,
+                },
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    reference = ReferenceOrchestrator()
+    orchestrators = OrchestratorRegistry({reference.descriptor.provider_id: reference})
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.ORCHESTRATOR,
+        extension_type=ExtensionType.ORCHESTRATOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "hermes-marketplace-installations.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    context = ValidationContext("0.0.1")
+
+    discovered = service.search(
+        RegistryQuery(
+            text="Hermes",
+            item_types=frozenset({RegistryItemType.ORCHESTRATOR}),
+        )
+    )
+    assert discovered == (item,)
+    requirements = service.inspect_requirements(item)
+    assert requirements is not None
+    assert requirements["required_extension_type"] == "orchestrator"
+    details = service.describe(item.item_id)
+    assert details["extension_type"] == "orchestrator"
+    extension_metadata = details["extension_metadata"]
+    assert isinstance(extension_metadata, dict)
+    hermes_metadata = extension_metadata["orchestrator.hermes"]
+    assert isinstance(hermes_metadata, dict)
+    assert hermes_metadata["planning"] is True
+    assert hermes_metadata["team_support"] is True
+    assert hermes_metadata["reconciliation"] is True
+
+    preview = service.preview(item.item_id, item.version, context)
+    assert preview.activation_allowed is True
+    installed = await service.activate(preview, context, authorized=True)
+    assert installed.state.value == "installed"
+    assert service.installed(item.item_id) is not None
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert (
+        orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
+    )
+
+    plugin_registry.configure(manifest.plugin_id, {})
+    hermes = HermesOrchestrator(
+        HermesAdapterConfig(enabled=True),
+        secret_resolver=lambda _: None,
+    )
+    runtime = _HermesPluginRuntime(manifest, hermes)
+    await plugin_registry.enable(manifest.plugin_id, runtime)
+
+    assert orchestrators.select(OrchestratorSelection(HERMES_ADAPTER_ID)) is hermes
+    assert (
+        orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
+    )
+
+    await plugin_registry.disable(manifest.plugin_id)
+    assert HERMES_ADAPTER_ID not in orchestrators.orchestrator_ids
+    assert (
+        orchestrators.select(OrchestratorSelection(reference.descriptor.provider_id)) is reference
+    )
+
+    await service.uninstall(item.item_id, authorized=True)
+    assert service.installed(item.item_id) is None
+    with pytest.raises(ContractError) as removed:
+        plugin_registry.get(manifest.plugin_id)
+    assert removed.value.code is ErrorCode.NOT_FOUND
+
+
+async def test_model_provider_marketplace_install_does_not_create_configured_model() -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.model-provider-plugin",
+        name="Reference model provider",
+        description="Model provider implementation package.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.reference",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    models = ModelRegistry()
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+        binders={ExtensionType.MODEL_PROVIDER: ModelProviderRegistryBinder(models)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.MODEL_PROVIDER,
+        extension_type=ExtensionType.MODEL_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+
+    await handler.install(item, _plugin_artifact(manifest))
+    assert models.list_providers() == ()
+    assert models.list_models() == ()
+
+    plugin_registry.configure(item.item_id, {})
+    provider = FakeModelProvider()
+    await plugin_registry.enable(
+        item.item_id,
+        _SingleExtensionRuntime(manifest, provider),
+    )
+
+    assert models.get_provider(provider.descriptor.provider_id) is provider
+    assert models.list_models() == ()
+
+    await plugin_registry.disable(item.item_id)
+    assert models.list_providers() == ()
+    assert models.list_models() == ()
+
+
+async def test_model_provider_marketplace_rejects_plaintext_package_credentials() -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.credential-safe-model-provider",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.credential-safe",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string"},
+                "credential_ref": {"type": "object"},
+            },
+            "additionalProperties": False,
+        },
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.MODEL_PROVIDER,
+        extension_type=ExtensionType.MODEL_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    secret_manifest = replace(
+        manifest,
+        extensions=(
+            replace(
+                manifest.extensions[0],
+                metadata={"api_key": "plaintext-provider-token"},
+            ),
+        ),
+    )
+
+    with pytest.raises(ContractError) as embedded_secret:
+        await handler.install(item, _plugin_artifact(secret_manifest))
+
+    assert embedded_secret.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert plugin_registry.list_plugins() == ()
+
+    schema_secret_manifest = replace(
+        manifest,
+        configuration_schema={
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "default": "plaintext-provider-token",
+                }
+            },
+            "additionalProperties": False,
+        },
+    )
+    with pytest.raises(ContractError) as embedded_schema_secret:
+        await handler.install(item, _plugin_artifact(schema_secret_manifest))
+
+    assert embedded_schema_secret.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert plugin_registry.list_plugins() == ()
+
+    schema_example_secret = replace(
+        manifest,
+        configuration_schema={
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "example": "plaintext-provider-token",
+                }
+            },
+            "additionalProperties": False,
+        },
+    )
+    with pytest.raises(ContractError) as embedded_schema_example:
+        await handler.install(item, _plugin_artifact(schema_example_secret))
+
+    assert embedded_schema_example.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert plugin_registry.list_plugins() == ()
+
+    installed = await handler.install(item, _plugin_artifact(manifest))
+    assert installed.plugin_id == item.item_id
+
+
+async def test_model_provider_secret_package_is_blocked_during_marketplace_preview(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.preview-secret-model-provider",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.preview-secret",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+                metadata={"api_key": "plaintext-provider-token"},
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.MODEL_PROVIDER,
+        extension_type=ExtensionType.MODEL_PROVIDER,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): artifact},
+        ),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / "model-provider-secret-preview.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("0.0.1"),
+    )
+
+    assert preview.activation_allowed is False
+    assert any(
+        finding.code == "owner_candidate_invalid" and "credentials" in finding.message.lower()
+        for finding in preview.findings
+    )
+    assert plugin_registry.list_plugins() == ()
+
+
+async def test_executor_marketplace_install_activates_only_through_plugin_owner(tmp_path) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.executor-plugin",
+        name="Reference executor package",
+        description="Executor implementation package.",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="executor.reference",
+                extension_type=ExtensionType.EXECUTOR,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+        configuration_schema={"type": "object", "additionalProperties": False},
+    )
+    executors = ExecutorRegistry()
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.EXECUTOR: frozenset({"1.0"})},
+        binders={ExtensionType.EXECUTOR: ExecutorRegistryBinder(executors)},
+    )
+    handler = PluginExtensionMarketplaceKindHandler(
+        kind=RegistryItemType.EXECUTOR,
+        extension_type=ExtensionType.EXECUTOR,
+        installer=PluginRegistryArtifactInstaller(plugin_registry),
+        registry=plugin_registry,
+    )
+    item = _item(
+        RegistryItemType.EXECUTOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+
+    await handler.install(item, _plugin_artifact(manifest))
+    assert executors.executor_ids == ()
+
+    plugin_registry.configure(item.item_id, {})
+    executor = ReferenceExecutor(tmp_path)
+    await plugin_registry.enable(
+        item.item_id,
+        _SingleExtensionRuntime(manifest, executor),
+    )
+    assert executor.descriptor.executor_id in executors.executor_ids
+
+    await plugin_registry.disable(item.item_id)
+    assert executors.executor_ids == ()
 
 
 async def test_plugin_activation_keeps_legacy_route_and_owner_handler_adds_status_remove(
@@ -300,6 +1413,108 @@ async def test_manifest_backed_tool_reconciles_into_plugin_owner_after_restart(
 
     assert restored == (item.item_id,)
     assert plugin_registry.get(item.item_id).plugin_version == item.version
+
+
+async def test_semantic_orchestrator_installation_reconciles_only_into_plugin_owner_after_restart(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.orchestrator-plugin",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="orchestrator.reference",
+                extension_type=ExtensionType.ORCHESTRATOR,
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+    )
+    item = _item(
+        RegistryItemType.ORCHESTRATOR,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "semantic-orchestrator-restart.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    orchestrators = OrchestratorRegistry({"reference": ReferenceOrchestrator()})
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.ORCHESTRATOR: frozenset({"1.0"})},
+        binders={ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(orchestrators)},
+    )
+
+    restored = await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    assert restored == (item.item_id,)
+    assert plugin_registry.get(item.item_id).state.value == "installed"
+    assert "orchestrator.reference" not in orchestrators.orchestrator_ids
+    assert "reference" in orchestrators.orchestrator_ids
+
+
+async def test_model_provider_reconciliation_rejects_secret_bearing_package(
+    tmp_path,
+) -> None:
+    base = reference_manifest()
+    manifest = replace(
+        base,
+        plugin_id="reference.secret-model-provider",
+        extensions=(
+            replace(
+                base.extensions[0],
+                extension_id="model-provider.secret",
+                extension_type=ExtensionType.MODEL_PROVIDER,
+                metadata={"token": "plaintext-provider-token"},
+            ),
+        ),
+        capabilities=(),
+        requested_permissions=frozenset(),
+    )
+    item = _item(
+        RegistryItemType.MODEL_PROVIDER,
+        item_id=manifest.plugin_id,
+        version=manifest.plugin_version,
+        license_name=manifest.provenance.license,
+        manifest=True,
+    )
+    artifact = _plugin_artifact(manifest)
+    provider = LocalRegistryProvider(
+        (item,),
+        {(item.item_id, item.version): artifact},
+    )
+    installations = JsonRegistryInstallationStore(tmp_path / "secret-model-provider-restart.json")
+    installations.record(
+        item,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+    )
+    plugin_registry = PluginRegistry(
+        platform_version="0.0.1",
+        supported_interfaces={ExtensionType.MODEL_PROVIDER: frozenset({"1.0"})},
+    )
+
+    with pytest.raises(
+        RegistryPluginReconciliationError,
+        match="no longer validates",
+    ):
+        await reconcile_registry_plugins(provider, installations, plugin_registry)
+
+    with pytest.raises(ContractError) as missing:
+        plugin_registry.get(item.item_id)
+    assert missing.value.code is ErrorCode.NOT_FOUND
 
 
 async def test_reconciliation_rejects_same_version_with_different_owner_manifest(

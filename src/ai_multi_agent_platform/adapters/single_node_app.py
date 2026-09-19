@@ -15,6 +15,7 @@ from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
+from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.deployment import (
     SingleNodeDeployment,
     load_application_release_gate_policy,
@@ -53,8 +54,16 @@ from ai_multi_agent_platform.onboarding.setup_registry_planning import (
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
     ConnectorRegistryBinder,
+    DiscoveredPlugin,
+    ExecutorRegistryBinder,
     ExtensionType,
+    ModelProviderRegistryBinder,
+    OrchestratorRegistryBinder,
+    PluginCatalog,
+    PluginManifest,
+    PluginPermission,
     PluginRegistry,
+    StaticPluginSource,
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
 from ai_multi_agent_platform.repositories.intelligence import (
@@ -66,7 +75,10 @@ from ai_multi_agent_platform.repositories.intelligence.wiring import (
 )
 
 from .application_runtime import ApplicationRuntimeComposition, compose_application_runtime
+from .hermes_plugin import HermesOrchestratorPlugin, hermes_plugin_manifest
 from .marketplace_owner_handlers import (
+    AgentMarketplaceKindHandler,
+    AgentTeamMarketplaceKindHandler,
     ApplicationMarketplaceKindHandler,
     PluginExtensionMarketplaceKindHandler,
     PluginMarketplaceKindHandler,
@@ -167,6 +179,18 @@ def build_default_single_node_deployment(
     return deployment
 
 
+async def _single_node_plugin_permissions(
+    context: RequestContext,
+    manifest: PluginManifest,
+) -> frozenset[PluginPermission]:
+    """Grant permissions only to exact platform-composed plugin manifests."""
+
+    del context
+    if manifest == hermes_plugin_manifest():
+        return manifest.requested_permissions
+    return frozenset()
+
+
 def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry:
     plugin_registry = deployment.control_plane.plugin_registry
     if plugin_registry is not None:
@@ -175,15 +199,38 @@ def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry
     plugin_registry = PluginRegistry(
         platform_version=__version__,
         supported_interfaces={
+            ExtensionType.ORCHESTRATOR: frozenset({"1.0"}),
+            ExtensionType.EXECUTOR: frozenset({"1.0"}),
+            ExtensionType.MODEL_PROVIDER: frozenset({"1.0"}),
             ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"}),
             ExtensionType.CONNECTOR_PROVIDER: frozenset({"1.0"}),
         },
         binders={
+            ExtensionType.ORCHESTRATOR: OrchestratorRegistryBinder(
+                deployment.orchestrators,
+                agent_mappers=deployment.agent_orchestrator_mappers,
+            ),
+            ExtensionType.EXECUTOR: ExecutorRegistryBinder(deployment.executors),
+            ExtensionType.MODEL_PROVIDER: ModelProviderRegistryBinder(deployment.models),
             ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities),
             ExtensionType.CONNECTOR_PROVIDER: ConnectorRegistryBinder(deployment.connectors),
         },
     )
-    deployment.control_plane.attach_plugin_runtime(plugin_registry)
+    hermes_manifest = hermes_plugin_manifest()
+    plugin_catalog = PluginCatalog(
+        StaticPluginSource(
+            DiscoveredPlugin(
+                manifest=hermes_manifest,
+                runtime_factory=HermesOrchestratorPlugin,
+                install_source="bundled:hermes-adapter",
+            )
+        )
+    )
+    deployment.control_plane.attach_plugin_runtime(
+        plugin_registry,
+        plugin_catalog=plugin_catalog,
+        plugin_permission_resolver=_single_node_plugin_permissions,
+    )
     return plugin_registry
 
 
@@ -196,7 +243,33 @@ def _marketplace_kind_handlers(
 ) -> MarketplaceKindHandlerRegistry:
     return MarketplaceKindHandlerRegistry(
         (
+            AgentMarketplaceKindHandler(deployment.agents),
+            AgentTeamMarketplaceKindHandler(deployment.agents),
             PluginMarketplaceKindHandler(plugin_installer, plugin_registry),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.ORCHESTRATOR,
+                extension_type=ExtensionType.ORCHESTRATOR,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.EXECUTOR,
+                extension_type=ExtensionType.EXECUTOR,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.MODEL_PROVIDER,
+                extension_type=ExtensionType.MODEL_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
+            PluginExtensionMarketplaceKindHandler(
+                kind=RegistryItemType.CAPABILITY_PROVIDER,
+                extension_type=ExtensionType.CAPABILITY_PROVIDER,
+                installer=plugin_installer,
+                registry=plugin_registry,
+            ),
             PluginExtensionMarketplaceKindHandler(
                 kind=RegistryItemType.TOOL,
                 extension_type=ExtensionType.CAPABILITY_PROVIDER,

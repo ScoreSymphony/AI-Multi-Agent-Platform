@@ -171,7 +171,9 @@ class AgentCommandHandlers:
         self.service = service
         self.runtime = runtime
         self.execution_environment_resolver = execution_environment_resolver
-        self.orchestrator_mappers = dict(orchestrator_mappers or {})
+        self.orchestrator_mappers = (
+            orchestrator_mappers if orchestrator_mappers is not None else {}
+        )
         for adapter_id, mapper in self.orchestrator_mappers.items():
             if not adapter_id.strip():
                 raise ValueError("orchestrator mapper registry key must not be blank")

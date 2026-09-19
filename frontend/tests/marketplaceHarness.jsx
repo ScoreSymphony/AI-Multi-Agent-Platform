@@ -150,7 +150,11 @@ function item({
           details: kind === "application"
             ? { runtime: "container", definition: "application manifest" }
             : { owner: `${kind}-handler` },
-          status: installed ? { state: "installed" } : { state: "available" },
+          status: installed
+            ? kind === "orchestrator"
+              ? { state: "enabled", health: "healthy" }
+              : { state: "installed" }
+            : { state: "available" },
           supported_operations:
             kind === "application"
               ? ["install", "uninstall"]
@@ -232,6 +236,42 @@ const catalog = [
     kind: "workflow",
     name: "Release Workflow",
     description: "Reusable workflow",
+  }),
+  item({
+    id: "research-agent",
+    kind: "agent",
+    name: "Research Agent",
+    description: "Canonical reusable Agent definition",
+    route: "kind_handler",
+    installed: true,
+    installedVersion: "1.1.0",
+  }),
+  item({
+    id: "software-engineering-team",
+    kind: "agent_team",
+    name: "Software Engineering Team",
+    description: "Canonical reusable Agent Team definition",
+    route: "kind_handler",
+    installed: true,
+    installedVersion: "1.1.0",
+  }),
+  item({
+    id: "hermes-orchestrator",
+    kind: "orchestrator",
+    name: "Hermes",
+    description: "Replaceable Orchestrator implementation package",
+    route: "kind_handler",
+    installed: true,
+    installedVersion: "1.1.0",
+  }),
+  item({
+    id: "local-model-provider",
+    kind: "model_provider",
+    name: "Local Model Provider",
+    description: "Installable ModelProvider implementation package",
+    route: "kind_handler",
+    installed: true,
+    installedVersion: "1.1.0",
   }),
   item({
     id: "notebook-extension",
