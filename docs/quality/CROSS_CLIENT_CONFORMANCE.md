@@ -30,7 +30,7 @@ Issue #1236 treats the public Web, CLI and HTTP API surfaces as projections of o
 | Search | `/search` query contract | typed search command | SearchPage / ControlPlaneClient.search | Shared query contract; authorization filtering remains server-owned |
 | Automations | automation resources/actions | canonical extension/domain commands | AutomationClient | Existing automation acceptance evidence; lifecycle remains canonical |
 | Workers / Nodes | worker/node resources/actions | compute commands | compute clients/pages | Supported-state projection only; scheduler/worker authority is server-side |
-| Marketplace | Marketplace resources/actions | marketplace command family | Marketplace UI/client | Core semantics available from #1174; final cross-kind parity awaits #1221 |
+| Marketplace | Marketplace resources/actions | marketplace command family | Marketplace UI/client | #1174 core and #1221 cross-kind semantics are integrated; detailed Marketplace acceptance remains owned by the separate #1236 Marketplace slice |
 | Diagnostics / status | manifest, health, readiness | platform status/health/doctor | setup/status surfaces | Canonical API status is source of truth |
 
 ## Maintained shared fixture contract
@@ -41,7 +41,12 @@ The cross-client fixture set under `frontend/src/api/__fixtures__/` is intention
 2. identical Task list pagination payload;
 3. equivalent `limit`, `cursor`, `sort`, `direction`, `q`, `filter[field]` and `fields` query semantics;
 4. equivalent canonical authorization-error category/status/retryability semantics;
-5. use of the versioned `/api/v1` resource paths from both clients;\n6. identical public Task/Run lifecycle mutation routes for queue/start/cancel/retry and Run cancellation;\n7. canonical Task deep links resolve back through the public API;\n8. repeated Web reads observe refreshed server state rather than retaining client-owned lifecycle state;\n9. POST lifecycle mutations carry an idempotency key and are not client-retried even when a returned canonical error is retryable;\n10. authorization, not-found and conflict responses preserve canonical HTTP status, code, category and retryability across Web and CLI.
+5. use of the versioned `/api/v1` resource paths from both clients;
+6. identical public Task/Run lifecycle mutation routes for queue/start/cancel/retry and Run cancellation;
+7. canonical Task deep links resolve back through the public API;
+8. repeated Web reads observe refreshed server state rather than retaining client-owned lifecycle state;
+9. POST lifecycle mutations carry an idempotency key and are not client-retried even when a returned canonical error is retryable;
+10. authorization, not-found and conflict responses preserve canonical HTTP status, code, category and retryability across Web and CLI.
 
 These fixtures are evidence, not a second schema. The OpenAPI / Control Plane contract remains authoritative.
 
