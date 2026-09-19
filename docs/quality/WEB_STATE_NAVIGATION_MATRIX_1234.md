@@ -130,10 +130,13 @@ cross-domain checks after the official first run has completed:
 - direct Task detail navigation and reload;
 - Search query/filter reload persistence;
 - explicit unknown-route Not Found behavior;
-- browser Back restoring the Search URL-owned filter state.
+- browser Back restoring the Search URL-owned filter state;
+- direct-detail permission denial with no misleading Retry action;
+- a once-valid detail resource becoming Not Found;
+- a bounded manifest/Control Plane transport outage followed by in-place shell recovery.
 
 The existing #1164 provider-offline/recovery and onboarding reload checks remain the evidence for
-those classes of failure.
+provider-specific failure and incomplete-setup persistence.
 
 ## Existing #1259 behavior deliberately reused
 
