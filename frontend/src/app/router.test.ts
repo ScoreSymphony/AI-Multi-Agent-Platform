@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchPath, normalizeAppLinkHref } from "./router";
+import { AppLink, matchPath, normalizeAppLinkHref } from "./router";
 
 describe("cross-cutting route matching", () => {
   it("decodes canonical route parameters without crashing on malformed deep links", () => {
@@ -13,6 +13,15 @@ describe("cross-cutting route matching", () => {
   });
 });
 
+
+describe("AppLink prop safety", () => {
+  it("does not expose raw HTML injection props", () => {
+    type Props = Parameters<typeof AppLink>[0];
+    const excludesDangerousHtml: "dangerouslySetInnerHTML" extends keyof Props ? false : true = true;
+
+    expect(excludesDangerousHtml).toBe(true);
+  });
+});
 
 describe("AppLink URL safety", () => {
   it("normalizes internal links and preserves safe external HTTP(S) links", () => {
