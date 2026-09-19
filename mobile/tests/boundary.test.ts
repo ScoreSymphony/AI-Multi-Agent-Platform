@@ -21,6 +21,23 @@ describe("mobile architecture boundary", () => {
     }
   });
 
+  it("delegates device secrets to expo-secure-store rather than ordinary app storage", () => {
+    const secureStore = readFileSync(resolve(ROOT, "src/secureStore.ts"), "utf8");
+    const session = readFileSync(resolve(ROOT, "src/session.ts"), "utf8");
+    expect(secureStore).toContain('from "expo-secure-store"');
+    expect(secureStore).toContain("SecureStore.getItemAsync");
+    expect(secureStore).toContain("SecureStore.setItemAsync");
+    expect(secureStore).toContain("SecureStore.deleteItemAsync");
+    expect(session).not.toContain("AsyncStorage");
+    expect(session).not.toContain("localStorage");
+  });
+
+  it("keeps stale offline state visibly read-only in the application surface", () => {
+    const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
+    expect(app).toContain("Showing cached read-only data.");
+    expect(app).toContain("Mutations are disabled");
+  });
+
   it("does not import server runtime packages into the mobile application", () => {
     const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
     expect(app).not.toContain("ai_multi_agent_platform");
