@@ -235,6 +235,25 @@ export function RunDetailPage({ client, runId }: { client: ControlPlaneClient; r
   return <div className="stack"><header className="page-header detail-header"><div><p className="eyebrow">Run</p><h1>Attempt {run.attempt}</h1><CanonicalId value={run.id} /></div><StatusBadge value={run.status} /></header>{run.error && <DegradedState title={`${run.error.category}: ${run.error.code}`} detail={run.error.message} />}{run.recovery_required && <DegradedState title="Recovery required" detail={run.recovery_reason ?? "The canonical Run is marked for recovery."} />}<div className="grid-two"><Card title="Run details"><DefinitionList values={{ task: run.task_id, subject: `${run.subject_type}:${run.subject_id}`, trace: run.trace_id ?? "—", correlation: run.correlation_id, started: run.started_at ? formatDate(run.started_at) : "—", finished: run.finished_at ? formatDate(run.finished_at) : "—" }} /></Card><Card title="References"><ReferenceList label="Artifacts" values={run.artifact_ids} /><ReferenceList label="Results" values={run.result_ids} /></Card></div><Card title="Output"><pre>{prettyJson(run.output)}</pre></Card></div>;
 }
 
+export function NotFoundPage({ path }: { path: string }) {
+  return (
+    <div className="stack">
+      <header className="page-header">
+        <p className="eyebrow">Navigation</p>
+        <h1>Page not found</h1>
+        <p>No maintained Web route matches <code>{path}</code>.</p>
+      </header>
+      <EmptyState
+        title="Unknown route"
+        detail="The address does not map to a claimed V1 Web surface. Optional subsystems use a separate unavailable state."
+      />
+      <div className="actions">
+        <AppLink href="/">Return to platform overview</AppLink>
+      </div>
+    </div>
+  );
+}
+
 export function UnavailablePage({ item, manifest }: { item: { label: string; apiResource?: string }; manifest: APImanifest | null }) {
   const registered = item.apiResource ? manifest?.resources.includes(item.apiResource) : false;
   return <div className="stack"><header className="page-header"><p className="eyebrow">Stable navigation shell</p><h1>{item.label}</h1></header><DegradedState title={registered ? "UI integration pending" : "Canonical subsystem unavailable"} detail={registered ? `The Control Plane advertises ${item.apiResource}, but this #17 slice has not implemented its dedicated UI yet.` : "This route is intentionally stable, but its owning canonical subsystem/API is not currently available. No private backend fallback is used."} /></div>;
