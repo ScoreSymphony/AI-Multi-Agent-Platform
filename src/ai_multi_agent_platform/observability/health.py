@@ -86,8 +86,7 @@ def aggregate_health(
             dependencies=dependencies,
         )
     if operator_intervention_required or any(
-        dependency.required
-        and dependency.state is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
+        dependency.required and dependency.state is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
         for dependency in dependencies
     ):
         return ServiceHealth(
