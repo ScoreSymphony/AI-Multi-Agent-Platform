@@ -356,6 +356,7 @@ def main(
             raise SystemExit(
                 "The server extra is required. Install with: pip install '.[server]'"
             ) from exc
+
         class _DrainAwareServer(uvicorn.Server):
             def handle_exit(self, sig: int, frame: FrameType | None) -> None:
                 already_exiting = self.should_exit

@@ -53,9 +53,7 @@ def test_readme_quick_start_uses_browser_first_supported_single_node_path() -> N
     assert "operator/recovery alternative" in readme
     assert "not a prerequisite" in readme
     assert "docs/operations/DEPLOYMENT.md" in readme
-    assert (
-        "No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker" in readme
-    )
+    assert "No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker" in readme
 
 
 def test_readme_links_directly_to_official_multi_agent_first_run() -> None:

@@ -91,9 +91,7 @@ def test_projectatlas_manifest_is_experimental_and_fail_closed() -> None:
 
 
 def test_legacy_projectatlas_entrypoint_resolves_to_canonical_plugin() -> None:
-    legacy = importlib.import_module(
-        "ai_multi_agent_platform.repository_intelligence.projectatlas"
-    )
+    legacy = importlib.import_module("ai_multi_agent_platform.repository_intelligence.projectatlas")
     canonical = importlib.import_module(
         "ai_multi_agent_platform.repositories.intelligence.projectatlas"
     )

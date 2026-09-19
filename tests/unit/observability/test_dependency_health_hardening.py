@@ -258,10 +258,7 @@ def test_operational_reconciliation_and_operator_blockers_are_projected_as_requi
             detail="canonical recovery requires an operator decision",
         )
         assert await health.health() is HealthStatus.UNAVAILABLE
-        assert (
-            health.service_health.readiness
-            is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
-        )
+        assert health.service_health.readiness is ReadinessState.OPERATOR_INTERVENTION_REQUIRED
 
         health.set_operational_state(None)
         assert await health.health() is HealthStatus.HEALTHY

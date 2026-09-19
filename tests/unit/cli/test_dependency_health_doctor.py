@@ -125,7 +125,5 @@ def test_doctor_health_rejects_unhashable_readiness_values_without_crashing() ->
     )
 
     assert overall == "blocking"
-    schema_check = next(
-        check for check in checks if check["name"] == "dependency_health_schema"
-    )
+    schema_check = next(check for check in checks if check["name"] == "dependency_health_schema")
     assert schema_check["status"] == "blocking"

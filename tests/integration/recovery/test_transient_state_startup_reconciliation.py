@@ -297,9 +297,7 @@ def test_single_node_restart_reconciles_crash_after_canonical_task_admission_wit
             if report.name == "single-node-transient-state"
         )
         automation_evidence = next(
-            item
-            for item in transient.evidence
-            if item.get("state_class") == "automation_delivery"
+            item for item in transient.evidence if item.get("state_class") == "automation_delivery"
         )
         assert automation_evidence["disposition"] == "resumed"
         assert recovered.status is DeliveryStatus.SUCCEEDED
@@ -321,8 +319,7 @@ def test_single_node_restart_reconciles_crash_after_canonical_task_admission_wit
             if report.name == "single-node-transient-state"
         )
         assert not any(
-            item.get("state_class") == "automation_delivery"
-            for item in repeated_transient.evidence
+            item.get("state_class") == "automation_delivery" for item in repeated_transient.evidence
         )
         assert set(await restarted.kernel_repository.list_stream_ids()) == before_streams
 
