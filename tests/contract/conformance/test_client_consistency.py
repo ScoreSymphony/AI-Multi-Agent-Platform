@@ -22,10 +22,12 @@ def test_client_consistency_scenarios_bind_task_run_result_parity() -> None:
     assert "error/status categories" in web.criterion
     assert "authorization/approval" in cli.criterion
     assert "mutation idempotency" in cli.criterion
+    assert "first-run command identity" in cli.criterion
     assert "authorization/approval" in web.criterion
     assert "mutation idempotency" in web.criterion
     assert "deep-link resolution" in web.criterion
     assert "reload behavior" in web.criterion
+    assert "first-run command identity" in web.criterion
     cli_command = " ".join(cli.command)
     assert "test_cli_reads_shared_canonical_task_run_result_state" in cli_command
     assert "test_cli_preserves_shared_task_query_pagination_and_error_semantics" in cli_command
@@ -38,6 +40,8 @@ def test_client_consistency_scenarios_bind_task_run_result_parity() -> None:
     assert "test_cli_and_public_api_share_pagination_filter_sort_semantics" in cli_command
     assert "test_cli_surfaces_canonical_authorization_denial" in cli_command
     assert "test_cli_surfaces_approval_required_and_observes_approved_action" in cli_command
+    assert "test_cli_multi_agent_first_run_uses_same_control_plane_command_as_web" in cli_command
     web_command = " ".join(web.command)
     assert "src/api/canonicalStateParity.test.ts" in web_command
     assert "src/api/errorPresentation.test.ts" in web_command
+    assert "src/api/onboarding.multiAgent.test.ts" in web_command
