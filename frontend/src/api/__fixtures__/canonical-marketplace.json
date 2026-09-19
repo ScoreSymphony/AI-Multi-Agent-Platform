@@ -1,0 +1,686 @@
+{
+  "kind": {
+    "id": "agent",
+    "type": "marketplace-kind",
+    "kind": "agent",
+    "display_name": "Agent",
+    "default_route": "kind_handler",
+    "supports_install": true,
+    "supports_update": true,
+    "supports_uninstall": true,
+    "group": "ai_agents",
+    "owner_resource": "agents",
+    "management_path": "/agents"
+  },
+  "item": {
+    "id": "research-agent@1.2.0",
+    "qualified_id": "official::research-agent@1.2.0",
+    "type": "registry-item",
+    "item_id": "research-agent",
+    "item_type": "agent",
+    "kind": "agent",
+    "name": "Research Agent",
+    "description": "Canonical cross-client Marketplace fixture",
+    "version": "1.2.0",
+    "publisher": "ScoreSymphony",
+    "source_registry": "official",
+    "source": {
+      "registry": "official",
+      "repository": "https://example.invalid/ScoreSymphony/research-agent",
+      "package_reference": "agent:research-agent@1.2.0",
+      "revision": "fixture-revision-120"
+    },
+    "license": "MIT",
+    "provenance": "signed fixture release",
+    "minimum_platform_version": "1.0.0",
+    "maximum_platform_version": null,
+    "dependencies": [],
+    "requested_permissions": [
+      "workspace.read"
+    ],
+    "required_capabilities": [
+      "search.read"
+    ],
+    "required_plugins": [],
+    "required_connectors": [],
+    "required_models": [],
+    "tags": [
+      "research",
+      "reference"
+    ],
+    "categories": [
+      "agents"
+    ],
+    "trust_status": "reviewed",
+    "trust": "reviewed",
+    "maturity": "stable",
+    "stability": "stable",
+    "review_reference": "review:research-agent-1.2.0",
+    "released_at": "2026-09-19T10:00:00Z",
+    "release_date": "2026-09-19T10:00:00Z",
+    "changelog": "Canonical cross-client fixture release.",
+    "deprecated": false,
+    "yanked": false,
+    "route": "kind_handler",
+    "route_available": true,
+    "integrity": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signature_present": true,
+      "signature_key_id": "fixture-signing-key"
+    },
+    "manifest_reference": {
+      "kind": "agent",
+      "reference": "agents/research-agent.json",
+      "schema_version": "1"
+    },
+    "compatible": true,
+    "compatibility": {
+      "compatible": true,
+      "platform_compatible": true,
+      "operating_system_compatible": true,
+      "architecture_compatible": true,
+      "operating_systems": [
+        "linux"
+      ],
+      "architectures": [
+        "x86_64"
+      ],
+      "required_runtimes": [],
+      "missing_runtimes": [],
+      "missing_capabilities": [],
+      "missing_plugins": [],
+      "missing_connectors": [],
+      "missing_models": [],
+      "reasons": []
+    },
+    "operation_state": "ready",
+    "installed": false,
+    "installed_version": null,
+    "installed_source_registry": null,
+    "installation_source_matches": null,
+    "pinned_version": null,
+    "update_available": false,
+    "installation": null,
+    "update_state": {
+      "installed": false,
+      "installed_version": null,
+      "candidate_version": "1.2.0",
+      "pinned_version": null,
+      "update_available": false
+    },
+    "owner_extension": {
+      "handler_available": true,
+      "requirements": {
+        "owner_domain": "agents"
+      },
+      "details": {
+        "definition_kind": "agent"
+      },
+      "status": {
+        "state": "available"
+      },
+      "status_version": null,
+      "supported_operations": [
+        "install",
+        "update",
+        "uninstall"
+      ]
+    }
+  },
+  "installed_item": {
+    "id": "research-agent@1.2.0",
+    "qualified_id": "official::research-agent@1.2.0",
+    "type": "registry-item",
+    "item_id": "research-agent",
+    "item_type": "agent",
+    "kind": "agent",
+    "name": "Research Agent",
+    "description": "Canonical cross-client Marketplace fixture",
+    "version": "1.2.0",
+    "publisher": "ScoreSymphony",
+    "source_registry": "official",
+    "source": {
+      "registry": "official",
+      "repository": "https://example.invalid/ScoreSymphony/research-agent",
+      "package_reference": "agent:research-agent@1.2.0",
+      "revision": "fixture-revision-120"
+    },
+    "license": "MIT",
+    "provenance": "signed fixture release",
+    "minimum_platform_version": "1.0.0",
+    "maximum_platform_version": null,
+    "dependencies": [],
+    "requested_permissions": [
+      "workspace.read"
+    ],
+    "required_capabilities": [
+      "search.read"
+    ],
+    "required_plugins": [],
+    "required_connectors": [],
+    "required_models": [],
+    "tags": [
+      "research",
+      "reference"
+    ],
+    "categories": [
+      "agents"
+    ],
+    "trust_status": "reviewed",
+    "trust": "reviewed",
+    "maturity": "stable",
+    "stability": "stable",
+    "review_reference": "review:research-agent-1.2.0",
+    "released_at": "2026-09-19T10:00:00Z",
+    "release_date": "2026-09-19T10:00:00Z",
+    "changelog": "Canonical cross-client fixture release.",
+    "deprecated": false,
+    "yanked": false,
+    "route": "kind_handler",
+    "route_available": true,
+    "integrity": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signature_present": true,
+      "signature_key_id": "fixture-signing-key"
+    },
+    "manifest_reference": {
+      "kind": "agent",
+      "reference": "agents/research-agent.json",
+      "schema_version": "1"
+    },
+    "compatible": true,
+    "compatibility": {
+      "compatible": true,
+      "platform_compatible": true,
+      "operating_system_compatible": true,
+      "architecture_compatible": true,
+      "operating_systems": [
+        "linux"
+      ],
+      "architectures": [
+        "x86_64"
+      ],
+      "required_runtimes": [],
+      "missing_runtimes": [],
+      "missing_capabilities": [],
+      "missing_plugins": [],
+      "missing_connectors": [],
+      "missing_models": [],
+      "reasons": []
+    },
+    "operation_state": "ready",
+    "installed": true,
+    "installed_version": "1.2.0",
+    "installed_source_registry": "official",
+    "installation_source_matches": true,
+    "pinned_version": null,
+    "update_available": false,
+    "installation": {
+      "id": "research-agent",
+      "type": "registry-installation",
+      "item_id": "research-agent",
+      "version": "1.2.0",
+      "pinned_version": null,
+      "source_registry": "official",
+      "source_repository": "https://example.invalid/ScoreSymphony/research-agent",
+      "package_reference": "agent:research-agent@1.2.0",
+      "revision": "fixture-revision-120",
+      "license": "MIT",
+      "provenance": "signed fixture release",
+      "history": []
+    },
+    "update_state": {
+      "installed": true,
+      "installed_version": "1.2.0",
+      "candidate_version": "1.2.0",
+      "pinned_version": null,
+      "update_available": false
+    },
+    "owner_extension": {
+      "handler_available": true,
+      "requirements": {
+        "owner_domain": "agents"
+      },
+      "details": {
+        "definition_kind": "agent"
+      },
+      "status": {
+        "state": "installed",
+        "revision_id": "agent-revision-120"
+      },
+      "status_version": null,
+      "supported_operations": [
+        "install",
+        "update",
+        "uninstall"
+      ]
+    }
+  },
+  "page": {
+    "items": [
+      {
+        "id": "research-agent@1.2.0",
+        "qualified_id": "official::research-agent@1.2.0",
+        "type": "registry-item",
+        "item_id": "research-agent",
+        "item_type": "agent",
+        "kind": "agent",
+        "name": "Research Agent",
+        "description": "Canonical cross-client Marketplace fixture",
+        "version": "1.2.0",
+        "publisher": "ScoreSymphony",
+        "source_registry": "official",
+        "source": {
+          "registry": "official",
+          "repository": "https://example.invalid/ScoreSymphony/research-agent",
+          "package_reference": "agent:research-agent@1.2.0",
+          "revision": "fixture-revision-120"
+        },
+        "license": "MIT",
+        "provenance": "signed fixture release",
+        "minimum_platform_version": "1.0.0",
+        "maximum_platform_version": null,
+        "dependencies": [],
+        "requested_permissions": [
+          "workspace.read"
+        ],
+        "required_capabilities": [
+          "search.read"
+        ],
+        "required_plugins": [],
+        "required_connectors": [],
+        "required_models": [],
+        "tags": [
+          "research",
+          "reference"
+        ],
+        "categories": [
+          "agents"
+        ],
+        "trust_status": "reviewed",
+        "trust": "reviewed",
+        "maturity": "stable",
+        "stability": "stable",
+        "review_reference": "review:research-agent-1.2.0",
+        "released_at": "2026-09-19T10:00:00Z",
+        "release_date": "2026-09-19T10:00:00Z",
+        "changelog": "Canonical cross-client fixture release.",
+        "deprecated": false,
+        "yanked": false,
+        "route": "kind_handler",
+        "route_available": true,
+        "integrity": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "signature_present": true,
+          "signature_key_id": "fixture-signing-key"
+        },
+        "manifest_reference": {
+          "kind": "agent",
+          "reference": "agents/research-agent.json",
+          "schema_version": "1"
+        },
+        "compatible": true,
+        "compatibility": {
+          "compatible": true,
+          "platform_compatible": true,
+          "operating_system_compatible": true,
+          "architecture_compatible": true,
+          "operating_systems": [
+            "linux"
+          ],
+          "architectures": [
+            "x86_64"
+          ],
+          "required_runtimes": [],
+          "missing_runtimes": [],
+          "missing_capabilities": [],
+          "missing_plugins": [],
+          "missing_connectors": [],
+          "missing_models": [],
+          "reasons": []
+        },
+        "operation_state": "ready",
+        "installed": false,
+        "installed_version": null,
+        "installed_source_registry": null,
+        "installation_source_matches": null,
+        "pinned_version": null,
+        "update_available": false,
+        "installation": null,
+        "update_state": {
+          "installed": false,
+          "installed_version": null,
+          "candidate_version": "1.2.0",
+          "pinned_version": null,
+          "update_available": false
+        },
+        "owner_extension": {
+          "handler_available": true,
+          "requirements": {
+            "owner_domain": "agents"
+          },
+          "details": {
+            "definition_kind": "agent"
+          },
+          "status": {
+            "state": "available"
+          },
+          "status_version": null,
+          "supported_operations": [
+            "install",
+            "update",
+            "uninstall"
+          ]
+        }
+      }
+    ],
+    "next_cursor": "marketplace-parity-next",
+    "total": 2,
+    "limit": 1
+  },
+  "mutation": {
+    "id": "marketplace-install-research-agent",
+    "type": "marketplace-mutation",
+    "action": "install",
+    "status": "applied",
+    "route": "kind_handler",
+    "decision": {
+      "operation": "install",
+      "dependencies": [],
+      "install_order": [
+        {
+          "item_id": "research-agent",
+          "item_kind": "agent",
+          "version": "1.2.0",
+          "source_registry": "official"
+        }
+      ],
+      "compatibility": {
+        "compatible": true,
+        "platform_compatible": true,
+        "operating_system_compatible": true,
+        "architecture_compatible": true,
+        "missing_runtimes": [],
+        "missing_capabilities": [],
+        "missing_plugins": [],
+        "missing_connectors": [],
+        "missing_models": []
+      },
+      "permission_diff": {
+        "previous": [],
+        "requested": [
+          "workspace.read"
+        ],
+        "added": [
+          "workspace.read"
+        ],
+        "removed": [],
+        "unchanged": [],
+        "changed": true,
+        "escalated": true
+      },
+      "provenance_diff": {
+        "installed": false,
+        "previous_source_registry": null,
+        "candidate_source_registry": "official",
+        "previous_publisher": null,
+        "candidate_publisher": "ScoreSymphony",
+        "previous_repository": null,
+        "candidate_repository": "https://example.invalid/ScoreSymphony/research-agent",
+        "previous_package_reference": null,
+        "candidate_package_reference": "agent:research-agent@1.2.0",
+        "previous_revision": null,
+        "candidate_revision": "fixture-revision-120",
+        "previous_artifact_sha256": null,
+        "candidate_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_signature_key_id": null,
+        "candidate_signature_key_id": "fixture-signing-key",
+        "previous_trust_status": null,
+        "candidate_trust_status": "reviewed",
+        "previous_review_reference": null,
+        "candidate_review_reference": "review:research-agent-1.2.0",
+        "source_changed": false,
+        "publisher_changed": false,
+        "repository_changed": false,
+        "package_reference_changed": false,
+        "revision_changed": false,
+        "artifact_changed": false,
+        "signature_changed": false,
+        "signature_key_changed": false,
+        "trust_changed": false,
+        "trust_downgraded": false,
+        "review_changed": false,
+        "changed": false
+      },
+      "approval": {
+        "required": false,
+        "reasons": [],
+        "authorization_required": true
+      },
+      "update_state": {
+        "installed_version": null,
+        "candidate_version": "1.2.0",
+        "latest_compatible_version": "1.2.0",
+        "update_available": false,
+        "pinned": false,
+        "blocked_by_pin": false,
+        "incompatible_update": false,
+        "current_yanked": false,
+        "candidate_yanked": false,
+        "candidate_deprecated": false,
+        "source_change": false,
+        "permission_change": true,
+        "trust_integrity_issue": false
+      },
+      "dependency_blocked": false
+    },
+    "installation": {
+      "id": "research-agent",
+      "type": "registry-installation",
+      "item_id": "research-agent",
+      "version": "1.2.0",
+      "pinned_version": null,
+      "source_registry": "official",
+      "source_repository": "https://example.invalid/ScoreSymphony/research-agent",
+      "package_reference": "agent:research-agent@1.2.0",
+      "revision": "fixture-revision-120",
+      "license": "MIT",
+      "provenance": "signed fixture release",
+      "history": []
+    }
+  },
+  "deprecated_item": {
+    "id": "legacy-research-agent@0.9.0",
+    "qualified_id": "official::legacy-research-agent@0.9.0",
+    "type": "registry-item",
+    "item_id": "legacy-research-agent",
+    "item_type": "agent",
+    "kind": "agent",
+    "name": "Legacy Research Agent",
+    "description": "Canonical cross-client Marketplace fixture",
+    "version": "0.9.0",
+    "publisher": "ScoreSymphony",
+    "source_registry": "official",
+    "source": {
+      "registry": "official",
+      "repository": "https://example.invalid/ScoreSymphony/research-agent",
+      "package_reference": "agent:research-agent@1.2.0",
+      "revision": "fixture-revision-120"
+    },
+    "license": "MIT",
+    "provenance": "signed fixture release",
+    "minimum_platform_version": "1.0.0",
+    "maximum_platform_version": null,
+    "dependencies": [],
+    "requested_permissions": [
+      "workspace.read"
+    ],
+    "required_capabilities": [
+      "search.read"
+    ],
+    "required_plugins": [],
+    "required_connectors": [],
+    "required_models": [],
+    "tags": [
+      "research",
+      "reference"
+    ],
+    "categories": [
+      "agents"
+    ],
+    "trust_status": "reviewed",
+    "trust": "reviewed",
+    "maturity": "stable",
+    "stability": "stable",
+    "review_reference": "review:research-agent-1.2.0",
+    "released_at": "2026-09-19T10:00:00Z",
+    "release_date": "2026-09-19T10:00:00Z",
+    "changelog": "Canonical cross-client fixture release.",
+    "deprecated": true,
+    "yanked": false,
+    "route": "kind_handler",
+    "route_available": false,
+    "integrity": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signature_present": true,
+      "signature_key_id": "fixture-signing-key"
+    },
+    "manifest_reference": {
+      "kind": "agent",
+      "reference": "agents/research-agent.json",
+      "schema_version": "1"
+    },
+    "compatible": true,
+    "compatibility": {
+      "compatible": true,
+      "platform_compatible": true,
+      "operating_system_compatible": true,
+      "architecture_compatible": true,
+      "operating_systems": [
+        "linux"
+      ],
+      "architectures": [
+        "x86_64"
+      ],
+      "required_runtimes": [],
+      "missing_runtimes": [],
+      "missing_capabilities": [],
+      "missing_plugins": [],
+      "missing_connectors": [],
+      "missing_models": [],
+      "reasons": []
+    },
+    "operation_state": "unsupported",
+    "installed": false,
+    "installed_version": null,
+    "installed_source_registry": null,
+    "installation_source_matches": null,
+    "pinned_version": null,
+    "update_available": false,
+    "installation": null,
+    "update_state": {
+      "installed": false,
+      "installed_version": null,
+      "candidate_version": "1.2.0",
+      "pinned_version": null,
+      "update_available": false
+    },
+    "owner_extension": {
+      "handler_available": true,
+      "requirements": null,
+      "details": null,
+      "status": {
+        "state": "deprecated"
+      },
+      "status_version": null,
+      "supported_operations": []
+    }
+  },
+  "errors": {
+    "authorization": {
+      "status": 403,
+      "body": {
+        "code": "forbidden",
+        "category": "authorization",
+        "message": "Marketplace install is not authorized",
+        "request_id": "marketplace-auth-request",
+        "correlation_id": "marketplace-auth-correlation",
+        "retryable": false,
+        "details": {
+          "marketplace_reason": "authorization_denied"
+        }
+      }
+    },
+    "validation": {
+      "status": 422,
+      "body": {
+        "code": "invalid_configuration",
+        "category": "configuration",
+        "message": "Marketplace candidate validation failed",
+        "request_id": "marketplace-validation-request",
+        "correlation_id": "marketplace-validation-correlation",
+        "retryable": false,
+        "details": {
+          "marketplace_reason": "validation_failed"
+        }
+      }
+    },
+    "not_found": {
+      "status": 404,
+      "body": {
+        "code": "not_found",
+        "category": "resource",
+        "message": "Marketplace item was not found",
+        "request_id": "marketplace-not-found-request",
+        "correlation_id": "marketplace-not-found-correlation",
+        "retryable": false,
+        "details": {
+          "marketplace_reason": "item_not_found"
+        }
+      }
+    },
+    "conflict": {
+      "status": 409,
+      "body": {
+        "code": "conflict",
+        "category": "conflict",
+        "message": "Marketplace item source is ambiguous",
+        "request_id": "marketplace-conflict-request",
+        "correlation_id": "marketplace-conflict-correlation",
+        "retryable": false,
+        "details": {
+          "marketplace_reason": "source_ambiguous"
+        }
+      }
+    },
+    "unsupported": {
+      "status": 400,
+      "body": {
+        "code": "unsupported_capability",
+        "category": "capability",
+        "message": "Marketplace operation is unsupported by the canonical owner",
+        "request_id": "marketplace-unsupported-request",
+        "correlation_id": "marketplace-unsupported-correlation",
+        "retryable": false,
+        "details": {
+          "marketplace_reason": "unsupported_operation",
+          "kind": "agent"
+        }
+      }
+    },
+    "unavailable": {
+      "status": 503,
+      "body": {
+        "code": "unavailable",
+        "category": "availability",
+        "message": "Marketplace provider is unavailable",
+        "request_id": "marketplace-unavailable-request",
+        "correlation_id": "marketplace-unavailable-correlation",
+        "retryable": true,
+        "details": {
+          "marketplace_reason": "provider_failure"
+        }
+      }
+    }
+  }
+}

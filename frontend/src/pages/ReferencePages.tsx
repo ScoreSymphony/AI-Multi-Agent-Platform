@@ -3,7 +3,7 @@ import { ControlPlaneClient } from "../api/client";
 import type { CanonicalFile } from "../api/files";
 import { FilesClient } from "../api/files";
 import type { CanonicalReference, ReferenceCollection } from "../api/references";
-import type { Page } from "../api/types";
+import type { CanonicalRun, Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
@@ -111,6 +111,8 @@ export function ReferencesPage({ client, files }: { client: ControlPlaneClient; 
 
       <FileInventory client={files} />
 
+      <ReferenceCollectionLinks />
+
       <div className="metrics">
         {collections.map((item) => <Metric key={item} label={labelFor(item)} value={totals?.[item] ?? "—"} />)}
       </div>
@@ -150,6 +152,125 @@ export function ReferencesPage({ client, files }: { client: ControlPlaneClient; 
         />
       ) : null}
     </div>
+  );
+}
+
+
+export function ReferenceCollectionPage({
+  client,
+  collection,
+}: {
+  client: ControlPlaneClient;
+  collection: ReferenceCollection;
+}) {
+  const [page, setPage] = useState<Page<CanonicalReference> | null>(null);
+  const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const pagination = useCursorPagination(`reference-overview:${collection}:${appliedQuery}`);
+
+  const load = useCallback(async () => {
+    try {
+      setPage(
+        await client.listReferences(collection, {
+          limit: 100,
+          cursor: pagination.cursor,
+          q: appliedQuery || undefined,
+        }),
+      );
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    }
+  }, [appliedQuery, client, collection, pagination.cursor]);
+
+  useEffect(() => {
+    setPage(null);
+    void load();
+  }, [load]);
+
+  const search = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalized = query.trim();
+    if (normalized !== appliedQuery) {
+      setAppliedQuery(normalized);
+      return;
+    }
+    if (pagination.cursor) {
+      pagination.reset();
+      return;
+    }
+    void load();
+  };
+
+  const clear = () => {
+    setQuery("");
+    if (appliedQuery) {
+      setAppliedQuery("");
+      return;
+    }
+    if (pagination.cursor) {
+      pagination.reset();
+      return;
+    }
+    void load();
+  };
+
+  return (
+    <div className="stack">
+      <header className="page-header">
+        <p className="eyebrow">Canonical task output</p>
+        <h1>{labelFor(collection)}</h1>
+        <p>
+          Stable overview and deep-link entry point for canonical {labelFor(collection).toLowerCase()}
+          projected by the Control Plane.
+        </p>
+      </header>
+      <ReferenceCollectionLinks active={collection} />
+      <Card title={`Search ${labelFor(collection)}`}>
+        <form className="filter-row" onSubmit={search}>
+          <label>
+            Search
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Canonical ID or task ID"
+            />
+          </label>
+          <button type="submit">Search</button>
+          <button type="button" onClick={clear}>Clear</button>
+        </form>
+      </Card>
+      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      <Card title={labelFor(collection)}>
+        {!page ? <LoadingState /> : <ReferenceTable items={page.items} />}
+      </Card>
+      {page ? (
+        <PaginationControls
+          page={page}
+          pageNumber={pagination.pageNumber}
+          hasPrevious={pagination.hasPrevious}
+          onPrevious={pagination.previous}
+          onRefresh={() => void load()}
+          onNext={() => pagination.next(page.next_cursor)}
+        />
+      ) : null}
+      <div className="actions"><AppLink href="/files">Back to Files & artifacts</AppLink></div>
+    </div>
+  );
+}
+
+function ReferenceCollectionLinks({ active }: { active?: ReferenceCollection }) {
+  return (
+    <Card title="Canonical reference domains">
+      <div className="actions" aria-label="Canonical reference domains">
+        {collections.map((item) => (
+          <AppLink key={item} href={`/${item}`} aria-current={active === item ? "page" : undefined}>
+            {labelFor(item)}
+          </AppLink>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -386,13 +507,76 @@ export function ReferenceDetailPage({
           {resource.step_ids.length ? <ul className="reference-list">{resource.step_ids.map((stepId) => <li key={stepId}><AppLink href={`/steps/${stepId}`}><CanonicalId value={stepId} /></AppLink></li>)}</ul> : <EmptyState title="No steps" />}
         </Card>
       ) : null}
+      {resource.type === "step" ? <StepRuns client={client} stepId={resource.id} /> : null}
       {resource.type === "artifact" ? (
         <DegradedState
           title="No raw file operation exposed"
           detail="This canonical artifact resource currently contains identity and Task ownership only. Storage location, download, preview and mutation are intentionally not inferred from provider-private state."
         />
       ) : null}
-      <div className="actions"><AppLink href="/files">Back to references</AppLink><button onClick={() => void load()}>Refresh</button></div>
+      <div className="actions"><AppLink href={`/${collection}`}>Back to {labelFor(collection)}</AppLink><button onClick={() => void load()}>Refresh</button></div>
+    </div>
+  );
+}
+
+function StepRuns({
+  client,
+  stepId,
+}: {
+  client: ControlPlaneClient;
+  stepId: string;
+}) {
+  const [runs, setRuns] = useState<Page<CanonicalRun> | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setRuns(
+        await client.listRuns({
+          limit: 100,
+          sort: "updated_at",
+          direction: "desc",
+          filters: { subject_type: "step", subject_id: stepId },
+        }),
+      );
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    }
+  }, [client, stepId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <Card title="Step runs">
+      <p>Canonical Runs whose execution subject is this Step.</p>
+      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {!runs && !error ? <LoadingState /> : null}
+      {runs ? <StepRunTable runs={runs.items} /> : null}
+      <div className="actions"><button type="button" onClick={() => void load()}>Refresh Step runs</button></div>
+    </Card>
+  );
+}
+
+export function StepRunTable({ runs }: { runs: CanonicalRun[] }) {
+  if (runs.length === 0) return <EmptyState title="No Runs for this Step" />;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>Run</th><th>Status</th><th>Task</th><th>Attempt</th></tr></thead>
+        <tbody>
+          {runs.map((run) => (
+            <tr key={run.id}>
+              <td><AppLink href={`/runs/${run.id}`}><CanonicalId value={run.id} /></AppLink></td>
+              <td><StatusBadge value={run.status} /></td>
+              <td><AppLink href={`/tasks/${run.task_id}`}><CanonicalId value={run.task_id} /></AppLink></td>
+              <td>{run.attempt}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

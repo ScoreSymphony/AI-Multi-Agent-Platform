@@ -116,6 +116,7 @@ export function MemoryDetailPage({
         <p><CanonicalId value={entry.id} /></p>
       </header>
       {actionError ? <ErrorState error={actionError} /> : null}
+      {busy ? <p role="status">Applying canonical Memory lifecycle command…</p> : null}
       {deleted ? <p role="status">The delete command completed for this Memory entry.</p> : null}
       {replacement ? <p role="status">New canonical entry: <AppLink href={`/memory/${encodeURIComponent(replacement.id)}`}><CanonicalId value={replacement.id} /></AppLink>{" · type "}<code>{replacement.memory_type}</code></p> : null}
 

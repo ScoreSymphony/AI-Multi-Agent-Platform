@@ -13,6 +13,7 @@ import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
 import {
   Card,
+  DegradedState,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -36,6 +37,8 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   const { configuration } = useConfigurationSession(client);
 
   const loadCapabilities = useCallback(async () => {
+    setCapabilities(null);
+    setCapabilityError(null);
     try {
       setCapabilities(
         await client.listCapabilities({
@@ -52,6 +55,8 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   }, [capabilityPagination.cursor, client]);
 
   const loadProviders = useCallback(async () => {
+    setProviders(null);
+    setProviderError(null);
     try {
       setProviders(
         await client.listCapabilityProviders({
@@ -68,6 +73,8 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   }, [client, providerPagination.cursor]);
 
   const loadAssignments = useCallback(async () => {
+    setAssignments(null);
+    setAssignmentError(null);
     try {
       setAssignments((await configuration.listCapabilityAssignments({ limit: 100 })).items);
       setAssignmentError(null);
@@ -97,8 +104,6 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
     );
   }
 
-  if (!capabilities && !providers && !capabilityError && !providerError) return <LoadingState />;
-
   const availableOnPage = capabilities?.items.filter((item) => item.available).length ?? "—";
   const healthyProvidersOnPage =
     providers?.items.filter((provider) => provider.available && provider.health === "healthy").length
@@ -119,12 +124,31 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
         <button className="primary" type="button" onClick={() => setCreatingAssignment(true)}>Create capability assignment</button>
       </header>
 
+      {capabilityError || providerError ? (
+        <DegradedState
+          title="Partial capability inventory"
+          detail={`Unavailable sections: ${[
+            capabilityError ? "capabilities" : null,
+            providerError ? "providers" : null,
+          ].filter(Boolean).join(", ")}. The browser does not fall back to provider-private state.`}
+        />
+      ) : null}
+
       <div className="metrics">
         <Metric label="Capabilities" value={capabilities?.total ?? "—"} />
         <Metric label="Available on page" value={availableOnPage} />
         <Metric label="Providers" value={providers?.total ?? "—"} />
         <Metric label="Healthy on page" value={healthyProvidersOnPage} />
       </div>
+
+      <Card title="MCP boundary">
+        <p>
+          MCP-backed tools are exposed here as canonical Capability and Capability Provider state.
+          The browser never connects to an MCP server directly; server transport/configuration stays
+          behind the replaceable provider boundary until the Control Plane exposes a canonical
+          product-management contract for it.
+        </p>
+      </Card>
 
       <Card title="Capability Assignments">
         <p>Canonical required/allowed/denied policy targeting an Agent, Agent Team or Project.</p>
@@ -289,6 +313,12 @@ export function CapabilityProviderDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {!provider.available || provider.health !== "healthy" ? (
+        <DegradedState
+          title="Capability provider unavailable or degraded"
+          detail={`Canonical provider state reports health=${provider.health} and available=${provider.available ? "yes" : "no"}. The browser does not contact the provider directly.`}
+        />
+      ) : null}
       <div className="grid-two">
         <Card title="Provider contract">
           <DefinitionList

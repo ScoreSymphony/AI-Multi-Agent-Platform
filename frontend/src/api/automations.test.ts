@@ -55,6 +55,7 @@ describe("AutomationClient", () => {
     await client.pause("automation_1");
     await client.resume("automation_1");
     await client.disable("automation_1");
+    await client.revalidate("automation_1");
     await client.test("automation_1", { dry_run: true });
     await client.retryDelivery("delivery_1");
 
@@ -62,15 +63,16 @@ describe("AutomationClient", () => {
       "/api/v1/commands/automation.pause",
       "/api/v1/commands/automation.resume",
       "/api/v1/commands/automation.disable",
+      "/api/v1/commands/automation.revalidate",
       "/api/v1/commands/automation.test",
       "/api/v1/commands/automation.retry-delivery",
     ]);
     expect(calls[0]?.body.resource_ref).toBe("automation_1");
-    expect(calls[3]?.body).toEqual({
+    expect(calls[4]?.body).toEqual({
       resource_ref: "automation_1",
       payload: { dry_run: true },
     });
-    expect(calls[4]?.body.resource_ref).toBe("delivery_1");
+    expect(calls[5]?.body.resource_ref).toBe("delivery_1");
   });
 
   it("updates only through the canonical automation.update command", async () => {

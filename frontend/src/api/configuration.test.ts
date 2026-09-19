@@ -126,4 +126,30 @@ describe("ConfigurationClient", () => {
       schema_version: "1.0",
     });
   });
+
+
+  it("deletes Agents and Agent Teams only through their named canonical commands", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return jsonResponse({ deleted: true });
+    });
+    const client = new ConfigurationClient({ fetchImpl });
+
+    await client.deleteAgent("agent_1");
+    await client.deleteAgentTeam("agent_team_1");
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toMatchObject({
+      url: "/api/v1/commands/agent.delete",
+      body: { resource_ref: "agent_1" },
+    });
+    expect(requests[1]).toMatchObject({
+      url: "/api/v1/commands/agent-team.delete",
+      body: { resource_ref: "agent_team_1" },
+    });
+  });
 });

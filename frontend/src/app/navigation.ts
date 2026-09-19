@@ -66,6 +66,11 @@ export function navigationItemForPath(path: string): NavigationItem | undefined 
   const exact = navigation.find((item) => item.path === path);
   if (exact) return exact;
 
+  const referenceOverviewParent = ["/artifacts", "/results", "/plans", "/steps"].includes(path)
+    ? navigation.find((item) => item.path === "/files")
+    : undefined;
+  if (referenceOverviewParent) return referenceOverviewParent;
+
   const alias = DETAIL_ROUTE_PARENTS.find(([prefix]) => path.startsWith(prefix));
   if (alias) return navigation.find((item) => item.path === alias[1]);
 
