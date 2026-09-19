@@ -61,6 +61,7 @@ from .handoff_composition import HandoffDeploymentComposition
 from .single_node import SingleNodeDeployment as BaseSingleNodeDeployment
 from .single_node import SingleNodeSmokeResult, build_single_node_deployment_from_foundation
 from .startup_recovery import StartupRecoveryExtension
+from .transient_recovery import SingleNodeTransientStateRecoveryExtension
 
 
 @dataclass(slots=True)
@@ -165,7 +166,7 @@ def _extend_base_deployment(
 ) -> SingleNodeDeployment:
     """Promote the base deployment to the durable public profile explicitly."""
 
-    return SingleNodeDeployment(
+    deployment = SingleNodeDeployment(
         config=base.config,
         kernel_repository=base.kernel_repository,
         scopes=base.scopes,
@@ -234,8 +235,16 @@ def _extend_base_deployment(
         handoffs=extensions.handoffs,
         automatic_reviewer=automatic_review.workflow,
         reviewer_recovery=automatic_review.recovery,
-        startup_recovery_extensions=(),
+        startup_recovery_extensions=extensions.context.startup_recovery_extensions,
     )
+    deployment.startup_recovery_extensions = (
+        *deployment.startup_recovery_extensions,
+        SingleNodeTransientStateRecoveryExtension(
+            automation=deployment.control_plane.automation_service,
+            authentication_sessions=deployment.authentication.store.sessions,
+        ),
+    )
+    return deployment
 
 
 __all__ = [
