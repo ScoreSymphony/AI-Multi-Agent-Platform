@@ -51,7 +51,7 @@ describe("RepositoryCollectionClient", () => {
   });
 
   it("routes canonical repository mutations through exact Control Plane commands", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ repository_id: "external_resource_1" }));
+    const fetchImpl = vi.fn(async () => jsonResponse({ repository_id: "external_resource_1" }));
     const client = new RepositoryCollectionClient({ fetchImpl });
 
     await client.createBranch(
@@ -105,7 +105,7 @@ describe("RepositoryCollectionClient", () => {
   });
 
   it("supports canonical local attach, discovery/attach and detach without private provider routes", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ repositories: [], attached: true }));
+    const fetchImpl = vi.fn(async () => jsonResponse({ repositories: [], attached: true }));
     const client = new RepositoryCollectionClient({ fetchImpl });
 
     await client.attachLocal(
