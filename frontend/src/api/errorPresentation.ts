@@ -53,9 +53,14 @@ export function describeError(error: unknown): ErrorPresentation {
   }
 
   if (
-    error.status === 400
-    || error.status === 422
-    || ["invalid_argument", "validation_error"].includes(error.body.code)
+    error.status === 422
+    || error.body.category === "validation"
+    || [
+      "invalid_request",
+      "invalid_configuration",
+      "invalid_argument",
+      "validation_error",
+    ].includes(error.body.code)
   ) {
     return {
       title: "Validation failed",
@@ -84,7 +89,7 @@ export function describeError(error: unknown): ErrorPresentation {
     };
   }
 
-  if (error.body.code === "unavailable") {
+  if (["unavailable", "model_unavailable"].includes(error.body.code)) {
     return {
       title: "Subsystem unavailable",
       message: error.body.message,
