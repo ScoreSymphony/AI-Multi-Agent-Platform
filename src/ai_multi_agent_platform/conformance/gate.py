@@ -250,8 +250,9 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             "CLI client",
             (
                 "CLI preserves shared canonical Task/Run/Result state, pagination/filter/sort "
-                "queries, canonical error/status categories, authorization/approval and "
-                "mutation idempotency through versioned Control Plane paths"
+                "queries, canonical error/status categories, authorization/approval, "
+                "mutation idempotency and official first-run command identity through versioned "
+                "Control Plane paths"
             ),
             _pytest(
                 "tests/integration/cli/test_client_state_parity.py::"
@@ -272,6 +273,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "test_cli_surfaces_canonical_authorization_denial",
                 "tests/unit/cli/test_cli_authorization_outcomes.py::"
                 "test_cli_surfaces_approval_required_and_observes_approved_action",
+                "tests/unit/cli/test_cli_multi_agent_onboarding.py::"
+                "test_cli_multi_agent_first_run_uses_same_control_plane_command_as_web",
             ),
         ),
         ConformanceScenario(
@@ -280,8 +283,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             (
                 "Web preserves the same canonical Task/Run/Result state, pagination/filter/sort "
                 "queries, canonical error/status categories, authorization/approval, "
-                "mutation idempotency, deep-link resolution and reload behavior through the "
-                "same versioned API paths"
+                "mutation idempotency, deep-link resolution, reload behavior and official "
+                "first-run command identity through the same versioned API paths"
             ),
             (
                 "npm",
@@ -292,6 +295,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "--run",
                 "src/api/canonicalStateParity.test.ts",
                 "src/api/errorPresentation.test.ts",
+                "src/api/onboarding.multiAgent.test.ts",
             ),
         ),
         ConformanceScenario(
