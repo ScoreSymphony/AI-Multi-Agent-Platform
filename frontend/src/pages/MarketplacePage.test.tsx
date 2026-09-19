@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { ControlPlaneError } from "../api/client";
 import { RegistryClient, type RegistryItem, type RegistryKindDescriptor } from "../api/registry";
-import { MarketplacePage, marketplacePresentation } from "./MarketplacePage";
+import { matchPath } from "../app/router";
+import { MARKETPLACE_ITEM_ROUTE, MarketplacePage, marketplacePresentation } from "./MarketplacePage";
 
 function item(overrides: Partial<RegistryItem> = {}): RegistryItem {
   return {
@@ -95,6 +97,66 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Sort");
     expect(html).toContain("Direction");
     expect(html).toContain("Loading Marketplace");
+    expect(html).toContain("Refresh Marketplace");
+  });
+
+  it("keeps every integrated V1 Marketplace kind addressable through a stable deep link", () => {
+    const kinds = [
+      "agent",
+      "agent_team",
+      "orchestrator",
+      "executor",
+      "model_provider",
+      "capability_provider",
+      "memory_provider",
+      "file_provider",
+      "knowledge_provider",
+      "observability_exporter",
+      "automation_provider",
+      "evaluator",
+      "tool",
+      "skill",
+      "plugin",
+      "workflow",
+      "template",
+      "model_configuration",
+      "connector",
+      "application",
+      "evaluation",
+      "documentation",
+    ];
+
+    for (const kind of kinds) {
+      const candidate = item({
+        id: `${kind}.example@1.0.0`,
+        qualified_id: `official::${kind}.example@1.0.0`,
+        item_id: `${kind}.example`,
+        item_type: kind,
+        source_registry: "official",
+      });
+      const href = marketplacePresentation.marketplaceItemHref(candidate);
+      const match = matchPath(MARKETPLACE_ITEM_ROUTE, href);
+      expect(match?.resourceId, `missing deep link for ${kind}`).toBe(
+        `official::${kind}.example@1.0.0`,
+      );
+    }
+  });
+
+  it("falls back to a deterministic source-qualified Marketplace identity", () => {
+    const candidate = item({
+      qualified_id: undefined,
+      item_id: "example.agent",
+      item_type: "agent",
+      version: "2.0.0",
+      source_registry: "private",
+    });
+
+    expect(marketplacePresentation.marketplaceItemResourceId(candidate)).toBe(
+      "private::example.agent@2.0.0",
+    );
+    expect(marketplacePresentation.marketplaceItemHref(candidate)).toBe(
+      "/marketplace/items/private%3A%3Aexample.agent%402.0.0",
+    );
   });
 
   it("keeps semantic Marketplace kinds separate from their technical packaging", () => {
@@ -177,6 +239,24 @@ describe("MarketplacePage", () => {
     expect(unknown?.supports_update).toBe(false);
     expect(unknown?.supports_uninstall).toBe(false);
     expect(unknown?.management_path).toBeNull();
+  });
+
+  it("distinguishes disabled Marketplace providers from permission and backend failures", () => {
+    expect(marketplacePresentation.providerLooksDisabled(new Error("404 not found"))).toBe(true);
+    expect(marketplacePresentation.providerLooksDisabled(new Error("provider disabled"))).toBe(true);
+    expect(marketplacePresentation.providerLooksDisabled(new Error("403 permission denied"))).toBe(false);
+    expect(marketplacePresentation.providerLooksDisabled(new Error("backend offline"))).toBe(false);
+
+    const denied = new ControlPlaneError(403, {
+      code: "forbidden",
+      category: "authorization",
+      message: "operation denied",
+      request_id: "request_marketplace",
+      correlation_id: "correlation_marketplace",
+      retryable: false,
+    });
+    expect(marketplacePresentation.isMarketplaceAccessFailure(denied)).toBe(true);
+    expect(marketplacePresentation.isMarketplaceAccessFailure(new Error("backend offline"))).toBe(false);
   });
 
   it("derives install and update verbs from canonical installed state", () => {

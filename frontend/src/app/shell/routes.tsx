@@ -16,7 +16,7 @@ import { ImportExportPage, PortabilityDetailPage } from "../../pages/ImportExpor
 import { ConnectionDetailPage, ConnectorDefinitionDetailPage, IntegrationsPage } from "../../pages/IntegrationsPage";
 import { GovernancePage, ProposalGovernanceDetailPage, SpecificationGovernanceDetailPage } from "../../pages/GovernancePage";
 import { LEARNING_REQUIRED_RESOURCES, LearningDetailPage, LearningPage } from "../../pages/LearningPage";
-import { MarketplacePage } from "../../pages/MarketplacePage";
+import { MARKETPLACE_ITEM_ROUTE, MarketplacePage } from "../../pages/MarketplacePage";
 import { KnowledgeDetailPage, KnowledgePage, MemoryDetailPage, MemoryPage } from "../../pages/MemoryKnowledgePages";
 import { ModelDetailPage, ModelProviderDetailPage } from "../../pages/ModelPages";
 import { ModelsPage } from "../../pages/ModelInventoryPage";
@@ -50,6 +50,7 @@ import { ManifestResourcePage, ManifestResourcesPage, type ManifestState } from 
 const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;
 const COMPUTE_RESOURCES = ["nodes", "workers", "worker-jobs"] as const;
 const INTEGRATION_RESOURCES = ["connector-definitions", "connections"] as const;
+const MARKETPLACE_RESOURCES = ["registry-items", "marketplace-kinds"] as const;
 const KNOWLEDGE_RESOURCES = ["knowledge", "knowledge-results"] as const;
 const APPLICATION_RESOURCES = ["applications", "application-instances", "application-logs"] as const;
 
@@ -114,6 +115,7 @@ export function renderShellRoute({
   const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
   const evaluationRunMatch = matchPath("/evaluations/runs/:evaluationRunId", path);
   const learningCandidateMatch = matchPath("/learning/:learningCandidateId", path);
+  const marketplaceItemMatch = matchPath(MARKETPLACE_ITEM_ROUTE, path);
   const computeNodeMatch = matchPath("/compute/nodes/:nodeId", path);
   const computeWorkerMatch = matchPath("/compute/workers/:workerId", path);
   const computeWorkerJobMatch = matchPath("/compute/jobs/:workerJobId", path);
@@ -200,7 +202,8 @@ export function renderShellRoute({
   if (evaluationRunMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}><EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} /></ManifestResourcesPage>;
   if (path === "/learning") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Learning" resources={LEARNING_REQUIRED_RESOURCES}><LearningPage client={learningClient} /></ManifestResourcesPage>;
   if (learningCandidateMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Learning" resources={LEARNING_REQUIRED_RESOURCES}><LearningDetailPage client={learningClient} candidateId={learningCandidateMatch.learningCandidateId} commands={learningCapabilities.commands} postPromotionAvailable={learningCapabilities.postPromotionAvailable} /></ManifestResourcesPage>;
-  if (path === "/marketplace") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Marketplace" resource="registry-items"><MarketplacePage client={registryClient} /></ManifestResourcePage>;
+  if (path === "/marketplace") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Marketplace" resources={MARKETPLACE_RESOURCES}><MarketplacePage client={registryClient} /></ManifestResourcesPage>;
+  if (marketplaceItemMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Marketplace" resources={MARKETPLACE_RESOURCES}><MarketplacePage client={registryClient} selectedResourceId={marketplaceItemMatch.resourceId} /></ManifestResourcesPage>;
   if (path === "/compute") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputePage client={computeClient} /></ManifestResourcesPage>;
   if (computeNodeMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeNodeDetailPage client={computeClient} nodeId={computeNodeMatch.nodeId} /></ManifestResourcesPage>;
   if (computeWorkerMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}><ComputeWorkerDetailPage client={computeClient} workerId={computeWorkerMatch.workerId} /></ManifestResourcesPage>;

@@ -404,7 +404,14 @@ export class RegistryClient {
     const resourceId = sourceRegistry
       ? `${requireText(sourceRegistry, "Registry source")}::${unqualified}`
       : unqualified;
-    return this.collections.get<RegistryItem>(REGISTRY_ITEMS, resourceId);
+    return this.getByResourceId(resourceId);
+  }
+
+  getByResourceId(resourceId: string): Promise<RegistryItem> {
+    return this.collections.get<RegistryItem>(
+      REGISTRY_ITEMS,
+      requireText(resourceId, "Registry item resource ID"),
+    );
   }
 
   async preview(
