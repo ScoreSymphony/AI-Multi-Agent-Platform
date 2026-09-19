@@ -82,7 +82,8 @@ def test_projectatlas_manifest_is_experimental_and_fail_closed() -> None:
     assert PluginPermission.SECRET_CONSUMPTION not in manifest.requested_permissions
     assert (
         manifest.extensions[0].entrypoint
-        == "ai_multi_agent_platform.repositories.intelligence.projectatlas:ProjectAtlasCandidatePlugin"
+        == "ai_multi_agent_platform.repositories.intelligence.projectatlas:"
+        "ProjectAtlasCandidatePlugin"
     )
     metadata = manifest.extensions[0].metadata
     assert metadata["candidate_status"] == "experimental"
