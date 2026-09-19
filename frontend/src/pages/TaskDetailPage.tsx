@@ -71,6 +71,7 @@ export function TaskDetailPage({
   const [liveState, setLiveState] = useState<LiveConnectionState>("connecting");
   const [liveError, setLiveError] = useState<string | null>(null);
   const loadGeneration = useRef(0);
+  const primaryTaskLoaded = useRef(false);
   const permission = usePermissionHint("task:command", taskId);
   const movePermission = usePermissionHint("task:move-project", taskId);
 
@@ -111,6 +112,7 @@ export function TaskDetailPage({
     // owner read succeeds; supporting projections must not hold the whole page in
     // Loading when Runs, Timeline or Budget are slow/degraded.
     setTask(nextTask);
+    primaryTaskLoaded.current = true;
     setError(null);
     if (nextTask.plan_ref === null) {
       setWorkflow(null);
@@ -183,6 +185,7 @@ export function TaskDetailPage({
   useEffect(() => {
     let active = true;
     let liveRefreshTimer: number | null = null;
+    primaryTaskLoaded.current = false;
 
     const scheduleLiveRefresh = () => {
       if (!active || liveRefreshTimer !== null) return;
@@ -198,10 +201,11 @@ export function TaskDetailPage({
       taskId,
       onEvent: () => {
         setLiveError(null);
-        // A stream without a cursor can replay the durable Task history. Coalesce that
-        // replay into bounded canonical refreshes instead of starting one full detail
-        // reload per historical event and starving every in-flight Task read.
-        scheduleLiveRefresh();
+        // The initial canonical Task read owns first paint. A stream without a cursor can
+        // replay the durable history immediately, so ignore refresh triggers until that
+        // first owner read has completed; the subsequent Timeline read covers the replayed
+        // history. After first paint, coalesce live events into bounded refreshes.
+        if (primaryTaskLoaded.current) scheduleLiveRefresh();
       },
       onError: (streamError) => setLiveError(describeLiveStreamError(streamError)),
       onState: (state) => {
@@ -213,6 +217,7 @@ export function TaskDetailPage({
     return () => {
       active = false;
       if (liveRefreshTimer !== null) window.clearTimeout(liveRefreshTimer);
+      primaryTaskLoaded.current = false;
       loadGeneration.current += 1;
       stream.close();
     };
