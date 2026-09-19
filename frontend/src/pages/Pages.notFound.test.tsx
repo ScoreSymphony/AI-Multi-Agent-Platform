@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { RouterProvider } from "../app/router";
-import { NotFoundPage } from "./Pages";
+import { NotFoundPage } from "./NotFoundPage";
 
 describe("cross-cutting route not-found state", () => {
   it("keeps unknown routes distinct from optional subsystem unavailability", () => {
