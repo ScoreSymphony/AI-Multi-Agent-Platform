@@ -1,4 +1,6 @@
-"""Compatibility namespace for canonical :mod:`ai_multi_agent_platform.repositories.intelligence`."""
+"""Compatibility namespace for canonical
+:mod:`ai_multi_agent_platform.repositories.intelligence`.
+"""
 
 from .baseline import BaselineRepositoryIntelligenceProvider, RepositorySnapshotLoader
 from .capabilities import (

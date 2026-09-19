@@ -1,10 +1,9 @@
 """Run-bound Workspace source support for repository intelligence.
 
 The deterministic repository baseline remains useful outside execution. During a Run, however,
-repository-backed code can diverge from its immutable Git input. This adapter selects an exact canonical Workspace snapshot/materialization when the Run binding proves
-that it belongs to the same
-repository, while preserving the Git revision as base provenance rather than pretending dirty
-bytes are another commit.
+repository-backed code can diverge from its immutable Git input. This adapter selects an exact canonical Workspace snapshot/materialization when the Run binding
+proves that it belongs to the same repository, while preserving the Git revision as base
+provenance rather than pretending dirty bytes are another commit.
 """
 
 from __future__ import annotations

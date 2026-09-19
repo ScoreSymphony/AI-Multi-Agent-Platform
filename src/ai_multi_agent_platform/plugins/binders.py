@@ -110,7 +110,8 @@ class OrchestratorRegistryBinder:
                 self._registry.unregister(provider_id)
             except ContractError as rollback_error:
                 exc.add_note(
-                    "orchestrator registration rollback failed after Agent mapper registration error"
+                    "orchestrator registration rollback failed after Agent mapper "
+                    "registration error"
                 )
                 exc.add_note(str(rollback_error))
             raise

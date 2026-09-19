@@ -91,7 +91,8 @@ class AuthorizedRepositorySnapshotLoader:
 class AuthorizedRunWorkspaceSnapshotLoader:
     """Resolve the exact repository-shaped Workspace source visible to one canonical Run.
 
-    The immutable ``RunWorkspaceBinding`` proves Workspace/Snapshot identity. Canonical authorization gates
+    The immutable ``RunWorkspaceBinding`` proves Workspace/Snapshot identity. Canonical authorization
+    gates
     the Workspace read before any bytes are touched. If the local execution coordinator owns an
     active materialization, its current bytes are read through a narrowly refined local path seam;
     no dirty bytes are persisted merely to answer a read-only intelligence request. If a Run is

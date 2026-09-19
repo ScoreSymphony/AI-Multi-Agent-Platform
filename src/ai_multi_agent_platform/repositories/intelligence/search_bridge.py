@@ -57,7 +57,9 @@ class RepositorySearchCaller:
 
 
 class RepositoryIntelligenceSearchFederator:
-    """Expose authorized source hits as scoped search results without persistent duplicate indexing."""
+    """Expose authorized source hits as scoped search results
+    without persistent duplicate indexing.
+    """
 
     def __init__(self, invoker: CapabilityInvocationPort, *, max_candidates: int = 500) -> None:
         if not 1 <= max_candidates <= 500:

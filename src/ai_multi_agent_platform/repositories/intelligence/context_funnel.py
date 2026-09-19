@@ -1,7 +1,8 @@
 """Minimal-source context funnel over canonical repository-intelligence capabilities.
 
 The funnel is consumer-neutral: coding agents, planners, reviewers and research workers can all use
-it through the normal capability invocation boundary. It never reads a repository path directly and never
+it through the normal capability invocation boundary. It never reads a repository path directly
+and never
 turns provider summaries into instruction authority. Selection uses bounded text-search evidence;
 only bounded exact source slices become candidates for canonical Context assembly.
 """
