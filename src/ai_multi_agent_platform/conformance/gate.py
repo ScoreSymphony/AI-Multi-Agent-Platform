@@ -276,6 +276,8 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "tests/integration/cli/test_client_state_parity.py::"
                 "test_cli_preserves_shared_marketplace_failure_categories",
                 "tests/integration/cli/test_control_plane_flows.py::"
+                "test_cli_status_doctor_project_workspace_and_canonical_error_output",
+                "tests/integration/cli/test_control_plane_flows.py::"
                 "test_cli_and_public_api_share_the_same_canonical_task_state",
                 "tests/integration/cli/test_control_plane_flows.py::"
                 "test_cli_and_public_api_share_pagination_filter_sort_semantics",
