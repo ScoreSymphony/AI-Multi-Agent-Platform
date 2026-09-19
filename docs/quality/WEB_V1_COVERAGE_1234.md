@@ -53,6 +53,38 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Settings / user-manageable configuration / secret references | `/settings` plus Model/Tool/Integration/Onboarding configuration surfaces | browser auth plus canonical configuration/SecretReference contracts | User-manageable configuration is reachable in its owning domain. Resolved/plaintext secret values are intentionally not a browser-management resource. |
 | Usage / Observability / diagnostics | `/usage`, `/events`, `/observability`, dashboard health | canonical accounting/timeline/observability resources | Maintained operator-readable views. Backend-neutral telemetry is not promoted into canonical Task/Run lifecycle truth. |
 
+## Governance, automation and operations state matrix
+
+This focused matrix records the #1234 Governance/Automation/Operations audit. A check means
+the state is a deliberate Web behavior through the public Control Plane. `N/A` means the owning
+V1 contract deliberately does not expose that lifecycle operation; the browser must not invent it.
+
+| Domain | Route/navigation | List / empty / loading | Create / edit | Detail / deep link / parent | Mutations / pending | Validation | Backend / permission / offline | Refresh / stale reconciliation | Destructive confirmation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Approvals | ✓ `/approvals` | ✓ pending by default, optional terminal history | N/A — approvals are created by owning workflows | ✓ `/approvals/:id` | ✓ approve/deny only when both canonical commands are advertised; terminal records are read-only | ✓ exact approval/action/resource/policy/digest confirmation | ✓ shared typed error presentation distinguishes auth, approval, forbidden and unavailable | ✓ failed/racing decisions reload the canonical Approval while retaining stable retry identity | ✓ exact-decision confirmation is mandatory |
+| Verification | ✓ `/verification` | ✓ pending review, requirements and history | N/A — verification requests are lifecycle-owned | ✓ `/verification/:id` | ✓ accept/reject/request-changes with idempotent retries; terminal records remove review actions | ✓ evidence IDs and server-owned policy validation | ✓ load, requirement and action failures remain visible; missing requirement alone is not treated as failure | ✓ failed/racing review commands reload canonical Verification/requirement/history | N/A — review outcome is an explicit decision, not deletion |
+| Automations | ✓ `/automations` | ✓ inventory pagination, empty/loading/error | ✓ create/update | ✓ `/automations/:id`, delivery history | ✓ pause, resume, disable, re-enable disabled state through canonical resume, revalidate invalid state, manual test and delivery retry | ✓ typed form/JSON validation plus canonical revalidation | ✓ shared typed errors; action failures reconcile canonical state | ✓ refresh inventory/detail/deliveries; failed lifecycle actions reload canonical Automation | ✓ disable confirmation; **Delete is N/A because V1 exposes no `automation.delete` command** |
+| Notifications | ✓ `/notifications` | ✓ cursor-paginated inbox, filters, empty/loading, live status | N/A — notifications are projections; preferences are editable | N/A — source links lead to owning canonical resource; no invented notification lifecycle page | ✓ mark read/all read, acknowledge, dismiss, archive, delivery retry, preference mutations | ✓ canonical preference validation | ✓ shared typed errors; live-stream failure degrades to refreshable inbox | ✓ explicit refresh + live canonical reload; pagination keeps all inbox records reachable | N/A — archive/dismiss are canonical attention states, not resource deletion |
+| Settings / configuration / SecretReferences | ✓ `/settings` plus owner-specific config routes | ✓ session/setup/release status loading/empty/error as applicable | ✓ only contracts explicitly declared user-manageable by their owner | ✓ owner-specific detail routes | ✓ browser session revoke, setup changes and already-maintained typed owner commands | ✓ owner manifests/schemas | ✓ shared typed errors | ✓ reload/retry in owning surfaces | ✓ session revoke; application removal and other destructive owner actions remain confirmed |
+| Usage | ✓ `/usage` | ✓ available collections remain usable independently | N/A — accounting is runtime-owned | N/A — operator-readable aggregation surface | N/A — no browser accounting authority | ✓ server-owned query/filter validation | ✓ per-collection errors retain canonical forbidden/approval/unavailable/backend semantics instead of collapsing them | ✓ refresh accounting collections | N/A |
+| Observability / Events | ✓ `/observability`, `/events` | ✓ task/timeline loading, empty and errors | N/A | ✓ canonical Task/Run links where present | N/A — telemetry is not lifecycle authority | N/A | ✓ typed read failures | ✓ explicit task/timeline refresh | N/A |
+| Diagnostics | ✓ dashboard health plus `/settings` release/setup status | ✓ operator-facing health/status only | N/A | N/A | N/A | N/A | ✓ canonical health/readiness/status failures | ✓ normal page/status refresh | N/A |
+
+Audit conclusions:
+
+- V1 has no public `automation.delete` or `automation.enable` command. Re-enabling a disabled
+  Automation is the existing canonical `automation.resume` transition; deletion is therefore
+  intentionally not fabricated in the Web client.
+- `automation.invalidate` / `automation.revalidate` are administrative lifecycle commands.
+  The ordinary browser does not invent invalidation, but it exposes canonical revalidation when an
+  Automation is already `invalid`, allowing an authorized operator to recover it.
+- Secret values remain outside browser management. User-manageable configuration stores/references
+  secrets only through the typed owning contract; plaintext/resolved secret material is not a V1 Web
+  resource.
+- Backup/restore, schema migration, HA failover, raw deployment logs, scheduler evaluation,
+  platform-event injection and webhook ingress remain operational/system boundaries rather than
+  newly exposed product buttons.
+
 ## Cross-cutting state coverage
 
 The frontend centralizes state behavior rather than implementing a different security/error model per
