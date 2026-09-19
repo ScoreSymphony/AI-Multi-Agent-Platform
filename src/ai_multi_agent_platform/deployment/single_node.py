@@ -109,6 +109,7 @@ from .composition.services import (
     RuntimeServicesBundle,
 )
 from .config import SingleNodeConfig
+from .drain import SingleNodeDrainController
 from .persistence_health import SingleNodePersistenceHealthProvider
 
 _SMOKE_PROJECT_KEY = "deployment-smoke-project-v1"
@@ -173,6 +174,7 @@ class SingleNodeDeployment:
     telemetry: Telemetry
     health_provider: AggregatedHealthProvider
     persistence_health: SingleNodePersistenceHealthProvider
+    drain: SingleNodeDrainController
     distributed_runtime: DistributedRuntime | None
     pre_authorization_lifecycle: LifecycleBackend
     lifecycle_binding: StartupLifecycleBinding
@@ -385,23 +387,19 @@ def build_single_node_deployment_from_foundation(
         kernel,
         accounting_service=accounting_service,
     )
-    health = build_health(config, storage, execution, observability)
-    control_plane = build_control_plane(
-        config,
-        storage,
-        security,
-        observability,
-        runtime,
-        platform_services,
-        repository_foundation,
-        repository_runtime,
-        verification,
-        kernel,
-        evaluation,
-        health,
+    health, drain, control_plane, http = _build_northbound_control_plane(
+        config=config,
+        foundation=foundation,
+        runtime=runtime,
+        platform_services=platform_services,
+        repositories=repository_foundation,
+        repository_runtime=repository_runtime,
+        execution=execution,
+        verification=verification,
+        kernel=kernel,
+        evaluation=evaluation,
         accounting_service=accounting_service,
     )
-    http = build_http(config, security, control_plane)
     return _assemble_deployment(
         config=config,
         foundation=foundation,
@@ -414,10 +412,62 @@ def build_single_node_deployment_from_foundation(
         kernel=kernel,
         evaluation=evaluation,
         health=health,
+        drain=drain,
         control_plane=control_plane,
         http=http,
         accounting_service=accounting_service,
     )
+
+
+def _build_northbound_control_plane(
+    *,
+    config: SingleNodeConfig,
+    foundation: SingleNodeFoundationBundle,
+    runtime: RuntimeServicesBundle,
+    platform_services: PlatformServicesBundle,
+    repositories: RepositoryFoundationBundle,
+    repository_runtime: RepositoryRuntimeBundle,
+    execution: ExecutionBundle,
+    verification: VerificationBundle,
+    kernel: KernelBundle,
+    evaluation: EvaluationBundle,
+    accounting_service: AccountingService | None,
+) -> tuple[HealthBundle, SingleNodeDrainController, ControlPlaneBundle, HttpBundle]:
+    """Compose drain-aware health, Control Plane and authenticated northbound transport."""
+
+    storage = foundation.storage
+    observability = foundation.observability
+    security = foundation.security
+    drain = SingleNodeDrainController(
+        timeout_seconds=config.shutdown_timeout_seconds,
+        telemetry=observability.telemetry,
+    )
+    health = build_health(
+        config,
+        storage,
+        execution,
+        observability,
+        draining=lambda: drain.draining,
+    )
+    control_plane = build_control_plane(
+        config,
+        storage,
+        security,
+        observability,
+        runtime,
+        platform_services,
+        repositories,
+        repository_runtime,
+        verification,
+        kernel,
+        evaluation,
+        health,
+        accounting_service=accounting_service,
+    )
+    drain.register_quiesce_callback(control_plane.control_plane.request_automation_runtime_stop)
+    drain.register_quiesce_callback(control_plane.control_plane.request_notification_runtime_stop)
+    http = build_http(config, security, control_plane, drain)
+    return health, drain, control_plane, http
 
 
 def _assemble_deployment(
@@ -433,6 +483,7 @@ def _assemble_deployment(
     kernel: KernelBundle,
     evaluation: EvaluationBundle,
     health: HealthBundle,
+    drain: SingleNodeDrainController,
     control_plane: ControlPlaneBundle,
     http: HttpBundle,
     accounting_service: AccountingService | None,
@@ -482,6 +533,7 @@ def _assemble_deployment(
         telemetry=observability.telemetry,
         health_provider=health.provider,
         persistence_health=health.persistence,
+        drain=drain,
         distributed_runtime=execution.distributed_runtime,
         pre_authorization_lifecycle=execution.pre_authorization_lifecycle,
         lifecycle_binding=execution.lifecycle,
