@@ -20,6 +20,7 @@ describe("#1234 V1 Web navigation coverage", () => {
       "/memory",
       "/knowledge",
       "/search",
+      "/research",
       "/import-export",
       "/tools",
       "/integrations",
@@ -34,6 +35,7 @@ describe("#1234 V1 Web navigation coverage", () => {
       "/plugins",
       "/approvals",
       "/governance",
+      "/decisions",
       "/organizations",
       "/notifications",
       "/events",
@@ -58,6 +60,7 @@ describe("#1234 V1 Web navigation coverage", () => {
       "/memory": "memory",
       "/knowledge": "knowledge",
       "/search": "search",
+      "/research": "research-items",
       "/import-export": "portability-packages",
       "/tools": "capabilities",
       "/integrations": "connector-definitions",
@@ -72,6 +75,7 @@ describe("#1234 V1 Web navigation coverage", () => {
       "/plugins": "plugins",
       "/approvals": "approvals",
       "/governance": "proposals",
+      "/decisions": "decision-records",
       "/organizations": "organizations",
       "/notifications": "notifications",
       "/events": "timeline",
@@ -99,6 +103,8 @@ describe("#1234 V1 Web navigation coverage", () => {
     expect(navigationItemForPath("/import-export/previews/preview_1")?.path).toBe("/import-export");
     expect(navigationItemForPath("/marketplace/items/official%3A%3Aagent.example%401.0.0")?.path).toBe("/marketplace");
     expect(navigationItemForPath("/integrations/connections/connection_1")?.path).toBe("/integrations");
+    expect(navigationItemForPath("/research/research_1")?.path).toBe("/research");
+    expect(navigationItemForPath("/decisions/decision_1")?.path).toBe("/decisions");
     expect(navigationItemForPath("/events/task_older")?.path).toBe("/events");
     expect(navigationItemForPath("/observability/task_older")?.path).toBe("/observability");
     expect(navigationItemForPath("/unknown/thing")).toBeUndefined();
