@@ -490,6 +490,23 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 
+
+  const bootstrapStatus = await page.evaluate(async () => {
+    const response = await fetch("/api/v1/auth/bootstrap-status");
+    return response.json();
+  });
+  if (bootstrapStatus.state !== "initialized" || bootstrapStatus.bootstrap_available !== false) {
+    throw new Error(`Bootstrap endpoint did not fail closed after first run: ${JSON.stringify(bootstrapStatus)}`);
+  }
+
+  // Existing completed installation: ordinary sign-in returns directly to the dashboard.
+  await page.goto(`${frontendUrl}/settings`);
+  await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+  await (await waitForButton(page, "Sign out")).click();
+  await page.goto(frontendUrl);
+  await signIn(page);
+  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+
   // Keep representative cross-domain navigation in the maintained browser-first-run harness.
   // Historical context: #1234 consumes #1164 rather than creating a competing E2E architecture.
   // Deep-linked canonical detail state must survive reload, Search filters must
@@ -600,22 +617,6 @@ try {
   await page.locator(".api-indicator").filter({ hasText: "/api/v1" }).waitFor();
   await manifestAlert.waitFor({ state: "detached" });
   await page.unroute(manifestApi, failManifestTemporarily);
-
-  const bootstrapStatus = await page.evaluate(async () => {
-    const response = await fetch("/api/v1/auth/bootstrap-status");
-    return response.json();
-  });
-  if (bootstrapStatus.state !== "initialized" || bootstrapStatus.bootstrap_available !== false) {
-    throw new Error(`Bootstrap endpoint did not fail closed after first run: ${JSON.stringify(bootstrapStatus)}`);
-  }
-
-  // Existing completed installation: ordinary sign-in returns directly to the dashboard.
-  await page.goto(`${frontendUrl}/settings`);
-  await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
-  await (await waitForButton(page, "Sign out")).click();
-  await page.goto(frontendUrl);
-  await signIn(page);
-  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 } catch (error) {
   await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
   if (page) {
