@@ -199,10 +199,10 @@ export function MarketplacePage({
       try {
         const [next, registeredKinds] = await Promise.all([
           client.list({ ...listQuery, cursor: pageCursor }),
-          client.listKinds({ limit: 200, sort: "kind", direction: "asc" }),
+          listAllKindDescriptors(client),
         ]);
         setPage(next);
-        setKindDescriptors(registeredKinds.items);
+        setKindDescriptors(registeredKinds);
         setError(null);
       } catch (nextError) {
         setError(nextError);
@@ -1545,6 +1545,32 @@ function sameVersionSourceSwitch(item: RegistryItem): boolean {
   );
 }
 
+async function listAllKindDescriptors(
+  client: Pick<RegistryClient, "listKinds">,
+): Promise<RegistryKindDescriptor[]> {
+  const items: RegistryKindDescriptor[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  while (true) {
+    const page = await client.listKinds({
+      limit: 200,
+      sort: "kind",
+      direction: "asc",
+      cursor,
+    });
+    items.push(...page.items);
+
+    const nextCursor = page.next_cursor ?? undefined;
+    if (!nextCursor) return items;
+    if (seenCursors.has(nextCursor)) {
+      throw new Error("Marketplace kind pagination returned a repeated cursor.");
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+}
+
 function mergeKindDescriptors(
   serverKinds: RegistryKindDescriptor[],
   items: RegistryItem[],
@@ -1618,6 +1644,7 @@ export const marketplacePresentation = {
   itemStateLabel,
   mutationOperation,
   mergeKindDescriptors,
+  listAllKindDescriptors,
   operationSupported,
   providerLooksDisabled,
   isMarketplaceAccessFailure,

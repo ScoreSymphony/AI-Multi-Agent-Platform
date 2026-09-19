@@ -241,6 +241,48 @@ describe("MarketplacePage", () => {
     expect(unknown?.management_path).toBeNull();
   });
 
+  it("loads every canonical Marketplace kind descriptor page before deriving lifecycle support", async () => {
+    const client = new RegistryClient({ fetchImpl: vi.fn() });
+    const first = kindDescriptor({
+      kind: "kind_001",
+      display_name: "Kind 001",
+      supports_install: false,
+      supports_update: false,
+      supports_uninstall: false,
+    });
+    const later = kindDescriptor({
+      kind: "kind_201",
+      display_name: "Kind 201",
+      supports_install: true,
+      supports_update: true,
+      supports_uninstall: true,
+    });
+    const listKinds = vi
+      .spyOn(client, "listKinds")
+      .mockResolvedValueOnce({
+        items: [first],
+        next_cursor: "page-2",
+        total: 201,
+        limit: 200,
+      })
+      .mockResolvedValueOnce({
+        items: [later],
+        next_cursor: null,
+        total: 201,
+        limit: 200,
+      });
+
+    const descriptors = await marketplacePresentation.listAllKindDescriptors(client);
+
+    expect(descriptors.map((entry) => entry.kind)).toEqual(["kind_001", "kind_201"]);
+    expect(listKinds).toHaveBeenCalledTimes(2);
+    expect(listKinds).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ cursor: "page-2", limit: 200 }),
+    );
+    expect(descriptors[1]?.supports_install).toBe(true);
+  });
+
   it("distinguishes disabled Marketplace providers from permission and backend failures", () => {
     expect(marketplacePresentation.providerLooksDisabled(new Error("404 not found"))).toBe(true);
     expect(marketplacePresentation.providerLooksDisabled(new Error("provider disabled"))).toBe(true);

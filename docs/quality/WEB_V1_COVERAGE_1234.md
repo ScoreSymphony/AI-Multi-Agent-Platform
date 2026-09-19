@@ -39,6 +39,8 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Files | `/files`, `/files/:id` | canonical `files` ResourceService | **Gap found and closed by #1234.** Authorized metadata, Project/owner scope, state, type, size/checksum and Artifact relationships are now reachable. Raw bytes, storage paths and provider-private identity remain intentionally non-Web. |
 | Memory / Knowledge | `/memory`, `/memory/:id`, `/knowledge`, `/knowledge/:id` | canonical Memory/Knowledge resources and commands | Inventory/query/detail/create/update/promotion/expiry/tombstone flows are maintained. Destructive Memory/Knowledge actions already require confirmation. |
 | Search | `/search` | canonical `/api/v1/search` | Global discovery is maintained over authorization-filtered canonical results; Search never becomes lifecycle authority. |
+| Research Evidence | `/research`, `/research/:id` | `research-items`, `research-sources`, `research-source-observations`, `research-claims`, `research-evidence` + `research.*` commands | #589 owner gap closed on the final integration follow-up: list/search/filter, stable item deep links, canonical Research creation, Source/observation/Claim/Evidence additions and revalidation are reachable when advertised; freshness, Verification bindings, workflow provenance and downstream Decision references remain inspectable without creating a Research-owned execution lifecycle. |
+| Decision Records | `/decisions`, `/decisions/:id` | `decision-records` + `decision-record.*` commands | #598 owner gap closed on the final integration follow-up: list/search/filter, create, immutable supersession and confirmed withdrawal are reachable when advertised; alternatives/outcome/rationale, exact evidence/evaluation/Approval/ADR references, downstream provenance and revisit state remain inspectable. Decision history remains non-authoritative for permissions or activation. |
 | Nodes / Workers / resources | `/compute`, Node/Worker/Job detail routes | `nodes`, `workers`, `worker-jobs` | Inventory, resource/health state and the advertised administrative command subset are maintained; scheduler/transport internals stay private. |
 | Approvals / Verification | `/approvals`, `/approvals/:id`, `/verification`, `/verification/:id` | canonical Approval/Verification resources + exact commands | Inspection, decision/review actions and evidence links are maintained. Missing decision commands degrade to read-only rather than fabricating authority. |
 | Automations | `/automations`, `/automations/:id` | `automations`, `automation-deliveries` + exact lifecycle commands | Create/update, pause/resume/disable, test, delivery history and retry are maintained. Scheduler evaluation and event/webhook ingestion remain system paths. |
@@ -173,22 +175,22 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
     `/marketplace/items/:resourceId` routes backed by canonical `registry-items` reads, preserving
     reload/direct-link behavior without introducing Marketplace-owned runtime authority.
 
-## Remaining #1234 work outside this branch
+## Final #1234 integration follow-up
 
-This branch is intentionally a mergeable **coverage slice**, not the final #1234 closure branch.
-Two additional closed V1 owners were identified during the audit but are deliberately not started
-halfway here:
+The two owner-domain gaps identified by the earlier coverage slice are now implemented on the final
+integration follow-up:
 
-- **#589 Research Evidence** explicitly requires a Web inspection surface for Research Items,
-  Sources, Claims, Evidence, freshness/staleness, verification status, provenance and downstream
-  Task/Plan/Decision references. The Control Plane owner exists, but no maintained Web route is
-  currently present.
-- **#598 Decision Records** explicitly requires Web list/search/filter, detail, linked evidence,
-  downstream references, supersession history and revisit status. A read client exists, but the
-  maintained Web route/page is still absent.
+- **#589 Research Evidence** has a maintained navigation entry, canonical list/filter/create
+  surface and stable Research Item detail route with Source/observation, Claim, Evidence creation
+  and revalidation, freshness, Verification/provenance and downstream Decision inspection.
+- **#598 Decision Records** has a maintained navigation entry, canonical list/search/filter/create
+  surface and stable detail route with linked evidence, alternatives, downstream references,
+  immutable supersession, confirmed withdrawal and review/revisit state.
 
-These should be implemented on dedicated follow-up branches and then composed with this branch in
-the later collection branch, rather than leaving partial route/client work in this slice.
+The follow-up also fixes complete Marketplace kind-descriptor pagination and adjusts the replaceable
+self-hosted authenticated-request limiter default after the official #1164 browser acceptance path
+reproducibly exceeded the old implementation default. None of these changes may be treated as
+accepted until the exact integrated head passes the full frontend/CI/browser gate.
 
 ## Remaining dependency-owned evidence
 
@@ -204,8 +206,9 @@ the later collection branch, rather than leaving partial route/client work in th
   work are complete.
 
 The implementation branch is therefore allowed to become merge-ready before #1164 closes; #1221 is already integrated.
-#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164 evidence is
-consumed and the exact final integrated Web state is rechecked. #1221 no longer blocks this matrix.
+#1234 itself should remain open until the exact final integrated Web state, including the new
+#589/#598 surfaces and Marketplace/authentication follow-up, passes the full frontend and #1164
+browser acceptance gate. #1221 no longer blocks this matrix.
 
 ## Validation contract
 
