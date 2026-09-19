@@ -457,5 +457,9 @@ def test_approval_cli_deny_and_expired_conflict_paths(tmp_path: Path) -> None:
         "--idempotency-key",
         "expired-decision",
     )
-    assert code == 2 and not output
+    assert code == 3 and not output
+    assert error["status"] == 409
+    assert error["code"] == "conflict"
+    assert error["category"] == "conflict"
+    assert error["retryable"] is False
     assert "approval is not pending: expired" in error["message"]
