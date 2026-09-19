@@ -206,9 +206,7 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
     assert isinstance(workspace_id, str)
 
     api_workspace = asyncio.run(
-        transport.http.handle(
-            HTTPRequest(method="GET", path=f"/api/v1/workspaces/{workspace_id}")
-        )
+        transport.http.handle(HTTPRequest(method="GET", path=f"/api/v1/workspaces/{workspace_id}"))
     )
     assert api_workspace.status == 200
     assert isinstance(api_workspace.body, dict)
