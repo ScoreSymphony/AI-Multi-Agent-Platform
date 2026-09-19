@@ -169,6 +169,7 @@ export function SearchPage({ client }: { client: ControlPlaneClient }) {
 
       <Card title="Authorized results">
         {loading && !page ? <LoadingState label="Searching…" /> : null}
+        {loading && page ? <p role="status">Refreshing authorized results…</p> : null}
         {page ? <SearchResults results={page.items} /> : null}
         {page ? (
           <PaginationControls
