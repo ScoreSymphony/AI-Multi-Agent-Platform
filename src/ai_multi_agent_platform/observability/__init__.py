@@ -10,6 +10,7 @@ from .exporters import (
     SpanHandle,
     Telemetry,
 )
+from .external_effect_recovery import ObservabilityExternalEffectRecoveryObserver
 from .health import (
     DependencyHealth,
     ReadinessState,
@@ -69,6 +70,7 @@ __all__ = [
     "MetricRecord",
     "NoOpExporter",
     "ObservabilityEventProvider",
+    "ObservabilityExternalEffectRecoveryObserver",
     "ObservabilityExporter",
     "ObservabilityInvocationObserver",
     "ObservedAuthorizationProvider",

@@ -268,6 +268,223 @@ def _future_kind() -> RegistryItem:
     )
 
 
+def test_builtin_semantic_kind_metadata_uses_generic_control_plane_collection() -> None:
+    service = MarketplaceKindResourceService(DistributionService(None))
+
+    resources = asyncio.run(
+        service.list_resources(
+            _request(),
+            PageQuery(sort="kind"),
+        )
+    )
+    by_kind = {resource["kind"]: resource for resource in resources}
+
+    assert by_kind["agent"]["group"] == "ai_agents"
+    assert by_kind["agent"]["management_path"] == "/agents"
+    assert by_kind["agent_team"]["management_path"] == "/agent-teams"
+    assert by_kind["orchestrator"]["default_route"] == "kind_handler"
+    assert by_kind["orchestrator"]["management_path"] == "/plugins"
+    assert by_kind["executor"]["group"] == "platform_extensions"
+    assert by_kind["model_provider"]["management_path"] == "/models"
+
+
+@pytest.mark.parametrize(
+    "kind",
+    (
+        RegistryItemType.AGENT,
+        RegistryItemType.AGENT_TEAM,
+        RegistryItemType.ORCHESTRATOR,
+        RegistryItemType.EXECUTOR,
+        RegistryItemType.MODEL_PROVIDER,
+    ),
+)
+def test_semantic_kinds_reuse_generic_control_plane_lifecycle(
+    tmp_path: Path,
+    kind: RegistryItemType,
+) -> None:
+    class SemanticHandler(RecordingHandler):
+        def __init__(self, semantic_kind: RegistryItemType) -> None:
+            super().__init__()
+            self.kind = semantic_kind
+
+        def describe(self, item: RegistryItem) -> dict[str, object]:
+            return {"manifest_kind": item.kind, "owner": item.kind}
+
+    item_id = f"example.{kind.value.replace('_', '-')}"
+    first = RegistryItem(
+        item_id=item_id,
+        item_type=kind,
+        name=f"Semantic {kind.value}",
+        description=f"Generic Control Plane fixture for {kind.value}",
+        version="1.0.0",
+        publisher="example",
+        source=_source(item_id, "1.0.0"),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=RegistryManifestReference(
+            kind=kind,
+            reference=f"manifests/{kind.value}.json",
+            schema_version="1",
+        ),
+    )
+    second = replace(
+        first,
+        version="1.1.0",
+        source=_source(item_id, "1.1.0"),
+    )
+    artifacts = {
+        (first.item_id, first.version): f"{kind.value}-1".encode(),
+        (second.item_id, second.version): f"{kind.value}-2".encode(),
+    }
+    handler = SemanticHandler(kind)
+    distribution = DistributionService(
+        LocalRegistryProvider((first, second), artifacts),
+        installations=JsonRegistryInstallationStore(
+            tmp_path / f"{kind.value}-generic-control-plane.json"
+        ),
+        kind_handlers=MarketplaceKindHandlerRegistry((handler,)),
+    )
+    validation = StaticValidationContext(_context())
+    resources = RegistryResourceService(distribution, validation)
+    commands = RegistryCommandHandlers(distribution, validation)
+
+    listed = asyncio.run(
+        resources.list_resources(
+            _request(),
+            PageQuery(filters={"kind": kind.value}),
+        )
+    )
+    assert listed
+    assert all(resource["kind"] == kind.value for resource in listed)
+
+    detail = asyncio.run(
+        resources.get_resource(
+            _request(),
+            f"{first.item_id}@{first.version}",
+        )
+    )
+    assert detail["kind"] == kind.value
+    assert detail["owner_extension"]["handler_available"] is True  # type: ignore[index]
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            first.item_id,
+            {"version": first.version},
+        )
+    )
+    assert preview["item"]["kind"] == kind.value  # type: ignore[index]
+    assert preview["activation_allowed"] is True
+
+    installed = asyncio.run(
+        commands.marketplace_install(
+            _request(),
+            first.item_id,
+            {"version": first.version},
+        )
+    )
+    assert installed["action"] == "install"
+
+    updated = asyncio.run(
+        commands.marketplace_update(
+            _request(),
+            second.item_id,
+            {"version": second.version},
+        )
+    )
+    assert updated["action"] == "update"
+
+    removed = asyncio.run(
+        commands.marketplace_uninstall(
+            _request(),
+            first.item_id,
+            {},
+        )
+    )
+    assert removed["action"] == "uninstall"
+    assert handler.calls == [
+        ("install", first.item_id, first.version),
+        ("update", second.item_id, second.version),
+        ("uninstall", second.item_id, second.version),
+    ]
+
+
+def test_semantic_provider_without_owner_handler_fails_closed(
+    tmp_path: Path,
+) -> None:
+    item = RegistryItem(
+        item_id="example.memory-provider",
+        item_type=RegistryItemType.MEMORY_PROVIDER,
+        name="Memory Provider",
+        description="Semantic provider without a composed owner binder.",
+        version="1.0.0",
+        publisher="example",
+        source=_source("example.memory-provider", "1.0.0"),
+        license="MIT",
+        provenance="source-release",
+        trust_status=TrustStatus.REVIEWED,
+        manifest=RegistryManifestReference(
+            kind=RegistryItemType.MEMORY_PROVIDER,
+            reference="manifests/memory-provider.json",
+            schema_version="1",
+        ),
+    )
+    service = DistributionService(
+        LocalRegistryProvider(
+            (item,),
+            {(item.item_id, item.version): b"memory-provider-package"},
+        ),
+        installations=JsonRegistryInstallationStore(tmp_path / "provider-fail-closed.json"),
+    )
+
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("1.0.0"),
+    )
+
+    assert preview.route is DistributionRoute.KIND_HANDLER
+    assert preview.activation_allowed is False
+    assert any(finding.code == "handler_unavailable" for finding in preview.findings)
+    assert service.route_available(item) is False
+    assert service.installed(item.item_id) is None
+
+
+@pytest.mark.parametrize(
+    "runtime_kind",
+    (
+        "agent_run",
+        "agent_runtime",
+        "task",
+        "run",
+        "worker",
+        "node",
+        "orchestration_session",
+        "provider_runtime",
+    ),
+)
+def test_runtime_instances_are_not_valid_marketplace_content(runtime_kind: str) -> None:
+    with pytest.raises(ValueError, match="not distributable Marketplace content"):
+        RegistryItem(
+            item_id="example.runtime-instance",
+            item_type=runtime_kind,
+            name="Runtime instance",
+            description="Live runtime state must stay outside Marketplace.",
+            version="1.0.0",
+            publisher="example",
+            source=_source("example.runtime-instance", "1.0.0"),
+            license="MIT",
+            provenance="runtime-state",
+            trust_status=TrustStatus.REVIEWED,
+            manifest=RegistryManifestReference(
+                kind=runtime_kind,
+                reference="manifests/runtime-instance.json",
+                schema_version="1",
+            ),
+        )
+
+
 def test_cross_kind_search_kind_filters_and_future_kind() -> None:
     items = (
         _tool("example.tool", "Example Tool"),
@@ -1247,6 +1464,106 @@ def test_marketplace_preview_serializes_structured_decision_findings(
     assert {finding["category"] for finding in findings} >= {"dependency", "permission"}  # type: ignore[index]
 
 
+def test_invalid_owner_candidate_remains_a_blocked_marketplace_preview(
+    tmp_path: Path,
+) -> None:
+    class InvalidCandidateHandler(RecordingHandler):
+        def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+            del item, artifact
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "candidate owner artifact is invalid",
+            )
+
+        def describe_candidate(
+            self,
+            item: RegistryItem,
+            artifact: bytes,
+        ) -> dict[str, object]:
+            self.validate_candidate(item, artifact)
+            raise AssertionError("unreachable")
+
+    item = _application("example.invalid-candidate", "1.0.0")
+    commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider(
+                (item,),
+                {(item.item_id, item.version): b"invalid-candidate"},
+            ),
+            installations=JsonRegistryInstallationStore(tmp_path / "invalid-candidate.json"),
+            kind_handlers=MarketplaceKindHandlerRegistry((InvalidCandidateHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            item.item_id,
+            {"version": item.version},
+        )
+    )
+
+    assert preview["activation_allowed"] is False
+    findings = preview["findings"]
+    assert isinstance(findings, list)
+    assert any(
+        isinstance(finding, dict)
+        and finding.get("code") == "owner_candidate_invalid"
+        and finding.get("message") == "candidate owner artifact is invalid"
+        for finding in findings
+    )
+    owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
+    assert owner_extension["handler_available"] is True  # type: ignore[index]
+    assert owner_extension["details"] is None  # type: ignore[index]
+    assert owner_extension["status"] is None  # type: ignore[index]
+
+
+def test_marketplace_preview_projects_only_explicit_candidate_owner_details(
+    tmp_path: Path,
+) -> None:
+    class CandidateDetailHandler(RecordingHandler):
+        def validate_candidate(self, item: RegistryItem, artifact: bytes) -> None:
+            assert item.kind == "application"
+            assert artifact == b"candidate-detail"
+
+        def describe_candidate(
+            self,
+            item: RegistryItem,
+            artifact: bytes,
+        ) -> dict[str, object]:
+            self.validate_candidate(item, artifact)
+            return {"candidate_kind": item.kind, "phase": "pre-install"}
+
+    item = _application("example.candidate-detail", "1.0.0")
+    commands = RegistryCommandHandlers(
+        DistributionService(
+            LocalRegistryProvider(
+                (item,),
+                {(item.item_id, item.version): b"candidate-detail"},
+            ),
+            installations=JsonRegistryInstallationStore(tmp_path / "candidate-detail.json"),
+            kind_handlers=MarketplaceKindHandlerRegistry((CandidateDetailHandler(),)),
+        ),
+        StaticValidationContext(_context()),
+    )
+
+    preview = asyncio.run(
+        commands.marketplace_preview(
+            _request(),
+            item.item_id,
+            {"version": item.version},
+        )
+    )
+
+    owner_extension = preview["item"]["owner_extension"]  # type: ignore[index]
+    assert owner_extension["details"] == {  # type: ignore[index]
+        "candidate_kind": "application",
+        "phase": "pre-install",
+    }
+    assert owner_extension["status"] is None  # type: ignore[index]
+
+
 def test_future_kind_registry_controls_operations_and_same_version_source_switch(
     tmp_path: Path,
 ) -> None:
@@ -1345,6 +1662,9 @@ def test_future_kind_registry_controls_operations_and_same_version_source_switch
             "supports_install": True,
             "supports_update": True,
             "supports_uninstall": True,
+            "group": "other",
+            "owner_resource": None,
+            "management_path": None,
         },
     )
     assert detail["installed"] is True

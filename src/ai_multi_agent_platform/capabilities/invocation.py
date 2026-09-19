@@ -40,6 +40,15 @@ type GovernanceBindingHook = Callable[
 type ApprovalHook = Callable[
     [CapabilityInvocation, CapabilitySpec, DomainToolInvocation], Awaitable[bool]
 ]
+type ProviderDispatchHook = Callable[
+    [
+        CapabilityInvocation,
+        CapabilityRegistration,
+        ToolInvocation,
+        DomainToolInvocation | None,
+    ],
+    Awaitable[None],
+]
 
 
 class InvocationObserver(Protocol):
@@ -87,6 +96,7 @@ class CapabilityInvoker:
         canonical_binding_hook: CanonicalInvocationBindingHook | None = None,
         governance_binding_hook: GovernanceBindingHook | None = None,
         approval_hook: ApprovalHook | None = None,
+        provider_dispatch_hook: ProviderDispatchHook | None = None,
         observer: InvocationObserver | None = None,
     ) -> None:
         self._registry = registry
@@ -94,6 +104,7 @@ class CapabilityInvoker:
         self._canonical_binding_hook = canonical_binding_hook
         self._governance_binding_hook = governance_binding_hook
         self._approval_hook = approval_hook
+        self._provider_dispatch_hook = provider_dispatch_hook
         self._observer = observer or NullInvocationObserver()
 
     async def invoke(self, request: CapabilityInvocation) -> CapabilityInvocationResult:
@@ -217,13 +228,6 @@ class CapabilityInvoker:
                 )
             approval_decision = "approved"
 
-        await self._record(
-            request,
-            registration,
-            InvocationStatus.RUNNING,
-            canonical_invocation=canonical_invocation,
-            approval_decision=approval_decision,
-        )
         if request.expires_at is not None and datetime.now(UTC) > request.expires_at:
             await self._record(
                 request,
@@ -245,20 +249,50 @@ class CapabilityInvoker:
                 },
             )
 
+        execution_invocation = provider_invocation
+        if canonical_invocation is not None:
+            try:
+                validate_tool_invocation_binding(provider_invocation, canonical_invocation)
+            except ValueError as exc:
+                await self._record(
+                    request,
+                    registration,
+                    InvocationStatus.FAILED,
+                    ErrorCode.CONTRACT_VIOLATION.value,
+                    canonical_invocation=canonical_invocation,
+                    approval_decision=approval_decision,
+                )
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "tool invocation governance binding changed before provider execution",
+                    provider_id=registration.provider_id,
+                ) from exc
+            execution_invocation = replace(
+                provider_invocation,
+                context=replace(
+                    provider_invocation.context,
+                    causation_id=canonical_invocation.id,
+                ),
+            )
+
+        if self._provider_dispatch_hook is not None:
+            await self._provider_dispatch_hook(
+                request,
+                registration,
+                execution_invocation,
+                canonical_invocation,
+            )
+        await self._record(
+            request,
+            registration,
+            InvocationStatus.RUNNING,
+            canonical_invocation=canonical_invocation,
+            approval_decision=approval_decision,
+        )
+
         timeout = capability.timeout_seconds or request.context.control.timeout_seconds
         provider_started = perf_counter()
-        execution_invocation = provider_invocation
-
         try:
-            if canonical_invocation is not None:
-                validate_tool_invocation_binding(provider_invocation, canonical_invocation)
-                execution_invocation = replace(
-                    provider_invocation,
-                    context=replace(
-                        provider_invocation.context,
-                        causation_id=canonical_invocation.id,
-                    ),
-                )
             if timeout is None:
                 tool_result = await provider.invoke(execution_invocation)
             else:
@@ -311,20 +345,6 @@ class CapabilityInvoker:
                 provider_id=registration.provider_id,
                 retryable=True,
                 adapter_metadata=adapter_metadata,
-            ) from exc
-        except ValueError as exc:
-            await self._record(
-                request,
-                registration,
-                InvocationStatus.FAILED,
-                ErrorCode.CONTRACT_VIOLATION.value,
-                canonical_invocation=canonical_invocation,
-                approval_decision=approval_decision,
-            )
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "tool invocation governance binding changed before provider execution",
-                provider_id=registration.provider_id,
             ) from exc
         except ContractError as exc:
             await self._record(

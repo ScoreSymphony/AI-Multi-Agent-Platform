@@ -29,8 +29,8 @@ The research and approach branches have no dependency on one another. Execution 
 the Plan exposes real parallel-ready work and a fan-in edge. The produced Result is then subject to a
 canonical Agent Verification policy using the scoped reviewer revision.
 
-The baseline does **not** require Hermes, Forge, LiteLLM, MCP, a remote Worker, the standard Agent
-catalog, or a paid model/API provider.
+The baseline does **not** require Hermes, LiteLLM, MCP, a remote Worker, the standard Agent
+catalog, or a paid model/API provider. The retired Forge runtime is not part of this workflow.
 
 ## Clean-checkout startup
 
@@ -201,3 +201,11 @@ idempotency, restart/provider-health recovery, and actionable missing-model guid
 Lower-level #889 runtime tests remain responsible for detailed planner, scheduling, handoff/context
 and recovery mechanics. This fixture proves that those mechanics are reachable as the maintained
 product first run rather than only as an internal integration scenario.
+
+The maintained browser regression at `frontend/tests/browserFirstRun.browser.mjs` extends the
+completed #905 onboarding baseline rather than replacing it. It drives the real Vite UI against the
+real single-node Control Plane, uses a hermetic local OpenAI-compatible endpoint, proves visible
+Task/Plan/Step/Agent/Run/Result/Artifact/Verification evidence, and covers an unusable-provider
+failure that must remain actionable and secret-safe without creating canonical Task state. CI runs
+this scenario in the existing frontend browser lane and retains bounded screenshot/page/process
+evidence only when the browser regression fails.

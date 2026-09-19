@@ -1,8 +1,8 @@
 """Replaceable platform-owned provider contracts.
 
 These interfaces define architectural seams. Concrete systems such as Hermes,
-Forge, LiteLLM, MCP servers, databases or workflow engines implement adapters
-behind these contracts rather than becoming part of the canonical domain model.
+LiteLLM, MCP servers, databases, workflow engines or supported executor runtimes implement
+adapters behind these contracts rather than becoming part of the canonical domain model.
 """
 
 from __future__ import annotations

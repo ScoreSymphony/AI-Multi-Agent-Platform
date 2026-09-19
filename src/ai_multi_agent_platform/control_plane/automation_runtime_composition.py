@@ -138,6 +138,10 @@ class ControlPlane(_BaseControlPlane):
     async def start_automation_runtime(self) -> None:
         await self._automation_runtime.start()
 
+    def request_automation_runtime_stop(self) -> None:
+        """Quiesce future autonomous Automation ticks while preserving the current tick."""
+        self._automation_runtime.request_stop()
+
     async def stop_automation_runtime(self) -> None:
         await self._automation_runtime.stop()
 

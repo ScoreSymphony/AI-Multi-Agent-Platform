@@ -13,9 +13,8 @@ from ai_multi_agent_platform.agents import (
     AgentService,
     InstructionSource,
 )
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.models import RequestContext
-from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.security import (
@@ -31,6 +30,8 @@ from ai_multi_agent_platform.verification import (
     VerificationStage,
     VerifierKind,
 )
+
+from .first_run_types import FirstRunPathProjection
 
 FIRST_RUN_WORKFLOW = "reference-multi-agent"
 REFERENCE_MULTI_AGENT_CONSTRAINT = "runtime:reference-multi-agent"
@@ -60,72 +61,84 @@ def require_owner(context: RequestContext) -> OwnerRef:
 
 
 def resolve_scope(
-    scopes: ScopeStore,
-    owner: OwnerRef,
+    projection: FirstRunPathProjection,
     *,
     project_id: str | None,
     workspace_id: str | None,
 ) -> tuple[str, str]:
-    owned_projects = tuple(item for item in scopes.list_projects() if item.owner_ref == owner)
+    """Resolve an owned first-run scope from the same canonical projection used by Web."""
+
+    owned_project_ids = tuple(projection.project_ids)
+    workspace_bindings = tuple(projection.workspace_bindings)
+
     if workspace_id is not None:
-        requested_workspace = scopes.get_workspace(workspace_id)
-        if requested_workspace.owner_type != owner.type or requested_workspace.owner_id != owner.id:
+        matching = tuple(binding for binding in workspace_bindings if binding[1] == workspace_id)
+        if len(matching) != 1:
             raise ContractError(
-                ErrorCode.FORBIDDEN, "Selected Workspace is not owned by this actor."
+                ErrorCode.INVALID_REQUEST,
+                "Select an owned Workspace for the official multi-agent first run.",
+                details={
+                    "candidate_workspace_ids": cast(
+                        JsonValue,
+                        sorted(
+                            {
+                                candidate_workspace_id
+                                for _, candidate_workspace_id in workspace_bindings
+                            }
+                        ),
+                    )
+                },
             )
-        if project_id is not None and requested_workspace.project_id != project_id:
+        workspace_project_id, selected_workspace_id = matching[0]
+        if project_id is not None and workspace_project_id != project_id:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "Selected Workspace does not belong to the selected Project.",
             )
-        selected_project_id = project_id or requested_workspace.project_id
+        selected_project_id = project_id or workspace_project_id
     else:
-        selected_project_id = _select_project(owned_projects, project_id)
+        selected_project_id = _select_project(owned_project_ids, project_id)
+        candidate_workspaces = tuple(
+            candidate_workspace_id
+            for candidate_project_id, candidate_workspace_id in workspace_bindings
+            if candidate_project_id == selected_project_id
+        )
+        selected_workspace_id = _select_workspace(candidate_workspaces, workspace_id)
 
-    project = scopes.get_project(selected_project_id)
-    if project.owner_ref != owner:
-        raise ContractError(ErrorCode.FORBIDDEN, "Selected Project is not owned by this actor.")
-
-    owned_workspaces = tuple(
-        item
-        for item in scopes.list_workspaces()
-        if item.project_id == selected_project_id
-        and item.owner_type == owner.type
-        and item.owner_id == owner.id
-    )
-    selected_workspace_id = _select_workspace(owned_workspaces, workspace_id)
-    workspace = scopes.get_workspace(selected_workspace_id)
-    if workspace.project_id != selected_project_id:
+    if selected_project_id not in owned_project_ids:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "Selected Project is not owned by this actor.",
+        )
+    if (selected_project_id, selected_workspace_id) not in workspace_bindings:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "Selected Workspace does not belong to the selected Project.",
         )
-    if workspace.owner_type != owner.type or workspace.owner_id != owner.id:
-        raise ContractError(ErrorCode.FORBIDDEN, "Selected Workspace is not owned by this actor.")
     return selected_project_id, selected_workspace_id
 
 
-def _select_project(projects: tuple[Any, ...], requested: str | None) -> str:
+def _select_project(project_ids: tuple[str, ...], requested: str | None) -> str:
     if requested is not None:
         return requested
-    if len(projects) == 1:
-        return cast(str, projects[0].id)
+    if len(project_ids) == 1:
+        return project_ids[0]
     raise ContractError(
         ErrorCode.INVALID_REQUEST,
         "Select an owned Project for the official multi-agent first run.",
-        details={"candidate_project_ids": [item.id for item in projects]},
+        details={"candidate_project_ids": cast(JsonValue, list(project_ids))},
     )
 
 
-def _select_workspace(workspaces: tuple[Any, ...], requested: str | None) -> str:
+def _select_workspace(workspace_ids: tuple[str, ...], requested: str | None) -> str:
     if requested is not None:
         return requested
-    if len(workspaces) == 1:
-        return cast(str, workspaces[0].id)
+    if len(workspace_ids) == 1:
+        return workspace_ids[0]
     raise ContractError(
         ErrorCode.INVALID_REQUEST,
         "Select an owned Workspace for the official multi-agent first run.",
-        details={"candidate_workspace_ids": [item.id for item in workspaces]},
+        details={"candidate_workspace_ids": cast(JsonValue, list(workspace_ids))},
     )
 
 

@@ -1,6 +1,6 @@
 # Platform-owned Task / Run / Event Kernel
 
-The kernel is the authoritative owner of externally visible Task and Run lifecycle state. Hermes, Forge, Temporal, executors, model providers and other adapters may participate in planning or execution, but none of their private databases or status models become the platform source of truth.
+The kernel is the authoritative owner of externally visible Task and Run lifecycle state. Hermes, supported executors, Temporal-style workflow integrations, model providers and other adapters may participate in planning or execution, but none of their private databases or status models become the platform source of truth. The retired Forge runtime is historical only.
 
 ## Ownership boundary
 
@@ -120,4 +120,4 @@ No Hermes, Forge, Temporal, external model API or production database is require
 
 ## Deliberate non-goals
 
-Issue #6 does not select a production scheduler, event bus or database and does not integrate Hermes, Forge or Temporal. Those components must remain replaceable participants around this kernel and map their private state into the platform-owned canonical lifecycle.
+Issue #6 does not select a production scheduler, event bus or database and does not integrate Hermes or Temporal. Supported external participants remain replaceable around this kernel and map their private state into the platform-owned canonical lifecycle; Forge is retired and is not an active participant.

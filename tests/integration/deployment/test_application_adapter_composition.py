@@ -113,15 +113,25 @@ def test_server_startup_recovery_reconciles_durable_applications(
     assert report["ready_for_service"] is True
     assert report["extension_items_checked"] == 1
     assert report["extension_failures"] == 0
-    assert report["extensions"] == [
-        {
-            "name": "applications",
-            "items_checked": 1,
-            "failure_count": 0,
-            "ready_for_service": True,
-            "failures": [],
-        }
+    extensions = report["extensions"]
+    assert [extension["name"] for extension in extensions] == [
+        "external-effect-recovery",
+        "single-node-transient-state",
+        "applications",
     ]
+    by_name = {extension["name"]: extension for extension in extensions}
+    assert by_name["external-effect-recovery"]["ready_for_service"] is True
+    assert by_name["single-node-transient-state"]["ready_for_service"] is True
+    assert {
+        evidence["state_class"] for evidence in by_name["single-node-transient-state"]["evidence"]
+    } == {"authentication_session", "transient_state_reconciliation"}
+    assert by_name["applications"] == {
+        "name": "applications",
+        "items_checked": 1,
+        "failure_count": 0,
+        "ready_for_service": True,
+        "failures": [],
+    }
 
     restarted = build_default_single_node_deployment(
         SingleNodeConfig(data_dir=root, secure_cookie=False)

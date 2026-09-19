@@ -5,10 +5,10 @@ enforce = true
 # The initial enforced probe found 62 top-level packages, 434 directed import
 # edges and one strongly connected component spanning 47 packages.
 #
-# Before freezing the baseline, the remaining internal Control Plane import of
-# the task_reassignment compatibility namespace was moved to its canonical
-# task_management.reassignment owner. The compatibility package is therefore
-# intentionally excluded from the allowed SCC below.
+# Compatibility-only migration roots are intentionally excluded from the allowed SCC once
+# repository-internal callers have moved to their canonical owners. task_reassignment was removed
+# before the original baseline freeze; #1241 additionally removes capability_assignments,
+# high_availability and repository_intelligence from the reviewed SCC allowance.
 #
 # A detected SCC may shrink or split, but it must never grow beyond this
 # explicitly reviewed package set. New SCCs outside this set are rejected.
@@ -21,7 +21,6 @@ packages = [
   "automation",
   "backup",
   "capabilities",
-  "capability_assignments",
   "coding_batches",
   "configuration",
   "connectors",
@@ -37,7 +36,6 @@ packages = [
   "goals",
   "governance",
   "handoffs",
-  "high_availability",
   "kernel",
   "learning",
   "models",
@@ -50,7 +48,6 @@ packages = [
   "portability",
   "release",
   "repositories",
-  "repository_intelligence",
   "research",
   "security",
   "skills",

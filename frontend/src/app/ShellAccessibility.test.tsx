@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PORTABILITY_RESOURCES } from "../api/portability";
 import type { APImanifest } from "../api/types";
 import { LiveConnectionStatus } from "../pages/TaskDetailPage";
 import {
@@ -8,6 +9,7 @@ import {
   manifestResourceState,
   manifestResourcesState,
 } from "./Shell";
+import { navigation } from "./navigation";
 import { RouterProvider } from "./router";
 
 afterEach(() => {
@@ -41,6 +43,16 @@ describe("#17 shell accessibility semantics", () => {
     expect((html.match(/aria-current="page"/g) ?? []).length).toBe(1);
     expect(html).toContain('href="/chat"');
     expect(html).toContain('id="main" tabindex="-1"');
+  });
+
+  it("maps every discoverable primary navigation item to a maintained route", () => {
+    for (const item of navigation) {
+      const html = renderShell(item.path);
+      expect(html, `navigation route fell through to unavailable: ${item.path}`).not.toContain(
+        "Canonical subsystem unavailable",
+      );
+      expect(html).not.toContain("Unknown route");
+    }
   });
 
   it("announces Control Plane and Task live status changes politely", () => {
@@ -108,6 +120,14 @@ describe("#17 shell accessibility semantics", () => {
     const knowledge = renderShell("/knowledge");
     expect(knowledge).toContain("Checking Knowledge availability");
     expect(knowledge).not.toContain("Source-backed canonical retrieval");
+
+    const files = renderShell("/files");
+    expect(files).toContain("Checking Files &amp; artifacts availability");
+    expect(files).not.toContain("Canonical File metadata");
+
+    const importExport = renderShell("/import-export");
+    expect(importExport).toContain("Checking Import / Export availability");
+    expect(importExport).not.toContain("Export canonical resource");
   });
 
   it("distinguishes advertised, absent and unavailable manifest resources", () => {
@@ -132,6 +152,8 @@ describe("#17 shell accessibility semantics", () => {
         "memory",
         "knowledge",
         "knowledge-results",
+        "files",
+        ...PORTABILITY_RESOURCES,
       ],
     } as APImanifest;
 
@@ -143,6 +165,7 @@ describe("#17 shell accessibility semantics", () => {
     expect(manifestResourceState("ready", manifest, "plugins")).toBe("available");
     expect(manifestResourceState("ready", manifest, "plugin-candidates")).toBe("available");
     expect(manifestResourceState("ready", manifest, "memory")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "files")).toBe("available");
     expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
     expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");
 
@@ -176,6 +199,25 @@ describe("#17 shell accessibility semantics", () => {
     expect(
       manifestResourcesState("ready", manifest, ["knowledge", "missing-knowledge-results"]),
     ).toBe("unavailable");
+
+    expect(manifestResourcesState("ready", manifest, PORTABILITY_RESOURCES)).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, [
+        "portability-packages",
+        "portability-import-previews",
+        "missing-portability-import-reports",
+      ]),
+    ).toBe("unavailable");
+  });
+
+  it("keeps the parent navigation active for deep links", () => {
+    const portability = renderShell("/import-export/previews/preview_1");
+    expect(portability).toContain('href="/import-export"');
+    expect(portability).toMatch(/href="\/import-export"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/import-export"/);
+    expect(portability).toContain("Checking Import preview availability");
+
+    const result = renderShell("/results/result_1");
+    expect(result).toMatch(/href="\/files"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/files"/);
   });
 
   it("routes Settings to the real browser-session surface", () => {

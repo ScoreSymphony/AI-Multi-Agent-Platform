@@ -7,10 +7,23 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.adapters.marketplace_owner_handlers import (
+    AgentMarketplaceKindHandler,
+    AgentTeamMarketplaceKindHandler,
     ApplicationMarketplaceKindHandler,
     PluginMarketplaceKindHandler,
     SkillMarketplaceKindHandler,
 )
+from ai_multi_agent_platform.agents import (
+    AgentInstructions,
+    AgentProfile,
+    AgentRevisionRef,
+    AgentTeamMember,
+    AgentTeamProfile,
+    InMemoryAgentRepository,
+    InstructionSource,
+    JsonAgentRepository,
+)
+from ai_multi_agent_platform.agents.service import AgentService
 from ai_multi_agent_platform.applications import (
     ApplicationDesiredState,
     ApplicationHealthStatus,
@@ -49,6 +62,12 @@ from ai_multi_agent_platform.plugins import (
     PluginManifest,
     PluginRegistry,
     reference_manifest,
+)
+from ai_multi_agent_platform.portability import (
+    AgentPortableCodec,
+    AgentTeamPortableCodec,
+    snapshot_agent,
+    snapshot_agent_team,
 )
 from ai_multi_agent_platform.skills import JsonSkillRepository
 from ai_multi_agent_platform.skills.codec import skill_revision_to_json
@@ -852,3 +871,332 @@ async def test_real_plugin_owner_recovers_install_update_uninstall_evidence_spli
     with pytest.raises(ContractError) as removed_after_retry:
         uninstall_retry_registry.get(first.item_id)
     assert removed_after_retry.value.code is ErrorCode.NOT_FOUND
+
+
+def _agent_profile(name: str) -> AgentProfile:
+    return AgentProfile(
+        name=name,
+        role="researcher",
+        instructions=AgentInstructions(
+            role=InstructionSource(content="Research through canonical platform capabilities.")
+        ),
+    )
+
+
+def _agent_artifact(repository: InMemoryAgentRepository, agent_id: str) -> bytes:
+    exported = AgentPortableCodec().serialize(snapshot_agent(repository, agent_id))
+    return json.dumps(exported.payload, sort_keys=True).encode()
+
+
+def _team_artifact(repository: InMemoryAgentRepository, team_id: str) -> bytes:
+    exported = AgentTeamPortableCodec().serialize(snapshot_agent_team(repository, team_id))
+    return json.dumps(exported.payload, sort_keys=True).encode()
+
+
+@pytest.mark.asyncio
+async def test_real_agent_owner_recovers_marketplace_evidence_after_restart(
+    tmp_path: Path,
+) -> None:
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    owner = OwnerRef(type="user", id="atomicity-agent-owner")
+    first_revision = source.create_agent(_agent_profile("Atomicity Agent v1"), owner_ref=owner)
+    first_artifact = _agent_artifact(source_repository, first_revision.agent_id)
+    second_revision = source.update_agent(
+        first_revision.agent_id,
+        _agent_profile("Atomicity Agent v2"),
+    )
+    second_artifact = _agent_artifact(source_repository, second_revision.agent_id)
+
+    first = RegistryItem(
+        item_id=first_revision.agent_id,
+        item_type=RegistryItemType.AGENT,
+        name="Atomicity Agent",
+        description="Durable Agent Marketplace owner recovery fixture",
+        version="1.0.0",
+        publisher="tests",
+        source=RegistrySource(
+            "https://example.invalid/atomicity-agent",
+            f"{first_revision.agent_id}@1.0.0",
+            revision="source-1",
+        ),
+        license="MIT",
+        provenance="atomicity-agent",
+        trust_status=TrustStatus.REVIEWED,
+    )
+    second = replace(
+        first,
+        version="1.1.0",
+        source=RegistrySource(
+            first.source.repository,
+            f"{first_revision.agent_id}@1.1.0",
+            revision="source-2",
+        ),
+    )
+    provider = LocalRegistryProvider(
+        (first, second),
+        {
+            (first.item_id, first.version): first_artifact,
+            (second.item_id, second.version): second_artifact,
+        },
+        provider_id="atomicity-agent",
+    )
+    installation_path = tmp_path / "agent-installations.json"
+    agent_path = tmp_path / "agents.json"
+    context = ValidationContext("0.0.1")
+
+    store = _FailOnceInstallationStore(installation_path)
+    service = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+
+    store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await service.activate(
+            service.preview(first.item_id, first.version, context),
+            context,
+            authorized=True,
+        )
+    assert store.get(first.item_id) is None
+    restored_after_install = JsonAgentRepository(agent_path)
+    assert restored_after_install.get_agent(first.item_id).current_revision == 1
+    assert restored_after_install.list_agent_runs() == ()
+
+    restarted_store = _FailOnceInstallationStore(installation_path)
+    restarted = DistributionService(
+        provider,
+        installations=restarted_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+    await restarted.activate(
+        restarted.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    persisted = restarted_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.0.0"
+    assert JsonAgentRepository(agent_path).get_agent(first.item_id).current_revision == 1
+
+    update_preview = restarted.preview(second.item_id, second.version, context)
+    restarted_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await restarted.activate(update_preview, context, authorized=True)
+    persisted = restarted_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.0.0"
+    assert JsonAgentRepository(agent_path).get_agent(first.item_id).current_revision == 2
+
+    after_update_store = _FailOnceInstallationStore(installation_path)
+    after_update = DistributionService(
+        provider,
+        installations=after_update_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+    await after_update.activate(
+        after_update.preview(second.item_id, second.version, context),
+        context,
+        authorized=True,
+    )
+    persisted = after_update_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.1.0"
+    assert JsonAgentRepository(agent_path).get_agent(first.item_id).current_revision == 2
+
+    uninstall_preview = after_update.preview_uninstall(first.item_id)
+    after_update_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await after_update.uninstall(uninstall_preview, authorized=True)
+    persisted = after_update_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.1.0"
+    with pytest.raises(ContractError) as removed:
+        AgentService(JsonAgentRepository(agent_path)).get_agent_revision(first.item_id)
+    assert removed.value.code is ErrorCode.NOT_FOUND
+
+    final_store = _FailOnceInstallationStore(installation_path)
+    final_service = DistributionService(
+        provider,
+        installations=final_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+    await final_service.uninstall(first.item_id, authorized=True)
+    assert final_store.get(first.item_id) is None
+
+
+@pytest.mark.asyncio
+async def test_real_agent_team_owner_recovers_marketplace_evidence_after_restart(
+    tmp_path: Path,
+) -> None:
+    source_repository = InMemoryAgentRepository()
+    source = AgentService(source_repository)
+    owner = OwnerRef(type="user", id="atomicity-team-owner")
+    member = source.create_agent(_agent_profile("Atomicity Team Member"), owner_ref=owner)
+    first_revision = source.create_team(
+        AgentTeamProfile(
+            name="Atomicity Team v1",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(member.agent_id, member.revision),
+                    role="researcher",
+                ),
+            ),
+            leader_agent_id=member.agent_id,
+        ),
+        owner_ref=owner,
+    )
+    first_artifact = _team_artifact(source_repository, first_revision.team_id)
+    second_revision = source.update_team(
+        first_revision.team_id,
+        AgentTeamProfile(
+            name="Atomicity Team v2",
+            members=first_revision.profile.members,
+            leader_agent_id=member.agent_id,
+        ),
+    )
+    second_artifact = _team_artifact(source_repository, second_revision.team_id)
+
+    first = RegistryItem(
+        item_id=first_revision.team_id,
+        item_type=RegistryItemType.AGENT_TEAM,
+        name="Atomicity Team",
+        description="Durable Agent Team Marketplace owner recovery fixture",
+        version="1.0.0",
+        publisher="tests",
+        source=RegistrySource(
+            "https://example.invalid/atomicity-team",
+            f"{first_revision.team_id}@1.0.0",
+            revision="source-1",
+        ),
+        license="MIT",
+        provenance="atomicity-team",
+        trust_status=TrustStatus.REVIEWED,
+    )
+    second = replace(
+        first,
+        version="1.1.0",
+        source=RegistrySource(
+            first.source.repository,
+            f"{first_revision.team_id}@1.1.0",
+            revision="source-2",
+        ),
+    )
+    provider = LocalRegistryProvider(
+        (first, second),
+        {
+            (first.item_id, first.version): first_artifact,
+            (second.item_id, second.version): second_artifact,
+        },
+        provider_id="atomicity-team",
+    )
+    installation_path = tmp_path / "team-installations.json"
+    agent_path = tmp_path / "team-agents.json"
+    context = ValidationContext("0.0.1")
+
+    target = AgentService(JsonAgentRepository(agent_path))
+    target.create_agent(
+        member.profile,
+        owner_ref=member.owner_ref,
+        project_id=member.project_id,
+        workspace_id=member.workspace_id,
+        agent_id=member.agent_id,
+    )
+
+    store = _FailOnceInstallationStore(installation_path)
+    service = DistributionService(
+        provider,
+        installations=store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentTeamMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+
+    store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await service.activate(
+            service.preview(first.item_id, first.version, context),
+            context,
+            authorized=True,
+        )
+    assert store.get(first.item_id) is None
+    assert (
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 1
+    )
+
+    restarted_store = _FailOnceInstallationStore(installation_path)
+    restarted = DistributionService(
+        provider,
+        installations=restarted_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentTeamMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+    await restarted.activate(
+        restarted.preview(first.item_id, first.version, context),
+        context,
+        authorized=True,
+    )
+    persisted = restarted_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.0.0"
+    assert (
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 1
+    )
+
+    update_preview = restarted.preview(second.item_id, second.version, context)
+    restarted_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await restarted.activate(update_preview, context, authorized=True)
+    persisted = restarted_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.0.0"
+    assert (
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id).revision == 2
+    )
+
+    after_update_store = _FailOnceInstallationStore(installation_path)
+    after_update = DistributionService(
+        provider,
+        installations=after_update_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentTeamMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+    await after_update.activate(
+        after_update.preview(second.item_id, second.version, context),
+        context,
+        authorized=True,
+    )
+    persisted = after_update_store.get(first.item_id)
+    assert persisted is not None
+    assert persisted.current.version == "1.1.0"
+
+    uninstall_preview = after_update.preview_uninstall(first.item_id)
+    after_update_store.fail_next_save = True
+    with pytest.raises(OSError, match="forced marketplace persistence failure"):
+        await after_update.uninstall(uninstall_preview, authorized=True)
+    assert after_update_store.get(first.item_id) is not None
+    with pytest.raises(ContractError) as removed:
+        AgentService(JsonAgentRepository(agent_path)).get_team_revision(first.item_id)
+    assert removed.value.code is ErrorCode.NOT_FOUND
+
+    final_store = _FailOnceInstallationStore(installation_path)
+    final_service = DistributionService(
+        provider,
+        installations=final_store,
+        kind_handlers=MarketplaceKindHandlerRegistry(
+            (AgentTeamMarketplaceKindHandler(AgentService(JsonAgentRepository(agent_path))),)
+        ),
+    )
+    await final_service.uninstall(first.item_id, authorized=True)
+    assert final_store.get(first.item_id) is None

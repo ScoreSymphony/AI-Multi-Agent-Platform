@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
@@ -14,17 +14,46 @@ const backendUrl = `http://${host}:${backendPort}`;
 const username = "browser-admin";
 const password = "correct horse battery staple browser first run";
 const dataDir = await mkdtemp(join(tmpdir(), "ai-map-browser-first-run-"));
+const artifactDir = process.env.BROWSER_E2E_ARTIFACT_DIR
+  ?? join(process.cwd(), ".browser-e2e-artifacts");
 
 let backend;
 let vite;
 let browser;
+let page;
 let backendLog = "";
 let viteLog = "";
 
+let chatCompletionCount = 0;
 const modelServer = createServer((request, response) => {
   if (request.method === "GET" && request.url === "/v1/models") {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ data: [{ id: "browser-model-native" }] }));
+    return;
+  }
+  if (request.method === "POST" && request.url === "/v1/chat/completions") {
+    request.resume();
+    chatCompletionCount += 1;
+    const delayMs = chatCompletionCount === 1 ? 250 : 20;
+    setTimeout(() => {
+      if (response.destroyed) return;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        model: "browser-model-native",
+        choices: [{
+          message: {
+            role: "assistant",
+            content: JSON.stringify({ outcome: "pass", findings: [] }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 8,
+          total_tokens: 28,
+        },
+      }));
+    }, delayMs);
     return;
   }
   response.writeHead(404, { "content-type": "application/json" });
@@ -119,6 +148,39 @@ async function onboardingStatusSnapshot(page) {
   });
 }
 
+async function taskInventory(page) {
+  return page.evaluate(async () => {
+    const [{ BrowserSessionClient }, { ControlPlaneClient }] = await Promise.all([
+      import("/src/api/browserSession.ts"),
+      import("/src/api/client.ts"),
+    ]);
+    const session = new BrowserSessionClient();
+    const client = new ControlPlaneClient({ transport: session.transport });
+    const tasks = await client.listTasks({ limit: 100 });
+    return tasks.items
+      .map((task) => ({ id: task.id, status: task.status }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+  });
+}
+
+async function refreshProviderHealthThroughBrowserClient(page, providerId) {
+  return page.evaluate(async (id) => {
+    const [{ BrowserSessionClient }, { ControlPlaneClient }] = await Promise.all([
+      import("/src/api/browserSession.ts"),
+      import("/src/api/client.ts"),
+    ]);
+    const session = new BrowserSessionClient();
+    const client = new ControlPlaneClient({ transport: session.transport });
+    return client.refreshModelProviderHealth(id);
+  }, providerId);
+}
+
+function requireText(haystack, needle, label) {
+  if (!haystack.includes(needle)) {
+    throw new Error(`${label} missing ${JSON.stringify(needle)} from ${JSON.stringify(haystack)}`);
+  }
+}
+
 async function assertModelSetupContract(page) {
   const snapshot = await page.evaluate(async () => {
     const [statusResponse, manifestResponse] = await Promise.all([
@@ -197,7 +259,7 @@ try {
   await waitForUrl(frontendUrl, "Vite", () => viteLog);
 
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  page = await browser.newPage();
   await page.goto(frontendUrl);
 
   // Fresh installation: first administrator is created entirely in the browser.
@@ -219,6 +281,8 @@ try {
   await page.getByLabel("Provider-native model name", { exact: true }).fill("browser-model-native");
   await page.getByLabel("Display name", { exact: true }).fill("Browser local model");
   await page.getByLabel("Base URL", { exact: true }).fill(`http://${host}:${modelPort}/v1`);
+  await page.getByLabel("Context window", { exact: true }).fill("32768");
+  await page.getByLabel("Structured output", { exact: true }).check();
   await (await waitForButton(page, "Validate and save model")).click();
 
   await page.getByRole("heading", { name: "Create project", exact: true }).waitFor();
@@ -259,6 +323,124 @@ try {
     );
   }
 
+  // #1164: exercise an unusable local provider through the maintained browser/API boundary.
+  // The stale rendered action must fail closed before any canonical Task is created.
+  await page.getByRole("heading", { name: "Official first run: multi-agent goal", exact: true }).waitFor();
+  const tasksBeforeFailure = await taskInventory(page);
+  await closeServer(modelServer);
+  const unavailableProvider = await refreshProviderHealthThroughBrowserClient(
+    page,
+    "browser-local-provider",
+  );
+  if (unavailableProvider.health === "healthy") {
+    throw new Error(`Provider remained healthy while its local endpoint was stopped: ${JSON.stringify(unavailableProvider)}`);
+  }
+
+  const failedRunButton = await waitForButton(page, "Run official multi-agent first run");
+  await failedRunButton.focus();
+  if (!(await failedRunButton.evaluate((element) => document.activeElement === element))) {
+    throw new Error("Official first-run action did not accept keyboard focus");
+  }
+  await failedRunButton.press("Enter");
+  await page.getByRole("alert").waitFor();
+  const failureText = await page.getByRole("alert").innerText();
+  requireText(failureText, "local/self-hosted", "Actionable missing-model failure");
+  if (
+    failureText.includes(password)
+    || failureText.includes(dataDir)
+    || failureText.includes("Traceback")
+    || failureText.includes("exception_type")
+  ) {
+    throw new Error(`Browser-visible failure leaked private diagnostics: ${failureText}`);
+  }
+  const tasksAfterFailure = await taskInventory(page);
+  if (JSON.stringify(tasksAfterFailure) !== JSON.stringify(tasksBeforeFailure)) {
+    throw new Error(
+      `Failed first-run preflight created canonical Task state: before=${JSON.stringify(tasksBeforeFailure)} after=${JSON.stringify(tasksAfterFailure)}`,
+    );
+  }
+
+  // Recover through the maintained onboarding UI, then execute the real multi-agent workflow.
+  // Re-validating and saving replaces the runtime provider attachment with a freshly healthy
+  // instance while preserving the canonical model configuration identity.
+  await listen(modelServer, modelPort);
+  await page.reload();
+  await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
+  await page.locator('select[name="adapter_id"]').selectOption("openai-compatible");
+  await page.locator('select[name="location"]').selectOption("local");
+  await page.getByLabel("Provider ID", { exact: true }).fill("browser-local-provider");
+  await page.getByLabel("Model configuration ID", { exact: true }).fill("browser-local-model");
+  await page.getByLabel("Provider-native model name", { exact: true }).fill("browser-model-native");
+  await page.getByLabel("Display name", { exact: true }).fill("Browser local model");
+  await page.getByLabel("Base URL", { exact: true }).fill(`http://${host}:${modelPort}/v1`);
+  await page.getByLabel("Context window", { exact: true }).fill("32768");
+  await page.getByLabel("Structured output", { exact: true }).check();
+  await (await waitForButton(page, "Validate and save model")).click();
+  await page.getByRole("heading", { name: "Official first run: multi-agent goal", exact: true }).waitFor();
+
+  const successfulRunButton = await waitForButton(page, "Run official multi-agent first run");
+  const commandResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/v1/commands/onboarding.run-multi-agent-golden-path")
+      && response.request().method() === "POST",
+  );
+  await successfulRunButton.focus();
+  await successfulRunButton.press("Enter");
+  await page.getByRole("button", { name: "Running multi-agent goal…", exact: true }).waitFor();
+  const commandResponse = await commandResponsePromise;
+  if (!commandResponse.ok()) {
+    throw new Error(
+      `Official browser multi-agent first run failed with ${commandResponse.status()}: ${await commandResponse.text()}`,
+    );
+  }
+
+  const resultCard = page.getByRole("heading", {
+    name: "Official multi-agent first-run result",
+    exact: true,
+  }).locator("..");
+  await resultCard.waitFor();
+  const resultText = await resultCard.innerText();
+  for (const expected of [
+    "Task",
+    "succeeded",
+    "Plan steps",
+    "4",
+    "Specialized roles",
+    "3",
+    "Verification",
+    "pass",
+    "Artifacts",
+    "researcher",
+    "developer",
+    "reviewer",
+    "Canonical verification",
+    "produced result",
+  ]) {
+    requireText(resultText.toLowerCase(), expected.toLowerCase(), "Official multi-agent browser result");
+  }
+  await resultCard.getByRole("link", { name: "Open Task", exact: true }).waitFor();
+  const producedResultLink = resultCard.getByRole("link", { name: "Open produced Result", exact: true });
+  await producedResultLink.waitFor();
+  if ((await resultCard.getByRole("link", { name: "Run", exact: true }).count()) < 4) {
+    throw new Error("Official browser result did not expose all canonical Step runs");
+  }
+  if ((await resultCard.locator('a[href^="/artifacts/"]').count()) < 1) {
+    throw new Error("Official browser result did not expose a canonical Artifact link");
+  }
+  if (chatCompletionCount < 5) {
+    throw new Error(`Official browser first run did not execute the real local model path: ${chatCompletionCount} completion calls`);
+  }
+  const tasksAfterSuccess = await taskInventory(page);
+  if (tasksAfterSuccess.length !== tasksBeforeFailure.length + 1) {
+    throw new Error(
+      `Official browser first run created an unexpected number of canonical Tasks: before=${JSON.stringify(tasksBeforeFailure)} after=${JSON.stringify(tasksAfterSuccess)}`,
+    );
+  }
+  const producedResultHref = await producedResultLink.getAttribute("href");
+  if (!producedResultHref?.startsWith("/results/")) {
+    throw new Error(`Produced Result link did not expose a canonical Result route: ${producedResultHref}`);
+  }
+
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
   await (await waitForButton(page, "Bootstrap standard Agents")).click();
   await (await waitForButton(page, "Create editable General Assistant")).click();
@@ -266,6 +448,32 @@ try {
   await page.getByRole("heading", { name: "Optional single-Agent first task", exact: true }).waitFor();
   await (await waitForButton(page, "Refresh setup state")).click();
   await (await waitForButton(page, "Validate readiness")).click();
+  await page.getByRole("link", { name: "Open dashboard", exact: true }).waitFor();
+
+  // Incomplete installations intentionally redirect non-onboarding routes back here.
+  // Exercise terminal Result keyboard navigation only after the canonical setup gate is ready.
+  const readyResultCard = page.getByRole("heading", {
+    name: "Official multi-agent first-run result",
+    exact: true,
+  }).locator("..");
+  const readyProducedResultLink = readyResultCard.getByRole("link", {
+    name: "Open produced Result",
+    exact: true,
+  });
+  if ((await readyProducedResultLink.getAttribute("href")) !== producedResultHref) {
+    throw new Error("Produced Result route changed while completing setup readiness");
+  }
+  await readyProducedResultLink.focus();
+  if (!(await readyProducedResultLink.evaluate((element) => document.activeElement === element))) {
+    throw new Error("Produced Result navigation did not accept keyboard focus");
+  }
+  const resultNavigation = page.waitForURL(`${frontendUrl}${producedResultHref}`);
+  await page.keyboard.press("Enter");
+  await resultNavigation;
+  await page.getByRole("heading", { name: "Result reference", exact: true }).waitFor();
+
+  await page.goto(`${frontendUrl}/onboarding`);
+  await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("link", { name: "Open dashboard", exact: true }).waitFor();
   await page.getByRole("link", { name: "Open dashboard", exact: true }).click();
 
@@ -292,6 +500,23 @@ try {
   await signIn(page);
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 } catch (error) {
+  await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
+  if (page) {
+    await page.screenshot({
+      path: join(artifactDir, "browser-first-run-failure.png"),
+      fullPage: true,
+    }).catch(() => undefined);
+    await writeFile(
+      join(artifactDir, "browser-first-run-page.txt"),
+      await page.locator("body").innerText().catch(() => "page body unavailable"),
+      "utf8",
+    ).catch(() => undefined);
+  }
+  await writeFile(
+    join(artifactDir, "browser-first-run-process.log"),
+    `--- platform-server ---\n${backendLog}\n--- vite ---\n${viteLog}`,
+    "utf8",
+  ).catch(() => undefined);
   throw new Error(
     `${error instanceof Error ? error.stack ?? error.message : String(error)}\n\n`
     + `--- platform-server ---\n${backendLog}\n`

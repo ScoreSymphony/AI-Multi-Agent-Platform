@@ -57,8 +57,17 @@ class ModelRuntime:
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         config, provider, routed_request = await self._resolve_target(request)
+        timeout = request.context.control.timeout_seconds
         try:
-            provider_response = await provider.generate(routed_request)
+            if timeout is None:
+                provider_response = await provider.generate(routed_request)
+            else:
+                provider_response = await asyncio.wait_for(
+                    provider.generate(routed_request),
+                    timeout,
+                )
+        except TimeoutError as exc:
+            raise self._timeout_error(request, config, timeout) from exc
         except asyncio.CancelledError as exc:
             raise self._cancelled_error(request, config) from exc
         return self._normalize_response(request, config, provider_response)
@@ -68,39 +77,67 @@ class ModelRuntime:
 
         async def iterate() -> AsyncIterator[ModelStreamEvent]:
             config, provider, routed_request = await self._resolve_target(request)
+            timeout = request.context.control.timeout_seconds
             try:
-                async for event in provider.stream(routed_request):
-                    if event.request_id != request.request_id:
-                        raise ContractError(
-                            ErrorCode.CONTRACT_VIOLATION,
-                            "model provider stream event request_id does not match request",
-                            provider_id=config.provider_id,
-                            details={
-                                "expected_request_id": request.request_id,
-                                "reported_request_id": event.request_id,
-                            },
-                        )
-
-                    provider_reported_model_ref = event.model_ref
-                    response = event.response
-                    if response is not None:
-                        response = self._normalize_response(request, config, response)
-
-                    runtime_metadata = self._runtime_metadata(
+                if timeout is None:
+                    async for event in self._stream_events(
                         request,
                         config,
-                        provider_reported_model_ref,
-                    )
-                    yield replace(
-                        event,
-                        model_ref=config.config_id,
-                        response=response,
-                        adapter_metadata=event.adapter_metadata + (runtime_metadata,),
-                    )
+                        provider,
+                        routed_request,
+                    ):
+                        yield event
+                else:
+                    async with asyncio.timeout(timeout):
+                        async for event in self._stream_events(
+                            request,
+                            config,
+                            provider,
+                            routed_request,
+                        ):
+                            yield event
+            except TimeoutError as exc:
+                raise self._timeout_error(request, config, timeout) from exc
             except asyncio.CancelledError as exc:
                 raise self._cancelled_error(request, config) from exc
 
         return iterate()
+
+    async def _stream_events(
+        self,
+        request: ModelRequest,
+        config: ModelConfiguration,
+        provider: ModelProvider,
+        routed_request: ModelRequest,
+    ) -> AsyncIterator[ModelStreamEvent]:
+        async for event in provider.stream(routed_request):
+            if event.request_id != request.request_id:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "model provider stream event request_id does not match request",
+                    provider_id=config.provider_id,
+                    details={
+                        "expected_request_id": request.request_id,
+                        "reported_request_id": event.request_id,
+                    },
+                )
+
+            provider_reported_model_ref = event.model_ref
+            response = event.response
+            if response is not None:
+                response = self._normalize_response(request, config, response)
+
+            runtime_metadata = self._runtime_metadata(
+                request,
+                config,
+                provider_reported_model_ref,
+            )
+            yield replace(
+                event,
+                model_ref=config.config_id,
+                response=response,
+                adapter_metadata=event.adapter_metadata + (runtime_metadata,),
+            )
 
     async def generate_canonical(
         self,
@@ -208,6 +245,24 @@ class ModelRuntime:
                 "provider_id": config.provider_id,
                 "provider_reported_model_ref": provider_reported_model_ref,
                 "correlation_id": request.context.correlation_id,
+            },
+        )
+
+    @staticmethod
+    def _timeout_error(
+        request: ModelRequest,
+        config: ModelConfiguration,
+        timeout_seconds: float | None,
+    ) -> ContractError:
+        return ContractError(
+            ErrorCode.TIMEOUT,
+            "model request timed out",
+            provider_id=config.provider_id,
+            retryable=True,
+            details={
+                "request_id": request.request_id,
+                "model_config_id": config.config_id,
+                "timeout_seconds": timeout_seconds,
             },
         )
 

@@ -9,8 +9,7 @@ import pytest
 
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.distributed import LocalWorker, WorkerJobRequest
-from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.high_availability import (
+from ai_multi_agent_platform.distributed.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
     ControlPlaneRole,
@@ -19,10 +18,11 @@ from ai_multi_agent_platform.high_availability import (
     NotLeaderError,
     ReconciliationResult,
 )
-from ai_multi_agent_platform.high_availability.worker_transport import (
+from ai_multi_agent_platform.distributed.high_availability.worker_transport import (
     FencedTransportWorkerDispatcher,
     FencedWorkerTransportEndpoint,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.testing import FakeLifecycleBackend
 

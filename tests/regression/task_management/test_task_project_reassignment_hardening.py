@@ -16,7 +16,7 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.control_plane.models import ActorContext
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel, TaskState
-from ai_multi_agent_platform.task_reassignment import PreparedTaskProjectMove
+from ai_multi_agent_platform.task_management.reassignment import PreparedTaskProjectMove
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
     FakeLifecycleBackend,

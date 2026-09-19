@@ -27,8 +27,8 @@ Authenticated Control Plane
         `-- ReferenceExecutor
 ```
 
-Hermes, Forge, LiteLLM, MCP, remote Workers, Kubernetes, cloud services and paid external
-AI/API services are not required for this profile. Advanced profiles add replaceable services
+Hermes, LiteLLM, MCP, remote Workers, Kubernetes, cloud services and paid external
+AI/API services are not required for this profile. The retired Forge runtime is not shipped by this profile. Advanced profiles add replaceable services
 without changing canonical Task/Run contracts.
 
 ## Prerequisites
@@ -56,8 +56,8 @@ pip install '.[server]'
 
 On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`.
 
-The `server` extra installs the HTTP server needed by `platform-server serve`. Hermes, Forge,
-LiteLLM, MCP and model-provider extras remain optional and are not required by this baseline.
+The `server` extra installs the HTTP server needed by `platform-server serve`. Hermes,
+LiteLLM, MCP and model-provider extras remain optional and are not required by this baseline. There is no active Forge runtime extra.
 
 ## Generate and load configuration
 
@@ -91,6 +91,7 @@ export AI_MAP_HOST="127.0.0.1"
 export AI_MAP_PORT="8000"
 export AI_MAP_SECURE_COOKIE="true"
 export AI_MAP_LOG_LEVEL="info"
+export AI_MAP_SHUTDOWN_TIMEOUT_SECONDS="30"
 ```
 
 The deployment loader imports only explicitly supported environment variables. It does not
@@ -163,7 +164,7 @@ platform-server smoke
 
 This creates a small Project and executes one canonical Task/Run through the in-process
 `ReferenceOrchestrator` and `ReferenceExecutor`. It requires no paid API, model endpoint,
-remote Worker, MCP server, LiteLLM, Hermes or Forge.
+remote Worker, MCP server, LiteLLM or Hermes. The retired Forge runtime is not part of the deployment profile.
 
 The smoke uses stable idempotency keys. Re-running it, including after a process restart,
 reuses the same canonical smoke Task/Run instead of duplicating work. Success prints the
@@ -195,11 +196,18 @@ platform --endpoint http://127.0.0.1:8000 doctor
 Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
 second backend-probing diagnostic authority.
 
-Required persistence/configuration failures block composition/startup and are reported as
-configuration failures. Optional external adapters are not required by this profile and
-therefore cannot make the baseline unready merely by being absent. Advanced profiles that
-enable optional adapters may report their degradation through the progressive #16 health
-model.
+Required configuration failures block composition/startup. Required persistence is additionally
+a live readiness dependency: the single-node persistence probe verifies required roots, an
+atomic write/fsync/rename/delete round-trip, free-space reserve, required durable-store presence
+and local store readability/integrity. A blocking persistence result makes `/readiness` unready
+and appears in `platform doctor` without exposing absolute host paths.
+
+See `docs/operations/PERSISTENCE_FAILURE_RECOVERY.md` for diagnostic codes, automatic cleanup,
+manual-recovery boundaries and the reference free-space thresholds.
+
+Optional external adapters are not required by this profile and therefore cannot make the
+baseline unready merely by being absent. Advanced profiles that enable optional adapters may
+report their degradation through the progressive #16 health model.
 
 ## Persistent layout
 
@@ -235,6 +243,10 @@ A clean restart uses the same `AI_MAP_DATA_DIR` and runs the same command:
 platform-server serve
 ```
 
+Before serving after a restart, local File/Workspace providers also reconcile only storage state
+whose ownership can be proven: `PENDING` File writes are tombstoned and owned stale Workspace
+materializations are removed. Cleanup failure is fail-closed; unknown temp paths are preserved.
+
 The Stage-1 regression suite verifies restart persistence for:
 
 - canonical Task/Run state;
@@ -256,9 +268,18 @@ storage.
 
 ## Shutdown
 
-Use the service manager's normal graceful stop or `Ctrl+C` for a foreground process. Uvicorn
-handles ASGI process shutdown; canonical durable state has already been committed through the
-platform persistence boundaries rather than being owned by the web-server process.
+Use the service manager's normal graceful stop or `Ctrl+C` for a foreground process. The
+single-node server first enters the #1152 process-local drain gate, rejects new authoritative
+mutations, reports `draining`/not-ready, and gives already-admitted work only the configured
+`AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` budget to settle. Uvicorn connection shutdown and ASGI
+lifespan/resource teardown share that bound.
+
+If the bound expires, process-local teardown is forced without inventing canonical terminal
+Task/Run/Step outcomes. The next process rebuilds from the same durable data root and the #707
+startup reconciliation remains the sole ordinary restart authority.
+
+See [Single-node graceful drain and shutdown recovery](SINGLE_NODE_DRAIN_SHUTDOWN.md) for the
+in-flight disposition matrix, forced-stop behavior, telemetry and operator recovery procedure.
 
 ## Update and backup hooks
 

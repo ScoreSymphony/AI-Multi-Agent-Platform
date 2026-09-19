@@ -26,6 +26,19 @@ from .models import (
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 
+_RUNTIME_INSTANCE_KINDS = frozenset(
+    {
+        "agent_run",
+        "agent_runtime",
+        "task",
+        "run",
+        "worker",
+        "node",
+        "orchestration_session",
+        "provider_runtime",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RegistryItem:
@@ -65,6 +78,10 @@ class RegistryItem:
     def __post_init__(self) -> None:
         _require_id(self.item_id, "item_id")
         object.__setattr__(self, "item_type", parse_registry_item_kind(self.item_type))
+        if self.kind in _RUNTIME_INSTANCE_KINDS:
+            raise ValueError(
+                f"runtime instance kind {self.kind!r} is not distributable Marketplace content"
+            )
         version_key(self.version)
         for value, field_name in (
             (self.name, "name"),

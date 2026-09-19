@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.high_availability import (
+from ai_multi_agent_platform.distributed.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
     InMemoryCoordinationProvider,

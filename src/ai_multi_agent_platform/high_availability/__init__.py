@@ -1,4 +1,6 @@
-"""Optional Control Plane high-availability and failover primitives."""
+"""Compatibility namespace for canonical
+:mod:`ai_multi_agent_platform.distributed.high_availability`.
+"""
 
 from .contracts import (
     AuthorityGrant,

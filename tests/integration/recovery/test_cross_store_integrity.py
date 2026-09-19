@@ -221,7 +221,7 @@ def test_manifest_records_structured_external_dependencies(tmp_path: Path) -> No
         platform_version=__version__,
         deployment_metadata={
             "profile": "single-node",
-            "optional_adapters": ["forge-sidecar"],
+            "optional_adapters": ["optional-executor-runtime"],
         },
         quiesced=True,
     )
@@ -234,6 +234,6 @@ def test_manifest_records_structured_external_dependencies(tmp_path: Path) -> No
         "provider_id": "local-model-provider",
     }
     assert by_id["secret-provider:local-secret-backend"]["restore_blocking"] is False
-    assert by_id["adapter-runtime:forge-sidecar"]["required"] is False
+    assert by_id["adapter-runtime:optional-executor-runtime"]["required"] is False
     serialized = json.dumps(dependencies, sort_keys=True)
     assert "model-provider-key" not in serialized

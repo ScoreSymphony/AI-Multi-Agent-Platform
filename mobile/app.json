@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "AI Multi-Agent Platform",
+    "slug": "ai-multi-agent-platform",
+    "version": "0.1.0",
+    "scheme": "aiagentplatform",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.scoresymphony.aimultiagentplatform"
+    },
+    "android": {
+      "package": "org.scoresymphony.aimultiagentplatform"
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Allow AI Multi-Agent Platform to unlock securely stored session credentials."
+        }
+      ]
+    ]
+  }
+}

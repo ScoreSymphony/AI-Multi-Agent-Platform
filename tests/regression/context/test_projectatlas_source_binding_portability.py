@@ -6,14 +6,14 @@ import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.repository_intelligence.models import (
+from ai_multi_agent_platform.repositories.intelligence.models import (
     RepositoryIntelligenceFreshness,
 )
-from ai_multi_agent_platform.repository_intelligence.projectatlas import (
+from ai_multi_agent_platform.repositories.intelligence.projectatlas import (
     PROJECTATLAS_ARCHIVE_SHA256,
     PROJECTATLAS_RUNTIME_VERSION,
 )
-from ai_multi_agent_platform.repository_intelligence.projectatlas_adapter import (
+from ai_multi_agent_platform.repositories.intelligence.projectatlas_adapter import (
     ProjectAtlasContainmentEvidence,
     ProjectAtlasSourceBinding,
 )

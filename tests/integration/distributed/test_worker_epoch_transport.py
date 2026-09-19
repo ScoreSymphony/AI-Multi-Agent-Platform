@@ -7,6 +7,16 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
+from ai_multi_agent_platform.distributed.high_availability import (
+    AuthorityGrant,
+    AvailabilityMode,
+    ControlPlaneFailoverService,
+    InMemoryCoordinationProvider,
+)
+from ai_multi_agent_platform.distributed.high_availability.worker_transport import (
+    FencedTransportWorkerDispatcher,
+    FencedWorkerTransportEndpoint,
+)
 from ai_multi_agent_platform.distributed.models import WorkerJobRequest
 from ai_multi_agent_platform.distributed.transport import (
     RemoteWorkerTransportError,
@@ -14,16 +24,6 @@ from ai_multi_agent_platform.distributed.transport import (
 )
 from ai_multi_agent_platform.distributed.worker import LocalWorker
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.high_availability import (
-    AuthorityGrant,
-    AvailabilityMode,
-    ControlPlaneFailoverService,
-    InMemoryCoordinationProvider,
-)
-from ai_multi_agent_platform.high_availability.worker_transport import (
-    FencedTransportWorkerDispatcher,
-    FencedWorkerTransportEndpoint,
-)
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.testing import FakeLifecycleBackend
 

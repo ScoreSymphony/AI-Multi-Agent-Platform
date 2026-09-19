@@ -246,6 +246,7 @@ export function ConnectionDetailPage({
 
   const remove = async () => {
     if (!connection) return;
+    if (!window.confirm(`Remove Connection ${connection.id} from active configuration?`)) return;
     setBusy(true);
     setActionError(null);
     try {

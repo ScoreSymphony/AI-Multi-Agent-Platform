@@ -99,8 +99,8 @@ Verified upstream references:
 
 | Candidate | License / hosting | Isolation / execution shape | Platform notes | Classification | Rationale |
 |---|---|---|---|---|---|
-| Local/reference executor | Project-owned | Host/local reference execution under canonical policy | Lowest operational cost; must remain constrained by #15/#34/#37/#43 | `recommended` | Guarantees a baseline path and proves executor independence from Forge/sandbox products. |
-| Forge adapter | External upstream already in project architecture | Adapter behind canonical Executor/Worker contracts | Provider-private lifecycle must stay inside adapter | `supported` when installed | Existing intended provider; not baseline authority. |
+| Local/reference executor | Project-owned | Host/local reference execution under canonical policy | Lowest operational cost; must remain constrained by #15/#34/#37/#43 | `recommended` | Guarantees a baseline path and proves executor independence from optional sandbox/runtime products. |
+| Forge adapter (retired) | Historical external integration | Former adapter behind canonical Executor/Worker contracts | Removed under #991; no executable runtime/support claim remains | `removed/historical` | Retained only as architecture/provenance evidence; reintroduction requires a new support decision. |
 | Containarium | Existing project candidate | Container-oriented isolation provider | Requires separate security/egress/credential evaluation | `experimental/evaluate` | Keep optional until evidence supports a stable provider contract. |
 | Agent-Sandbox | Apache-2.0 per #798 research scope; self-host; Kubernetes-native | Stateful high-isolation sandbox service | Significant Kubernetes/ops cost; #798 owns adoption evidence | `experimental/evaluate` | #799 may discover it, but must not pre-empt #798. |
 | SWE-ReX | MIT; local/cloud backends | Sandboxed code execution abstraction; local and remote providers | Supports broad platforms including non-Linux paths; provider support varies | `experimental/evaluate` | Strong new candidate for a lighter adapter seam and cross-platform execution; needs isolation/credential/egress testing. |
@@ -255,14 +255,13 @@ Workflow engine:     none externally required
 Observability:       OpenTelemetry/platform-owned evidence
 ```
 
-This baseline deliberately works without Hermes, Forge, Ollama, LiteLLM, Redis, NATS, a vector database, a workflow engine or a hosted service.
+This baseline deliberately works without Hermes, Ollama, LiteLLM, Redis, NATS, a vector database, a workflow engine or a hosted service. The retired Forge runtime is absent from the supported first-run surface.
 
 ## Supported alternatives suitable for explicit adapters
 
 - Hermes where installed and healthy.
 - Ollama, llama.cpp, vLLM, LocalAI and arbitrary compatible endpoints through ModelProvider adapters.
 - LiteLLM as an optional gateway adapter.
-- Forge as an optional execution provider.
 - pgvector/Qdrant/Chroma where retrieval is configured.
 - MCP servers behind the canonical Capability Registry.
 - SeaweedFS or other validated S3-compatible endpoints for object storage.
@@ -275,7 +274,7 @@ The following deserve focused evaluation before automatic first-run recommendati
 
 1. **Bifrost** — compare to optional LiteLLM gateway on provider coverage, OpenAI compatibility, latency, secrets, SSRF/egress handling, clustering, upgrades and security patch posture.
 2. **SGLang** — compare to vLLM on representative local models/GPUs, OpenAI compatibility, distributed serving and operational complexity.
-3. **SWE-ReX** — compare to reference/Forge/Containarium paths on isolation, Workspace mapping, Windows/Linux behavior, credentials, egress, artifacts and cancellation.
+3. **SWE-ReX** — compare to reference, Containarium and Agent-Sandbox paths on isolation, Workspace mapping, Windows/Linux behavior, credentials, egress, artifacts and cancellation.
 4. **RustFS** — validate S3 behavior needed by canonical Artifact/File storage, durability, upgrade/recovery, multi-node failure behavior and maturity before recommending over SeaweedFS.
 5. **Garage** — evaluate AGPL implications plus S3 feature fit and multi-VPS resilience.
 6. **DBOS** — evaluate only under #21 against Temporal/no-engine baseline, especially Postgres coupling, recovery semantics and canonical Run ownership.

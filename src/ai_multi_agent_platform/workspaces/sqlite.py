@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import sqlite3
 from dataclasses import replace
 from datetime import datetime
@@ -13,7 +14,7 @@ from typing import Literal, cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, validate_id
 
 from .models import (
     MaterializationOutcome,
@@ -125,6 +126,7 @@ class SqliteWorkspaceProvider(LocalWorkspaceProvider):
         self._persistence_lock = asyncio.Lock()
         self._initialize_database()
         self._load_state()
+        self._recover_stale_materializations()
 
     def _connect_workspace_db(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._workspace_db_path)
@@ -229,6 +231,36 @@ class SqliteWorkspaceProvider(LocalWorkspaceProvider):
                 ErrorCode.CONTRACT_VIOLATION,
                 "stored workspace metadata is invalid",
             ) from exc
+
+    def _recover_stale_materializations(self) -> None:
+        """Remove only provider-owned materializations left by a previous process."""
+
+        try:
+            entries = tuple(self._root.iterdir())
+        except OSError as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to inspect stale workspace materializations",
+            ) from exc
+
+        for path in entries:
+            if not path.name.startswith("materialization_"):
+                continue
+            try:
+                validate_id(path.name, "materialization")
+            except ValueError:
+                continue
+            try:
+                self._make_writable(path)
+                if path.is_dir() and not path.is_symlink():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise ContractError(
+                    ErrorCode.BACKEND_ERROR,
+                    "failed to recover stale workspace materialization",
+                ) from exc
 
     async def create_workspace(
         self,

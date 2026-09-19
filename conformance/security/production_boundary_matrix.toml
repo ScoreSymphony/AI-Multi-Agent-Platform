@@ -1,0 +1,607 @@
+schema_version = 1
+issue = 1233
+threat_model = "docs/SECURITY_THREAT_MODEL.md"
+
+[global_regressions]
+missing_or_expired_authentication = [
+  "tests/integration/cli/test_authentication_and_approvals.py::test_auth_cli_reports_unauthenticated_revoked_and_expired_credentials",
+]
+cross_project_or_workspace_access = [
+  "tests/integration/workspaces/test_run_workspace_bindings.py::test_workspace_bound_start_rejects_cross_project_workspace",
+  "tests/integration/security/test_acceptance.py::test_workspace_policy_prevents_cross_workspace_session_creation",
+]
+revoked_permissions = [
+  "tests/integration/organizations/test_organization_domain.py::test_resource_ownership_sharing_revoke_and_cross_org_isolation",
+]
+missing_or_stale_approval = [
+  "tests/integration/security/test_authorization_hardening.py::test_control_plane_create_approval_cannot_be_reused_for_changed_payload",
+  "tests/integration/security/test_policy_lifecycle_revision_binding.py::test_enable_approval_is_invalid_after_policy_revision_changes",
+]
+secret_redaction = [
+  "tests/unit/security/test_secret_provider.py::test_redaction_helpers_cover_representative_operational_api_and_export_surfaces",
+  "tests/integration/security/test_terminal_sessions.py::test_default_terminal_redaction_scrubs_sensitive_environment_assignments",
+]
+provider_failure = [
+  "tests/unit/capabilities/test_capabilities.py::test_provider_error_is_mapped",
+  "tests/integration/application_distribution/test_control_plane_security.py::test_provider_failure_never_marks_canonical_release_published",
+]
+unavailable_policy_dependency = [
+  "tests/integration/security/test_authorization_final_boundaries.py::test_composed_control_plane_is_fail_closed_without_explicit_dev_opt_out",
+]
+forged_external_or_provider_identifiers = [
+  "tests/integration/security/test_worker_protocol_security.py::test_registration_rejects_wrong_worker_identity_and_incomplete_snapshot",
+  "tests/integration/application_distribution/test_remote_worker_result_evidence.py::test_remote_build_rejects_worker_result_with_mismatched_provenance",
+]
+replay_or_idempotency = [
+  "tests/unit/automation/test_automation.py::test_duplicate_webhook_delivery_does_not_duplicate_task",
+  "tests/integration/goals/test_automation_runtime.py::test_automation_delivery_generates_goal_task_once_and_replay_is_deduplicated",
+]
+remote_worker_identity_mismatch = [
+  "tests/integration/security/test_worker_protocol_security.py::test_registration_rejects_wrong_worker_identity_and_incomplete_snapshot",
+  "tests/integration/application_distribution/test_remote_worker_result_evidence.py::test_remote_build_rejects_worker_result_with_mismatched_provenance",
+]
+
+[[surface]]
+id = "control-plane-mutations"
+owner = "Control Plane + canonical authentication/authorization"
+authentication_boundary = "Authenticated northbound RequestContext; missing, expired or revoked credentials fail before mutation."
+authorization_boundary = "ControlPlaneAuthorizationBridge maps public commands to canonical #15 actions/resources."
+approval_boundary = "AuthorizationGate binds Approval to the exact canonical action digest."
+scope_boundary = "Project/resource scope is server-derived and cannot be substituted by a caller."
+secret_boundary = "Public request/error/audit state carries references and redacted metadata, not plaintext secret material."
+audit_boundary = "Canonical authorization audit records retain actor/action/resource/correlation context."
+failure_boundary = "ContractError/public HTTP projection normalizes authentication, policy and provider failures."
+fail_closed_boundary = "Production composition requires an explicit authorization boundary unless a development-only opt-out is selected."
+public_error_boundary = "Northbound errors expose canonical categories/codes without raw provider internals."
+provider_identity_boundary = "Provider-private identity is diagnostic metadata and never grants Control Plane authority."
+allow_evidence = [
+  "tests/integration/security/test_authorization_hardening.py::test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approval",
+]
+deny_evidence = [
+  "tests/integration/security/test_control_plane_authentication_hardening.py::test_15_policy_denies_even_when_credential_scope_allows",
+]
+approval_evidence = [
+  "tests/integration/security/test_authorization_hardening.py::test_control_plane_create_approval_cannot_be_reused_for_changed_payload",
+]
+scope_evidence = [
+  "tests/unit/authorization/test_approval_project_scope.py::test_approval_decision_cannot_substitute_another_project_scope",
+]
+secret_evidence = [
+  "tests/integration/security/test_control_plane_authentication_hardening.py::test_scoped_personal_credential_http_contract_exposes_safe_scope_metadata",
+]
+failure_evidence = [
+  "tests/integration/security/test_authorization_final_boundaries.py::test_composed_control_plane_is_fail_closed_without_explicit_dev_opt_out",
+]
+identity_evidence = []
+audit_evidence = []
+
+[[surface]]
+id = "capability-execution"
+owner = "CapabilityRegistry / CapabilityInvoker"
+authentication_boundary = "Caller identity is supplied through canonical invocation context rather than provider handles."
+authorization_boundary = "Capability policy hooks decide the concrete canonical invocation before provider execution."
+approval_boundary = "Approval-required capability invocations bind to the exact canonical invocation digest."
+scope_boundary = "Capability target/caller scope is validated before execution."
+secret_boundary = "Credential requirements are references/classification metadata; providers do not receive secret authority implicitly."
+audit_boundary = "Invocation trace/evidence uses canonical capability and invocation identities."
+failure_boundary = "Timeout, cancellation and provider failures map to canonical errors."
+fail_closed_boundary = "DENY or unresolved REQUIRE_APPROVAL stops before provider execution."
+public_error_boundary = "Provider errors are translated to canonical ContractError categories."
+provider_identity_boundary = "Capability identity is canonical; provider/tool handles remain adapter metadata."
+allow_evidence = [
+  "tests/unit/capabilities/test_capabilities.py::test_native_tool_success_and_trace_preservation",
+]
+deny_evidence = [
+  "tests/unit/capabilities/test_capabilities.py::test_permission_denied_before_provider_execution",
+]
+approval_evidence = [
+  "tests/unit/capabilities/test_capabilities.py::test_approval_required_is_bound_to_canonical_tool_invocation",
+]
+scope_evidence = [
+  "tests/integration/security/test_service.py::test_scope_authorization_and_target_scope_are_enforced",
+]
+secret_evidence = [
+  "tests/unit/capabilities/test_registry_discovery_and_compatibility.py::test_credential_classification_contains_no_secret_backend_contract",
+]
+failure_evidence = [
+  "tests/unit/capabilities/test_capabilities.py::test_provider_error_is_mapped",
+]
+identity_evidence = [
+  "tests/integration/security/test_service.py::test_provider_replacement_preserves_canonical_assignment_identity",
+]
+audit_evidence = []
+
+[[surface]]
+id = "mcp-calls"
+owner = "MCP adapter behind CapabilityInvoker"
+authentication_boundary = "MCP transport identity does not replace the canonical caller identity."
+authorization_boundary = "MCP tools execute through the same canonical capability policy path as native tools."
+approval_boundary = "Canonical CapabilityInvoker approval binding applies before MCP provider execution."
+scope_boundary = "Canonical invocation scope and egress classification are checked before remote MCP access."
+secret_boundary = "Egress policy blocks sensitive data before the MCP provider boundary."
+audit_boundary = "MCP execution retains canonical capability/invocation evidence rather than session authority."
+failure_boundary = "MCP provider failures are normalized by the canonical capability boundary."
+fail_closed_boundary = "Blocked egress or unresolved policy prevents the MCP call."
+public_error_boundary = "MCP-native failures do not become public authority-bearing errors."
+provider_identity_boundary = "MCP session/server/tool identifiers remain adapter-private metadata."
+allow_evidence = [
+  "tests/unit/capabilities/test_capabilities.py::test_mcp_tool_uses_same_canonical_invocation_path",
+]
+deny_evidence = [
+  "tests/integration/security/test_capability_egress_paths.py::test_mcp_tool_is_blocked_by_same_egress_gate_for_secret_data",
+]
+approval_evidence = [
+  "tests/unit/capabilities/test_capabilities.py::test_approval_required_is_bound_to_canonical_tool_invocation",
+]
+scope_evidence = []
+secret_evidence = [
+  "tests/integration/security/test_capability_egress_paths.py::test_mcp_tool_is_blocked_by_same_egress_gate_for_secret_data",
+]
+failure_evidence = []
+identity_evidence = []
+audit_evidence = []
+
+[[surface]]
+id = "browser-network-actions"
+owner = "Browser capability / egress policy"
+authentication_boundary = "Browser actions originate from canonical caller/session context rather than browser backend identity."
+authorization_boundary = "Browser capabilities and outbound targets are policy checked before provider execution."
+approval_boundary = "Side-effecting form submission is policy gated through the canonical capability path."
+scope_boundary = "Browser sessions are isolated by canonical Project scope."
+secret_boundary = "Downloads/provenance and egress checks prevent sensitive values from being exposed."
+audit_boundary = "Canonical browser/capability trace preserves correlation without backend-private session authority."
+failure_boundary = "Timeout/cancellation/provider failures map to canonical browser errors."
+fail_closed_boundary = "Private/blocked targets and sensitive egress are denied before network execution."
+public_error_boundary = "Browser errors expose canonical metadata, not cookies/backend handles."
+provider_identity_boundary = "Browser provider/session handles remain replaceable metadata."
+allow_evidence = [
+  "tests/unit/browser/test_browser_capability.py::test_navigation_extract_follow_and_trace_preservation",
+]
+deny_evidence = [
+  "tests/unit/browser/test_browser_capability.py::test_network_policy_blocks_private_target",
+]
+approval_evidence = [
+  "tests/unit/browser/test_browser_capability.py::test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file",
+]
+scope_evidence = [
+  "tests/unit/browser/test_browser_capability.py::test_session_isolation_by_project",
+]
+secret_evidence = [
+  "tests/integration/security/test_capability_egress_paths.py::test_browser_network_read_is_blocked_before_provider_execution_for_secret_data",
+]
+failure_evidence = [
+  "tests/unit/browser/test_browser_capability.py::test_timeout_and_cancellation_use_canonical_errors_and_browser_metadata",
+]
+identity_evidence = [
+  "tests/unit/browser/test_browser_capability.py::test_provider_replacement_unsupported_operation_and_disabled_path",
+]
+audit_evidence = []
+
+[[surface]]
+id = "terminal-process-execution"
+owner = "TerminalSessionService / Control Plane"
+authentication_boundary = "Only registered canonical actors can read/attach/use terminal sessions."
+authorization_boundary = "Terminal lifecycle and execution-owning cancellation stay behind canonical authorization."
+approval_boundary = "Interactive/manual terminal creation may resume only after exact Approval."
+scope_boundary = "Terminal sessions are Workspace-bounded and cross-workspace creation is rejected."
+secret_boundary = "Terminal frames and environment output are redacted before canonical persistence/streaming."
+audit_boundary = "Input/content audit records avoid storing secret command content."
+failure_boundary = "Worker loss/inactivity/termination become explicit canonical terminal states."
+fail_closed_boundary = "Missing evidence sink for retained transcript fails closed."
+public_error_boundary = "Backend PTY/session handles are hidden from canonical payloads."
+provider_identity_boundary = "Canonical TerminalSession identity is independent of backend handle identity."
+allow_evidence = [
+  "tests/integration/security/test_terminal_sessions.py::test_reference_session_is_canonical_and_hides_backend_handle",
+]
+deny_evidence = [
+  "tests/integration/security/test_terminal_sessions.py::test_unregistered_actor_cannot_read_or_attach_session",
+]
+approval_evidence = [
+  "tests/integration/security/test_acceptance.py::test_manual_interactive_session_can_resume_after_exact_approval",
+]
+scope_evidence = [
+  "tests/integration/security/test_acceptance.py::test_workspace_policy_prevents_cross_workspace_session_creation",
+]
+secret_evidence = [
+  "tests/integration/security/test_terminal_sessions.py::test_default_terminal_redaction_scrubs_sensitive_environment_assignments",
+]
+failure_evidence = [
+  "tests/integration/security/test_acceptance.py::test_transcript_retention_fails_closed_without_evidence_sink",
+]
+identity_evidence = [
+  "tests/integration/security/test_acceptance.py::test_canonical_session_and_stream_payloads_do_not_leak_backend_private_handle_types",
+]
+audit_evidence = [
+  "tests/integration/security/test_terminal_sessions.py::test_stream_output_is_redacted_and_input_audit_does_not_store_content",
+]
+
+[[surface]]
+id = "repository-git-operations"
+owner = "RepositoryService / LocalGitRepositoryProvider"
+authentication_boundary = "Repository mutations are invoked from canonical actor/operation context."
+authorization_boundary = "Repository write/push operations pass service/capability policy before Git side effects."
+approval_boundary = "Repository side effects remain subordinate to canonical capability/authorization approval policy."
+scope_boundary = "Repository materialization and operations remain Workspace-bounded."
+secret_boundary = "SecretReference/external identity values do not leak into local clone paths or public state."
+audit_boundary = "Canonical repository revision/provenance records describe the side effect."
+failure_boundary = "Missing Git/provider failures map to canonical provider errors."
+fail_closed_boundary = "Denied push stops before provider side effect."
+public_error_boundary = "Git/provider-private diagnostics are normalized at the repository boundary."
+provider_identity_boundary = "Repository identity/revision stays canonical across provider replacement."
+allow_evidence = [
+  "tests/repository_git_cases.py::test_local_git_initialize_branch_status_diff_commit_and_revision",
+]
+deny_evidence = [
+  "tests/repository_git_cases.py::test_push_is_denied_before_provider_side_effect",
+]
+approval_evidence = []
+scope_evidence = [
+  "tests/repository_git_cases.py::test_workspace_materializes_exact_repository_revision_into_canonical_files",
+]
+secret_evidence = [
+  "tests/repository_git_cases.py::test_secret_reference_and_external_identity_do_not_leak_local_clone_path",
+]
+failure_evidence = [
+  "tests/repository_git_cases.py::test_missing_git_binary_is_provider_unavailable",
+]
+identity_evidence = [
+  "tests/repository_git_cases.py::test_provider_replacement_preserves_canonical_repository_identity",
+]
+audit_evidence = []
+
+[[surface]]
+id = "connector-actions"
+owner = "ConnectorService through canonical capability pipeline"
+authentication_boundary = "Connector actions retain the canonical actor, not provider account identity, as caller authority."
+authorization_boundary = "Connector actions execute through canonical CapabilityInvoker policy."
+approval_boundary = "Connector side effects inherit the capability approval boundary where policy requires it."
+scope_boundary = "Connections and actions are Project/owner scoped."
+secret_boundary = "Credentials are SecretReferences and invalid/missing credentials fail canonically."
+audit_boundary = "Connector action provenance retains canonical invocation and namespaced external identity."
+failure_boundary = "Health/provider failures are queryable and normalized."
+fail_closed_boundary = "Permission denial blocks connector provider action."
+public_error_boundary = "Connector errors expose canonical categories rather than raw credential/provider state."
+provider_identity_boundary = "External resource identity remains namespaced metadata."
+allow_evidence = [
+  "tests/integration/connectors/test_connector_runtime.py::test_connector_action_uses_canonical_capability_pipeline",
+]
+deny_evidence = [
+  "tests/integration/connectors/test_connector_runtime.py::test_permission_denial_blocks_connector_action",
+]
+approval_evidence = []
+scope_evidence = []
+secret_evidence = [
+  "tests/integration/connectors/test_connector_runtime.py::test_missing_and_invalid_credentials_fail_canonically",
+]
+failure_evidence = [
+  "tests/integration/connectors/test_connector_runtime.py::test_health_failure_and_recovery_are_queryable",
+]
+identity_evidence = [
+  "tests/integration/connectors/test_connector_runtime.py::test_resource_list_read_and_external_serialization_preserve_namespaced_identity",
+]
+audit_evidence = []
+
+[[surface]]
+id = "plugin-actions"
+owner = "Plugin runtime through Control Plane"
+authentication_boundary = "Plugin lifecycle is reachable through canonical Control Plane context, not direct browser/provider authority."
+authorization_boundary = "Plugin actions map to canonical plugin authorization resources."
+approval_boundary = "Manifest/permission-sensitive activation remains subject to canonical authorization/approval."
+scope_boundary = "Plugin lifecycle uses canonical installation/resource scope."
+secret_boundary = "Plugin manifests do not become a plaintext secret transport."
+audit_boundary = "Lifecycle changes remain canonical Control Plane mutations."
+failure_boundary = "Stale/uninspected manifests are rejected before activation."
+fail_closed_boundary = "Authoritative permission resolution is required before enabling."
+public_error_boundary = "Plugin implementation failures remain behind canonical error translation."
+provider_identity_boundary = "Plugin implementation identity never replaces canonical resource identity."
+allow_evidence = [
+  "tests/integration/plugins/test_plugin_control_plane.py::test_reference_plugin_lifecycle_runs_through_control_plane_only",
+]
+deny_evidence = [
+  "tests/integration/plugins/test_plugin_control_plane.py::test_enable_requires_authoritative_permission_resolution",
+]
+approval_evidence = []
+scope_evidence = []
+secret_evidence = []
+failure_evidence = [
+  "tests/integration/plugins/test_plugin_control_plane.py::test_install_refuses_stale_or_uninspected_manifest_digest",
+]
+identity_evidence = [
+  "tests/integration/plugins/test_plugin_control_plane.py::test_plugin_actions_map_to_plugin_authorization_resource",
+]
+audit_evidence = []
+
+[[surface]]
+id = "application-actions"
+owner = "Application Control Plane service"
+authentication_boundary = "Application lifecycle is initiated through canonical Control Plane request context."
+authorization_boundary = "Application mutation authorization occurs before owner/backend mutation."
+approval_boundary = "Application configuration approval binds to the exact payload."
+scope_boundary = "Application/release operations preserve canonical Project/Workspace ownership."
+secret_boundary = "Application backend configuration uses canonical secret/reference boundaries."
+audit_boundary = "Application mutation decisions remain visible through canonical Control Plane/audit state."
+failure_boundary = "Runtime/provider failures are canonicalized and never mark false success."
+fail_closed_boundary = "Denied application actions stop before mutation."
+public_error_boundary = "Application runtime failures are projected as canonical errors."
+provider_identity_boundary = "Backend handles remain noncanonical implementation metadata."
+allow_evidence = [
+  "tests/unit/applications/test_application_control_plane.py::test_lifecycle_commands_converge_through_registered_boundary",
+]
+deny_evidence = [
+  "tests/unit/applications/test_application_control_plane.py::test_authorization_denial_happens_before_application_mutation",
+]
+approval_evidence = [
+  "tests/integration/security/test_application_authorization_approval.py::test_application_configuration_approval_is_payload_bound_and_audited",
+]
+scope_evidence = []
+secret_evidence = []
+failure_evidence = [
+  "tests/unit/applications/test_application_control_plane.py::test_runtime_failures_are_canonicalized_at_control_plane_boundary",
+]
+identity_evidence = []
+audit_evidence = [
+  "tests/integration/security/test_application_authorization_approval.py::test_application_configuration_approval_is_payload_bound_and_audited",
+]
+
+[[surface]]
+id = "local-executor-dispatch"
+owner = "Reference Executor"
+authentication_boundary = "Execution is admitted by canonical caller/capability policy before the Executor receives work."
+authorization_boundary = "Executor execution is subordinate to canonical Run/capability authorization."
+approval_boundary = "Approval is resolved before a privileged capability reaches the Executor."
+scope_boundary = "Filesystem execution is confined to canonical Workspace roots."
+secret_boundary = "Executor environment/diagnostics do not acquire plaintext secret authority implicitly."
+audit_boundary = "Run/Executor evidence remains tied to canonical Run identity."
+failure_boundary = "Cancellation and unexpected executor failures are canonicalized."
+fail_closed_boundary = "Traversal/symlink escapes are rejected."
+public_error_boundary = "Unexpected backend failures are contained without raw diagnostics."
+provider_identity_boundary = "Executor implementation identity does not replace canonical Run/Workspace identity."
+allow_evidence = [
+  "tests/contract/execution/test_reference_executor.py::test_write_artifact_preserves_exact_utf8_bytes",
+]
+deny_evidence = [
+  "tests/integration/security/test_executor_confinement.py::test_reference_executor_rejects_workspace_traversal",
+]
+approval_evidence = []
+scope_evidence = [
+  "tests/integration/security/test_executor_confinement.py::test_reference_executor_rejects_workspace_traversal",
+]
+secret_evidence = []
+failure_evidence = [
+  "tests/contract/execution/test_reference_executor.py::test_unexpected_executor_failure_is_contained_without_raw_diagnostics",
+]
+identity_evidence = []
+audit_evidence = []
+
+[[surface]]
+id = "remote-worker-dispatch"
+owner = "Distributed scheduler / Worker transport"
+authentication_boundary = "Remote registration/heartbeat/dispatch use canonical Worker service identity and replay-resistant credentials."
+authorization_boundary = "Dispatch authorization is evaluated before Worker execution."
+approval_boundary = "Remote execution cannot widen a canonical approval/authorization decision."
+scope_boundary = "Workspace refs cross transport while Worker-local paths remain noncanonical."
+secret_boundary = "Remote profiles require canonical SecretReference-backed credentials."
+audit_boundary = "Canonical Run/Worker/Node identity and trace context survive remote dispatch."
+failure_boundary = "Worker loss/reconnect and result admission have explicit canonical recovery/failure states."
+fail_closed_boundary = "Wrong Worker identity, mismatched result provenance and denied authorization are rejected."
+public_error_boundary = "Remote transport/provider errors are normalized without exposing credential material."
+provider_identity_boundary = "Worker/runtime-local handles do not become canonical task/run authority."
+allow_evidence = [
+  "tests/integration/deployment/test_advanced_deployment.py::test_authenticated_remote_profile_dispatches_through_transport_contract",
+]
+deny_evidence = [
+  "tests/integration/security/test_security_result_recovery.py::test_dispatch_authorization_denial_releases_reservation_before_worker_execution",
+  "tests/integration/security/test_worker_protocol_security.py::test_registration_rejects_wrong_worker_identity_and_incomplete_snapshot",
+]
+approval_evidence = []
+scope_evidence = [
+  "tests/integration/deployment/test_advanced_deployment.py::test_workspace_root_is_local_only_and_refs_survive_transport_codec",
+]
+secret_evidence = [
+  "tests/integration/deployment/test_advanced_deployment.py::test_remote_profile_requires_tls_and_canonical_secret_reference",
+]
+failure_evidence = [
+  "tests/integration/deployment/test_advanced_deployment.py::test_worker_loss_marks_active_remote_job_lost_and_reregistration_recovers",
+]
+identity_evidence = [
+  "tests/integration/application_distribution/test_remote_worker_result_evidence.py::test_remote_build_rejects_worker_result_with_mismatched_provenance",
+]
+audit_evidence = []
+
+[[surface]]
+id = "marketplace-lifecycle"
+owner = "Registry/Marketplace Control Plane + owner handlers"
+authentication_boundary = "Marketplace mutations enter through canonical Control Plane caller context."
+authorization_boundary = "Install/update/uninstall map to canonical create/modify/delete authorization actions."
+approval_boundary = "Installation approval binds to resolved permission/source state and exact action digest."
+scope_boundary = "Marketplace owner activation receives validated canonical context; owner handlers cannot self-authorize."
+secret_boundary = "Marketplace metadata/artifacts do not grant secret authority."
+audit_boundary = "AuthorizationGate records canonical marketplace mutation decisions."
+failure_boundary = "Provider/owner/validation failures map to canonical conflict/unavailable/backend errors."
+fail_closed_boundary = "Policy denial or missing Approval stops before owner mutation."
+public_error_boundary = "Marketplace provider failures expose bounded canonical reason metadata."
+provider_identity_boundary = "Source/handler/provider identity stays metadata and cannot become platform authority."
+allow_evidence = [
+  "tests/integration/plugins/test_marketplace_cross_kind_acceptance.py::test_cross_kind_marketplace_owner_restart_and_uninstall_acceptance",
+]
+deny_evidence = [
+  "tests/integration/security/test_marketplace_authorization_enforcement.py::test_marketplace_install_denial_stops_before_owner_mutation",
+]
+approval_evidence = [
+  "tests/integration/security/test_marketplace_authorization_enforcement.py::test_marketplace_install_requires_canonical_approval_before_owner_mutation",
+  "tests/integration/security/test_marketplace_authorization_enforcement.py::test_marketplace_approval_digest_binds_resolved_permission_state",
+]
+scope_evidence = []
+secret_evidence = []
+failure_evidence = []
+identity_evidence = []
+audit_evidence = [
+  "tests/integration/security/test_marketplace_authorization_enforcement.py::test_marketplace_install_resumes_after_exact_canonical_approval",
+]
+
+[[surface]]
+id = "automation-triggered-actions"
+owner = "Automation runtime -> canonical Task/Goal admission"
+authentication_boundary = "External/webhook deliveries are verified before automation processing where authentication is claimed."
+authorization_boundary = "Generated canonical work re-enters normal Task/Goal authorization rather than inheriting event authority."
+approval_boundary = "Automation cannot fabricate Approval; downstream side effects use normal exact-action gates."
+scope_boundary = "Automation create/delivery is bound to requested Project/owner scope."
+secret_boundary = "Webhook verification uses secret references and event payload is treated as untrusted data."
+audit_boundary = "Automation delivery/provenance and dedupe state remain queryable."
+failure_boundary = "Retryable failures remain retryable without duplicate canonical side effects."
+fail_closed_boundary = "Spoofed webhook or unauthorized generated Task is rejected."
+public_error_boundary = "Automation/provider failures are normalized and do not expose verification secret material."
+provider_identity_boundary = "Webhook/provider event identifiers are dedupe/provenance metadata, not authorization."
+allow_evidence = [
+  "tests/integration/goals/test_automation_runtime.py::test_automation_delivery_generates_goal_task_once_and_replay_is_deduplicated",
+]
+deny_evidence = [
+  "tests/unit/automation/test_automation.py::test_unauthorized_generated_task_fails_inside_normal_task_admission",
+  "tests/unit/automation/test_automation.py::test_spoofed_webhook_is_rejected_and_queryable",
+]
+approval_evidence = []
+scope_evidence = [
+  "tests/integration/security/test_runtime_security.py::test_automation_create_authorizes_requested_project_scope",
+]
+secret_evidence = []
+failure_evidence = [
+  "tests/unit/automation/test_automation.py::test_failed_processing_can_retry_same_delivery_without_duplicate_occurrence",
+]
+identity_evidence = []
+audit_evidence = [
+  "tests/unit/automation/test_automation.py::test_duplicate_webhook_delivery_does_not_duplicate_task",
+]
+
+[[surface]]
+id = "import-export"
+owner = "Portability package / import executor"
+authentication_boundary = "Import/export is invoked through platform-owned operations; package contents never carry caller authority."
+authorization_boundary = "Destination ownership/scope and owner-domain handlers decide mutation eligibility."
+approval_boundary = "Imported payload cannot import or fabricate Approval authority."
+scope_boundary = "Implicit owner transfer/cross-scope remap is rejected before mutation."
+secret_boundary = "Plaintext secret-bearing fields are rejected; SecretReference placeholders remain portable."
+audit_boundary = "Manifest/checksum/provenance describe imported/exported canonical resources."
+failure_boundary = "Integrity/version/handler failures occur before or roll back canonical mutation."
+fail_closed_boundary = "Unknown handlers, invalid preview, owner transfer and plaintext secret fields fail closed."
+public_error_boundary = "Import failures are canonical and avoid serializing secret/runtime state."
+provider_identity_boundary = "Backend-private runtime state is rejected recursively."
+allow_evidence = [
+  "tests/integration/portability/test_portability.py::test_portable_package_round_trip_preserves_manifest_and_integrity",
+]
+deny_evidence = [
+  "tests/integration/portability/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
+]
+approval_evidence = []
+scope_evidence = [
+  "tests/integration/portability/test_portability_connectors.py::test_connection_import_rejects_implicit_owner_transfer_before_mutation",
+]
+secret_evidence = [
+  "tests/integration/portability/test_portability.py::test_secret_reference_placeholder_is_portable",
+  "tests/integration/portability/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
+]
+failure_evidence = [
+  "tests/integration/portability/test_import_executor.py::test_executor_resolves_all_handlers_before_first_mutation",
+]
+identity_evidence = [
+  "tests/integration/portability/test_portability.py::test_backend_private_runtime_state_is_rejected_recursively",
+]
+audit_evidence = []
+
+[[surface]]
+id = "secret-configuration-references"
+owner = "SecretProvider / SecretReference"
+authentication_boundary = "Secret resolution is requested by an already authenticated canonical operation."
+authorization_boundary = "SecretReference metadata is not itself a permission grant."
+approval_boundary = "Approval records contain references/digests, not resolved secret values."
+scope_boundary = "Secret references retain canonical scope without exposing secret material."
+secret_boundary = "Plaintext values are excluded from canonical serialization, diagnostics and export."
+audit_boundary = "Secret-provider audit records are replaceable and value-free."
+failure_boundary = "Missing/invalid secret references fail canonically before dependent side effects."
+fail_closed_boundary = "Direct serialization/redaction cannot reveal sensitive metadata."
+public_error_boundary = "Errors/logs preserve reference metadata only when safe."
+provider_identity_boundary = "Secret backend/provider identity remains replaceable metadata."
+allow_evidence = [
+  "tests/integration/portability/test_portability.py::test_secret_reference_placeholder_is_portable",
+]
+deny_evidence = [
+  "tests/integration/portability/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
+]
+approval_evidence = []
+scope_evidence = []
+secret_evidence = [
+  "tests/unit/security/test_secret_provider.py::test_secret_reference_direct_serialization_never_exposes_sensitive_metadata",
+  "tests/unit/security/test_secret_provider.py::test_redaction_helpers_cover_representative_operational_api_and_export_surfaces",
+]
+failure_evidence = []
+identity_evidence = [
+  "tests/unit/security/test_secret_provider.py::test_local_secret_provider_supports_replaceable_audit_sink",
+]
+audit_evidence = [
+  "tests/unit/security/test_secret_provider.py::test_local_secret_provider_supports_replaceable_audit_sink",
+]
+
+[[surface]]
+id = "approval-gated-operations"
+owner = "AuthorizationGate / ApprovalService"
+authentication_boundary = "Requester and approver identities are canonical actors."
+authorization_boundary = "Approval cannot override a DENY and approver decisions are themselves authorized."
+approval_boundary = "Approval binds actor/resource/action/payload digest and invalidates on changed payload/policy revision."
+scope_boundary = "Approval decision scope is derived from the stored record and cannot be substituted."
+secret_boundary = "Approval payload/audit state contains no plaintext secrets."
+audit_boundary = "Pending/resolved Approval decisions emit canonical, value-free audit evidence."
+failure_boundary = "Expired, rejected, cancelled or stale approvals fail as canonical authorization conflicts/denials."
+fail_closed_boundary = "Missing/unresolvable Approval never executes the gated side effect."
+public_error_boundary = "Approval failures expose safe canonical decision metadata."
+provider_identity_boundary = "Authorization provider IDs are diagnostics, not authority-bearing Approval identity."
+allow_evidence = [
+  "tests/integration/security/test_authorization_hardening.py::test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approval",
+]
+deny_evidence = [
+  "tests/integration/security/test_authorization_hardening.py::test_control_plane_create_approval_cannot_be_reused_for_changed_payload",
+]
+approval_evidence = [
+  "tests/integration/security/test_policy_lifecycle_revision_binding.py::test_enable_approval_is_invalid_after_policy_revision_changes",
+]
+scope_evidence = [
+  "tests/unit/authorization/test_approval_project_scope.py::test_approval_decision_cannot_substitute_another_project_scope",
+]
+secret_evidence = []
+failure_evidence = [
+  "tests/integration/cli/test_authentication_and_approvals.py::test_approval_cli_deny_and_expired_conflict_paths",
+]
+identity_evidence = []
+audit_evidence = []
+
+[[surface]]
+id = "verification-review-transitions"
+owner = "Verification Control Plane / VerificationService"
+authentication_boundary = "Human review transitions originate from authenticated canonical RequestContext."
+authorization_boundary = "Verification reads/review transitions fail closed on Task/Project authorization denial."
+approval_boundary = "Verification is a distinct integrity gate; it cannot be substituted by an unrelated Approval."
+scope_boundary = "Review visibility and mutation are bound to the canonical Task/Project scope."
+secret_boundary = "Verification evidence references canonical subjects without secret material."
+audit_boundary = "Review outcomes/evidence are canonical and idempotent."
+failure_boundary = "Rejected/request-changes and changed subject revisions remain explicit canonical states."
+fail_closed_boundary = "Old verification cannot authorize a changed result revision."
+public_error_boundary = "Review authorization failures use canonical public error projection."
+provider_identity_boundary = "Reviewer/provider implementation identity does not replace canonical verification identity."
+allow_evidence = [
+  "tests/integration/verification/test_verification_control_plane.py::test_human_accept_is_canonical_idempotent_and_exposes_evidence",
+]
+deny_evidence = [
+  "tests/integration/verification/test_verification_control_plane.py::test_verification_reads_and_human_review_fail_closed_on_task_scope_denial",
+]
+approval_evidence = []
+scope_evidence = [
+  "tests/integration/verification/test_verification_control_plane.py::test_verification_reads_and_human_review_fail_closed_on_task_scope_denial",
+]
+secret_evidence = []
+failure_evidence = [
+  "tests/integration/verification/test_verification.py::test_changed_result_revision_cannot_reuse_old_verification",
+]
+identity_evidence = [
+  "tests/integration/verification/test_verification.py::test_agent_revisions_do_not_count_as_distinct_reviewers",
+]
+audit_evidence = [
+  "tests/integration/verification/test_verification_control_plane.py::test_human_accept_is_canonical_idempotent_and_exposes_evidence",
+]

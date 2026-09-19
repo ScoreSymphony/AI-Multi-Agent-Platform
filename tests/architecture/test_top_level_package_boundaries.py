@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import ast
+import importlib
+import os
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -20,6 +24,16 @@ ALLOWED_KINDS = {
 }
 ALLOWED_DISPOSITIONS = {"keep", "consolidate", "compatibility"}
 EXTERNAL_OWNERS = {"repository"}
+LEGACY_MIGRATION_IMPORTS = {
+    "ai_multi_agent_platform.capability_assignments": "capabilities.assignments",
+    "ai_multi_agent_platform.high_availability": "distributed.high_availability",
+    "ai_multi_agent_platform.repository_intelligence": "repositories.intelligence",
+    "ai_multi_agent_platform.task_reassignment": "task_management.reassignment",
+}
+LEGACY_IMPORT_ALLOWLIST = {
+    "tests/architecture/test_high_availability_contract_migration.py",
+    "tests/architecture/test_top_level_package_boundaries.py",
+}
 
 
 def _manifest() -> dict[str, Any]:
@@ -78,6 +92,95 @@ def _import_targets(path: Path) -> tuple[tuple[int, str], ...]:
         )
 
     return tuple(targets)
+
+
+def _absolute_import_targets(path: Path) -> tuple[tuple[int, str], ...]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    targets: list[tuple[int, str]] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets.extend((node.lineno, alias.name) for alias in node.names)
+            continue
+        if not isinstance(node, ast.ImportFrom) or node.level or not node.module:
+            continue
+        targets.append((node.lineno, node.module))
+
+    return tuple(targets)
+
+
+def test_internal_code_uses_canonical_paths_instead_of_legacy_migration_imports() -> None:
+    violations: list[str] = []
+
+    for root in (SOURCE_ROOT, ROOT / "tests"):
+        for path in root.rglob("*.py"):
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in LEGACY_IMPORT_ALLOWLIST:
+                continue
+            for lineno, target in _absolute_import_targets(path):
+                for legacy, canonical in LEGACY_MIGRATION_IMPORTS.items():
+                    if target == legacy or target.startswith(f"{legacy}."):
+                        violations.append(
+                            f"{relative}:{lineno}: import canonical namespace "
+                            f"ai_multi_agent_platform.{canonical!s} instead of {target!r}"
+                        )
+
+    assert not violations, (
+        "repository-internal code must not rely on compatibility-only migration namespaces:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_canonical_imports_do_not_load_compatibility_namespaces() -> None:
+    cases = (
+        (
+            "ai_multi_agent_platform.capabilities.assignments",
+            "ai_multi_agent_platform.capability_assignments",
+        ),
+        (
+            "ai_multi_agent_platform.task_management.reassignment",
+            "ai_multi_agent_platform.task_reassignment",
+        ),
+        (
+            "ai_multi_agent_platform.distributed.high_availability",
+            "ai_multi_agent_platform.high_availability",
+        ),
+        (
+            "ai_multi_agent_platform.repositories.intelligence",
+            "ai_multi_agent_platform.repository_intelligence",
+        ),
+    )
+
+    script = """
+import importlib
+import sys
+
+canonical = sys.argv[1]
+legacy = sys.argv[2]
+importlib.import_module(canonical)
+assert legacy not in sys.modules, (canonical, legacy)
+"""
+    for canonical, legacy in cases:
+        env = dict(os.environ)
+        existing_pythonpath = env.get("PYTHONPATH")
+        source_pythonpath = str(ROOT / "src")
+        env["PYTHONPATH"] = (
+            source_pythonpath
+            if not existing_pythonpath
+            else source_pythonpath + os.pathsep + existing_pythonpath
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", script, canonical, legacy],
+            cwd=ROOT,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, (
+            f"{canonical} loaded compatibility namespace {legacy}: "
+            f"{completed.stderr or completed.stdout}"
+        )
 
 
 def test_package_boundary_inventory_matches_root_namespace_exactly() -> None:
@@ -158,6 +261,117 @@ def test_confusing_package_families_have_explicit_non_overlapping_owners() -> No
 
     assert packages["high_availability"]["kind"] == "migration"
     assert packages["high_availability"]["owner"] == "distributed"
+    assert packages["high_availability"]["disposition"] == "compatibility"
+
+    assert packages["repository_intelligence"]["kind"] == "migration"
+    assert packages["repository_intelligence"]["owner"] == "repositories"
+    assert packages["repository_intelligence"]["disposition"] == "compatibility"
+
+
+def test_high_availability_root_is_behavior_free_compatibility_namespace() -> None:
+    package_root = SOURCE_ROOT / "high_availability"
+    violations: list[str] = []
+
+    for path in package_root.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+                continue
+            if isinstance(node, ast.Assign) and all(
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            ):
+                continue
+            violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: {type(node).__name__}")
+
+    assert not violations, (
+        "root high_availability must remain a behavior-free compatibility namespace:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_high_availability_compatibility_import_preserves_public_objects() -> None:
+    from ai_multi_agent_platform import high_availability as compatibility
+    from ai_multi_agent_platform.distributed import high_availability as canonical
+
+    public_names = (
+        "AuthorityGrant",
+        "AvailabilityMode",
+        "ControlPlaneFailoverService",
+        "ControlPlaneHAStatus",
+        "ControlPlaneRole",
+        "CoordinationProvider",
+        "DistributedRuntimeFailoverReconciler",
+        "FencingToken",
+        "HighAvailabilityTelemetry",
+        "InMemoryCoordinationProvider",
+        "ReconciliationResult",
+    )
+    for name in public_names:
+        assert getattr(compatibility, name) is getattr(canonical, name)
+
+
+def test_repository_intelligence_root_is_behavior_free_compatibility_namespace() -> None:
+    package_root = SOURCE_ROOT / "repository_intelligence"
+    violations: list[str] = []
+
+    for path in package_root.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+                continue
+            if isinstance(node, ast.Assign) and all(
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            ):
+                continue
+            violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: {type(node).__name__}")
+
+    assert not violations, (
+        "root repository_intelligence must remain a behavior-free compatibility namespace:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_repository_intelligence_compatibility_import_preserves_public_objects() -> None:
+    from ai_multi_agent_platform import repository_intelligence as compatibility
+    from ai_multi_agent_platform.repositories import intelligence as canonical
+
+    public_names = (
+        "BaselineRepositoryIntelligenceProvider",
+        "RepositoryIntelligenceFreshness",
+        "RepositoryIntelligenceOperation",
+        "RepositoryIntelligenceProvenance",
+        "RepositoryIntelligenceSearchFederator",
+        "WorkspaceAwareRepositoryIntelligenceProvider",
+        "ProjectAtlasCandidatePlugin",
+        "projectatlas_candidate_manifest",
+    )
+    for name in public_names:
+        assert getattr(compatibility, name) is getattr(canonical, name)
+
+
+def test_repository_intelligence_compatibility_submodules_preserve_all() -> None:
+    modules = (
+        "context_funnel",
+        "evaluation_matrix",
+        "fallback",
+        "projectatlas_adapter",
+        "projectatlas_resources",
+        "resources",
+        "search_bridge",
+        "workspace",
+    )
+    for module in modules:
+        compatibility = importlib.import_module(
+            f"ai_multi_agent_platform.repository_intelligence.{module}"
+        )
+        canonical = importlib.import_module(
+            f"ai_multi_agent_platform.repositories.intelligence.{module}"
+        )
+        assert compatibility.__all__ == canonical.__all__
 
 
 def test_task_reassignment_is_owned_by_task_management() -> None:

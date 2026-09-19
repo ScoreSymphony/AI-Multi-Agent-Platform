@@ -26,7 +26,7 @@ Additional cross-cutting entry documents such as frontend, planning, release, co
 | [`product/`](product/) | Product-facing domains and surfaces such as conversations, notifications, organizations, templates, browser/terminal, onboarding and accounting. |
 | [`cli/`](cli/) | CLI overview and command-area documentation. |
 | [`search/`](search/) | Global Search and domain-specific Search integrations. |
-| [`integrations/`](integrations/) | Concrete adapters and external-system integrations, including Hermes, Forge, LiteLLM, Connectors and repository integration. |
+| [`integrations/`](integrations/) | Concrete adapters, external-system integrations and retained integration history, including Hermes, LiteLLM, Connectors, repository integration and historical Forge records. |
 | [`extensions/`](extensions/) | Plugin/extension compatibility, Registry/Marketplace and optional platform-expansion domains. |
 | [`security/`](security/) | Authentication, authorization, secrets and secure development/deployment guidance. |
 | [`operations/`](operations/) | Deployment, HA, backup/restore, observability, upgrades, host pressure and release operations. |

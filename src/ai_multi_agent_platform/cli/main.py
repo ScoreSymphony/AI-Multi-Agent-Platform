@@ -23,6 +23,7 @@ from .client import (
     TransportError,
 )
 from .compute import add_compute_parsers, doctor_compute, execute_compute
+from .doctor import _doctor_health
 from .evaluation import add_evaluation_parser, execute_evaluation
 from .marketplace import add_marketplace_parser, execute_marketplace
 from .memory_knowledge import (
@@ -569,84 +570,6 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
         ),
         exit_code=4 if blocking else 1 if degraded else 0,
     )
-
-
-def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
-    if not isinstance(body, dict):
-        return "blocking", [
-            {
-                "name": "health_schema",
-                "status": "blocking",
-                "message": "health payload must be a JSON object",
-            }
-        ]
-
-    ready = body.get("ready")
-    providers = body.get("providers")
-    if not isinstance(ready, bool) or not isinstance(providers, list):
-        return "blocking", [
-            {
-                "name": "health_schema",
-                "status": "blocking",
-                "message": "health payload must contain boolean ready and provider list",
-            }
-        ]
-
-    overall = "healthy" if ready else "blocking"
-    checks: list[JsonValue] = []
-    for provider in providers:
-        if not isinstance(provider, dict):
-            overall = "blocking"
-            checks.append(
-                {
-                    "name": "provider_health",
-                    "status": "blocking",
-                    "message": "provider health entry must be a JSON object",
-                }
-            )
-            continue
-
-        provider_id = provider.get("id")
-        provider_type = provider.get("type")
-        status = provider.get("status")
-        available = provider.get("available")
-        if (
-            not isinstance(provider_id, str)
-            or not isinstance(provider_type, str)
-            or not isinstance(status, str)
-            or not isinstance(available, bool)
-            or status not in {"healthy", "degraded", "unknown", "unavailable"}
-        ):
-            overall = "blocking"
-            checks.append(
-                {
-                    "name": "provider_health",
-                    "status": "blocking",
-                    "message": "provider health entry does not match the canonical schema",
-                }
-            )
-            continue
-
-        if not available or status == "unavailable":
-            check_status = "blocking"
-            overall = "blocking"
-        elif status in {"degraded", "unknown"}:
-            check_status = "degraded"
-            if overall == "healthy":
-                overall = "degraded"
-        else:
-            check_status = "healthy"
-        checks.append(
-            {
-                "name": "provider_health",
-                "status": check_status,
-                "provider_id": provider_id,
-                "provider_type": provider_type,
-                "provider_status": status,
-                "available": available,
-            }
-        )
-    return overall, checks
 
 
 def _project_command(

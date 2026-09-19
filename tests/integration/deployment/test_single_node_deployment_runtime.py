@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import ai_multi_agent_platform.deployment.config as deployment_config
 from ai_multi_agent_platform.configuration import ConfigurationError
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import (
@@ -76,6 +77,21 @@ def test_single_node_startup_blocks_unusable_persistence_path(tmp_path: Path) ->
 
     with pytest.raises(ConfigurationError, match="required persistence path"):
         build_single_node_deployment(SingleNodeConfig(data_dir=blocked))
+
+
+def test_single_node_startup_blocks_unwritable_persistence_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
+
+    def fail_fsync(_fd: int) -> None:
+        raise PermissionError("injected unwritable persistence path")
+
+    monkeypatch.setattr(deployment_config.os, "fsync", fail_fsync)
+
+    with pytest.raises(ConfigurationError, match="not writable"):
+        config.prepare_directories()
 
 
 def test_single_node_reference_smoke_is_retry_safe_across_restart(tmp_path: Path) -> None:

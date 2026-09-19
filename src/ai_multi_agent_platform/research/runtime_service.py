@@ -9,7 +9,9 @@ from datetime import UTC, datetime
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.domain import OwnerRef, Provenance
-from ai_multi_agent_platform.repository_intelligence.models import RepositoryIntelligenceProvenance
+from ai_multi_agent_platform.repositories.intelligence.models import (
+    RepositoryIntelligenceProvenance,
+)
 from ai_multi_agent_platform.security import ActorIdentity, AuthorizationAction, AuthorizationGate
 
 from .async_repository import AsyncResearchRepository, AsyncResearchRepositoryAdapter

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PORTABILITY_PACKAGE_COLLECTION, PORTABILITY_PREVIEW_COLLECTION, PORTABILITY_REPORT_COLLECTION, PORTABILITY_RESOURCES } from "../../api/portability";
 import type { ReferenceCollection } from "../../api/references";
 import type { APImanifest } from "../../api/types";
 import { AgentDetailPage, AgentsPage, AgentTeamDetailPage, AgentTeamsPage } from "../../pages/AgentsPage";
@@ -11,6 +12,7 @@ import { ChatPage } from "../../pages/ChatPage";
 import { ComputeNodeDetailPage, ComputePage, ComputeWorkerDetailPage, ComputeWorkerJobDetailPage } from "../../pages/ComputePage";
 import { EvaluationRunDetailPage, EvaluationSuiteDetailPage, EvaluationsPage } from "../../pages/EvaluationsPage";
 import { GoalDetailPage, GoalsPage } from "../../pages/GoalsPage";
+import { ImportExportPage, PortabilityDetailPage } from "../../pages/ImportExportPage";
 import { ConnectionDetailPage, ConnectorDefinitionDetailPage, IntegrationsPage } from "../../pages/IntegrationsPage";
 import { GovernancePage, ProposalGovernanceDetailPage, SpecificationGovernanceDetailPage } from "../../pages/GovernancePage";
 import { LEARNING_REQUIRED_RESOURCES, LearningDetailPage, LearningPage } from "../../pages/LearningPage";
@@ -27,7 +29,7 @@ import { PluginCandidateDetailPage, PluginDetailPage, PluginsPage } from "../../
 import { ProjectDetailPage, WorkspaceDetailPage } from "../../pages/ProjectPages";
 import { ProjectsPage } from "../../pages/ProjectListPage";
 import { RepositoriesPage, RepositoryDetailPage } from "../../pages/RepositoriesPage";
-import { ReferencesPage } from "../../pages/ReferencePages";
+import { FileDetailPage, ReferencesPage } from "../../pages/ReferencePages";
 import { RunsPage } from "../../pages/RunListPage";
 import { SearchPage } from "../../pages/SearchPage";
 import { SettingsPage } from "../../pages/SettingsPage";
@@ -74,6 +76,7 @@ export function renderShellRoute({
     goalClient,
     computeClient,
     evaluationClient,
+    filesClient,
     governanceClient,
     integrationsClient,
     learningClient,
@@ -81,6 +84,7 @@ export function renderShellRoute({
     notificationClient,
     organizationClient,
     pluginsClient,
+    portabilityClient,
     registryClient,
     templateClient,
     verificationClient,
@@ -103,6 +107,7 @@ export function renderShellRoute({
   const connectionMatch = matchPath("/integrations/connections/:connectionId", path);
   const memoryMatch = matchPath("/memory/:memoryId", path);
   const knowledgeMatch = matchPath("/knowledge/:sourceId", path);
+  const fileMatch = matchPath("/files/:fileId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
   const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
@@ -121,9 +126,18 @@ export function renderShellRoute({
   const modelRoutingProfileMatch = matchPath("/model-routing-profiles/:profileId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
+  const portabilityPackageMatch = matchPath("/import-export/packages/:packageId", path);
+  const portabilityPreviewMatch = matchPath("/import-export/previews/:previewId", path);
+  const portabilityReportMatch = matchPath("/import-export/reports/:reportId", path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
+  const manifestCommands = manifest?.commands ?? [];
+  const repositoryManagement = {
+    attachLocal: manifestCommands.includes("repository.local.attach"),
+    discover: manifestCommands.includes("repository.discover"),
+    detach: manifestCommands.includes("repository.detach"),
+  };
   const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);
   const learningCapabilities = learningManifestCapabilities(manifestState, manifest);
 
@@ -133,8 +147,8 @@ export function renderShellRoute({
   if (path === "/projects") return <ProjectsPage client={client} />;
   if (projectMatch) return <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
   if (workspaceMatch) return <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
-  if (path === "/repositories") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoriesPage client={repositoryClient} /></ManifestResourcePage>;
-  if (repositoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoryDetailPage client={repositoryClient} repositoryId={repositoryMatch.repositoryId} /></ManifestResourcePage>;
+  if (path === "/repositories") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoriesPage client={repositoryClient} management={repositoryManagement} /></ManifestResourcePage>;
+  if (repositoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Repositories" resource="repositories"><RepositoryDetailPage client={repositoryClient} repositoryId={repositoryMatch.repositoryId} management={repositoryManagement} /></ManifestResourcePage>;
   if (path === "/tasks") return <ManagedTasksPage client={client} />;
   if (taskManagementMatch) return <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
   if (taskMatch) return <VerificationBoundTaskDetailPage client={client} verificationClient={verificationClient} taskId={taskMatch.taskId} />;
@@ -155,13 +169,18 @@ export function renderShellRoute({
   if (path === "/agent-teams") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamsPage client={client} /></ManifestResourcePage>;
   if (agentTeamMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} /></ManifestResourcePage>;
   if (path === "/organizations") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Organizations" resource="organizations"><OrganizationsPage client={organizationClient} /></ManifestResourcePage>;
-  if (path === "/files") return <ReferencesPage client={client} />;
+  if (path === "/files") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Files & artifacts" resource="files"><ReferencesPage client={client} files={filesClient} /></ManifestResourcePage>;
+  if (fileMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="File" resource="files"><FileDetailPage client={filesClient} fileId={fileMatch.fileId} /></ManifestResourcePage>;
   if (referenceMatch) return <VerificationBoundReferenceDetailPage client={client} verificationClient={verificationClient} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   if (path === "/memory") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryPage client={memoryKnowledgeClient} /></ManifestResourcePage>;
   if (memoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryDetailPage client={memoryKnowledgeClient} memoryId={memoryMatch.memoryId} /></ManifestResourcePage>;
   if (path === "/knowledge") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Knowledge" resources={KNOWLEDGE_RESOURCES}><KnowledgePage client={memoryKnowledgeClient} /></ManifestResourcesPage>;
   if (knowledgeMatch) return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Knowledge" resources={KNOWLEDGE_RESOURCES}><KnowledgeDetailPage client={memoryKnowledgeClient} sourceId={knowledgeMatch.sourceId} /></ManifestResourcesPage>;
   if (path === "/search") return <SearchPage client={client} />;
+  if (path === "/import-export") return <ManifestResourcesPage state={manifestState} manifest={manifest} label="Import / Export" resources={PORTABILITY_RESOURCES}><ImportExportPage client={portabilityClient} /></ManifestResourcesPage>;
+  if (portabilityPackageMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Portable package" resource={PORTABILITY_PACKAGE_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="package" resourceId={portabilityPackageMatch.packageId} /></ManifestResourcePage>;
+  if (portabilityPreviewMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Import preview" resource={PORTABILITY_PREVIEW_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="preview" resourceId={portabilityPreviewMatch.previewId} /></ManifestResourcePage>;
+  if (portabilityReportMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Import report" resource={PORTABILITY_REPORT_COLLECTION}><PortabilityDetailPage client={portabilityClient} kind="report" resourceId={portabilityReportMatch.reportId} /></ManifestResourcePage>;
   if (path === "/tools") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capabilities"><CapabilitiesPage client={client} /></ManifestResourcePage>;
   if (capabilityProviderMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capability-providers"><CapabilityProviderDetailPage client={client} providerId={capabilityProviderMatch.providerId} /></ManifestResourcePage>;
   if (capabilityMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capabilities"><CapabilityDetailPage client={client} capabilityId={capabilityMatch.capabilityId} /></ManifestResourcePage>;

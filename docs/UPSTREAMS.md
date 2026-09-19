@@ -283,6 +283,31 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Provenance:** `upstream/psycopg-ha-coordination.yaml`.
 - **Adoption review:** `docs/upstream/POSTGRES_HA_COORDINATION_ADOPTION.md`.
 
+### Expo / React Native mobile client runtime
+
+- **Purpose:** optional Android/iOS northbound client for canonical Control Plane monitoring and human-attention workflows.
+- **Status:** integrated through #1240.
+- **Integration category/categories:** library dependency; optional client build/runtime.
+- **Canonical upstream repository:** `https://github.com/expo/expo` and `https://github.com/facebook/react-native`.
+- **Pinned version/tag/commit or deployed revision:** Expo `57.0.17`; React Native `0.86.3`; `expo-secure-store` `57.0.4`.
+- **Verified license:** MIT.
+- **License verification date:** 2026-09-19.
+- **Last review date:** 2026-09-19.
+- **Platform adapter/boundary:** optional `mobile/` application consuming only public `/api/v1` Control Plane resources/commands.
+- **Local source path:** none for upstream source; `mobile/` contains project-owned client code only.
+- **Source origin/path:** no upstream source copied, vendored, forked or selectively ported.
+- **Modified locally:** no upstream source modifications.
+- **Required notices / attribution:** installed packages retain their own package/license metadata; no vendored upstream notice bundle is required.
+- **Known compatibility constraints:** Expo SDK 57 stable line; React Native 0.86 stable line; Android 7+; iOS 16.4+.
+- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; no server port/database/GPU/paid service is introduced.
+- **Required for baseline:** no.
+- **Recurring paid service required:** no.
+- **Update/review method:** explicit dependency update PR; review Expo/React Native release/security notes and run mobile typecheck/tests/config plus Android/iOS export smoke.
+- **Exit/replacement strategy:** replace the mobile implementation behind the unchanged public Control Plane; canonical platform state requires no migration.
+- **ADR:** `docs/adr/0016-optional-mobile-control-plane-client.md`.
+- **Provenance:** `upstream/expo-mobile-client.yaml`.
+- **Adoption review:** `docs/upstream/EXPO_MOBILE_CLIENT_ADOPTION.md`.
+
 ## Current direct build/development dependencies
 
 These packages are third-party software already declared by `pyproject.toml`. Packages promoted to required or architecture-significant production use must also appear in the registry above when required by `LICENSE_POLICY.md`.

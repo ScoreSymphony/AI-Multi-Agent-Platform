@@ -15,7 +15,7 @@ from ai_multi_agent_platform.contracts.types import (
 )
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.repositories import RepositoryTree, RepositoryTreeEntry
-from ai_multi_agent_platform.repository_intelligence import (
+from ai_multi_agent_platform.repositories.intelligence import (
     BaselineRepositoryIntelligenceProvider,
     RepositoryIntelligenceOperation,
     repository_intelligence_capability_specs,

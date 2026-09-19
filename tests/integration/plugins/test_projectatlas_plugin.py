@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from pathlib import Path
 
 import pytest
@@ -17,10 +18,10 @@ from ai_multi_agent_platform.plugins import (
     PluginRegistry,
     PluginState,
 )
-from ai_multi_agent_platform.repository_intelligence.capabilities import (
+from ai_multi_agent_platform.repositories.intelligence.capabilities import (
     RepositoryIntelligenceOperation,
 )
-from ai_multi_agent_platform.repository_intelligence.projectatlas import (
+from ai_multi_agent_platform.repositories.intelligence.projectatlas import (
     PROJECTATLAS_ARCHIVE_SHA256,
     PROJECTATLAS_PLUGIN_ID,
     PROJECTATLAS_PROVIDER_ID,
@@ -79,10 +80,24 @@ def test_projectatlas_manifest_is_experimental_and_fail_closed() -> None:
     assert PluginPermission.NETWORK_ACCESS not in manifest.requested_permissions
     assert PluginPermission.WORKSPACE_ACCESS not in manifest.requested_permissions
     assert PluginPermission.SECRET_CONSUMPTION not in manifest.requested_permissions
+    assert (
+        manifest.extensions[0].entrypoint
+        == "ai_multi_agent_platform.repositories.intelligence.projectatlas:"
+        "ProjectAtlasCandidatePlugin"
+    )
     metadata = manifest.extensions[0].metadata
     assert metadata["candidate_status"] == "experimental"
     assert metadata["source_operations_enabled"] is False
     assert metadata["network_isolation_verified"] is False
+
+
+def test_legacy_projectatlas_entrypoint_resolves_to_canonical_plugin() -> None:
+    legacy = importlib.import_module("ai_multi_agent_platform.repository_intelligence.projectatlas")
+    canonical = importlib.import_module(
+        "ai_multi_agent_platform.repositories.intelligence.projectatlas"
+    )
+
+    assert legacy.ProjectAtlasCandidatePlugin is canonical.ProjectAtlasCandidatePlugin
 
 
 def test_projectatlas_plugin_registers_and_removes_only_status_capabilities(tmp_path: Path) -> None:

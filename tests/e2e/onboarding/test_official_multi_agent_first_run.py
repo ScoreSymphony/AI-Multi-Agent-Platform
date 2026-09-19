@@ -138,17 +138,23 @@ def test_official_first_run_exposes_real_plan_agents_artifact_and_verification(
             owner_type="user",
             owner_id=admin.user_id,
         )
-        workspace = deployment.scopes.create_workspace(
-            key="official-first-run-workspace",
-            project_id=project.id,
+        workspace = await deployment.control_plane.create_workspace(
+            _context(admin.user_id, "official-first-run-workspace"),
+            {
+                "project_id": project.id,
+                "workspace_type": "persistent_project",
+                "access_mode": "read_write",
+                "retention": "persistent",
+            },
         )
+        workspace_id = str(workspace["id"])
         assert deployment.agents.repository.list_agents() == ()
 
         result = await deployment.control_plane.execute_command(
             _context(admin.user_id, _COMMAND_KEY),
             ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
             FIRST_RUN_RESOURCE_ID,
-            _payload(project.id, workspace.id),
+            _payload(project.id, workspace_id),
         )
 
         assert result["type"] == "multi_agent_first_run_result"
@@ -193,7 +199,7 @@ def test_official_first_run_exposes_real_plan_agents_artifact_and_verification(
             _context(admin.user_id, _COMMAND_KEY),
             ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
             FIRST_RUN_RESOURCE_ID,
-            _payload(project.id, workspace.id),
+            _payload(project.id, workspace_id),
         )
         assert replay["task_id"] == result["task_id"]
         assert replay["plan_id"] == result["plan_id"]
@@ -212,7 +218,7 @@ def test_official_first_run_exposes_real_plan_agents_artifact_and_verification(
                 _context(admin.user_id, _COMMAND_KEY),
                 ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
                 FIRST_RUN_RESOURCE_ID,
-                _payload(project.id, workspace.id),
+                _payload(project.id, workspace_id),
             )
         assert missing_health.value.code is ErrorCode.INVALID_CONFIGURATION
         assert missing_health.value.details["action"] == "onboarding.configure-model"
@@ -225,7 +231,7 @@ def test_official_first_run_exposes_real_plan_agents_artifact_and_verification(
             _context(admin.user_id, _COMMAND_KEY),
             ONBOARDING_RUN_MULTI_AGENT_GOLDEN_PATH_COMMAND,
             FIRST_RUN_RESOURCE_ID,
-            _payload(project.id, workspace.id),
+            _payload(project.id, workspace_id),
         )
         assert restored["task_id"] == result["task_id"]
         assert restored["result_id"] == result["result_id"]

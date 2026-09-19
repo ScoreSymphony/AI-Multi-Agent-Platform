@@ -3,6 +3,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
+import ai_multi_agent_platform.workspaces.sqlite as workspace_sqlite
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef, new_id
@@ -182,6 +186,8 @@ def test_restart_clears_stale_active_refs_and_cleanup_finds_crash_orphan(tmp_pat
         assert active.active_task_ids == (task_id,)
         assert active.active_run_ids == (run_id,)
         assert provider.local_path(materialization.id).exists()
+        unowned = provider.materialization_root / "foreign_unowned"
+        unowned.mkdir()
 
         restarted = SqliteWorkspaceProvider(
             tmp_path / "materializations",
@@ -191,9 +197,53 @@ def test_restart_clears_stale_active_refs_and_cleanup_finds_crash_orphan(tmp_pat
         recovered = await restarted.get_workspace(workspace.id)
         assert recovered.active_task_ids == ()
         assert recovered.active_run_ids == ()
+        assert not (restarted.materialization_root / materialization.id).exists()
+        assert unowned.is_dir()
 
         report = await restarted.cleanup()
-        assert report.removed_materialization_ids == (materialization.id,)
-        assert not (restarted.materialization_root / materialization.id).exists()
+        assert report.removed_materialization_ids == ()
+        assert unowned.is_dir()
 
     asyncio.run(scenario())
+
+
+def test_restart_fails_closed_when_owned_workspace_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    async def seed() -> tuple[LocalFileProvider, Path]:
+        files, context, source = await _seed(tmp_path)
+        root = tmp_path / "materializations"
+        database = tmp_path / "workspaces.sqlite"
+        provider = SqliteWorkspaceProvider(root, files, database)
+        workspace = await provider.create_workspace(
+            project_id=context.project_id or "",
+            owner_ref=OwnerRef(type="user", id="workspace-user"),
+            workspace_type=WorkspaceType.ISOLATED_RUN,
+            context=context,
+            files=(source,),
+        )
+        materialization = await provider.materialize(workspace.id, context)
+        return files, provider.local_path(materialization.id)
+
+    files, materialization_path = asyncio.run(seed())
+    assert materialization_path.exists()
+
+    original_rmtree = workspace_sqlite.shutil.rmtree
+
+    def fail_owned_cleanup(path: Path, *args, **kwargs) -> None:
+        if Path(path) == materialization_path:
+            raise OSError("injected cleanup failure")
+        original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(workspace_sqlite.shutil, "rmtree", fail_owned_cleanup)
+
+    with pytest.raises(ContractError) as raised:
+        SqliteWorkspaceProvider(
+            tmp_path / "materializations",
+            files,
+            tmp_path / "workspaces.sqlite",
+        )
+
+    assert raised.value.code is ErrorCode.BACKEND_ERROR
+    assert materialization_path.exists()

@@ -16,7 +16,7 @@ A concrete integration must not require unrelated platform modules to import its
 
 ## 3. No privileged upstream framework
 
-Hermes may be the first orchestrator. Forge may provide execution or lifecycle capabilities. LiteLLM may provide model routing. MCP may provide tool interoperability. None of them is the platform itself.
+Hermes may provide orchestration, LiteLLM may provide model routing, and MCP may provide tool interoperability. Replaceable executor adapters may provide execution capabilities behind platform-owned contracts. None of them is the platform itself. The retired Forge integration is historical evidence only and is not an active platform capability.
 
 The core remains testable without those systems installed or running.
 

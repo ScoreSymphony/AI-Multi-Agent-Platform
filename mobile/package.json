@@ -1,0 +1,33 @@
+{
+  "name": "@ai-multi-agent-platform/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "packageManager": "npm@11.6.0",
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=11.6.0 <12"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit --pretty false",
+    "test": "vitest run",
+    "check:expo": "expo config --type public",
+    "smoke:android": "expo export --platform android --output-dir dist/android",
+    "smoke:ios": "expo export --platform ios --output-dir dist/ios"
+  },
+  "dependencies": {
+    "expo": "57.0.17",
+    "expo-secure-store": "57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.3",
+    "@types/react": "19.2.18",
+    "typescript": "6.0.3",
+    "vitest": "5.0.0"
+  }
+}

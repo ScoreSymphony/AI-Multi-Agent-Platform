@@ -7,13 +7,17 @@ from typing import Any
 from ai_multi_agent_platform.automation.runtime import AutomationRuntimeTick
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.high_availability.contracts import (
+from ai_multi_agent_platform.distributed.high_availability.contracts import (
     AuthorityGrant,
     ControlPlaneRole,
     CoordinationError,
 )
-from ai_multi_agent_platform.high_availability.integrations import AuthorityGatedAutomationLoop
-from ai_multi_agent_platform.high_availability.service import ControlPlaneFailoverService
+from ai_multi_agent_platform.distributed.high_availability.integrations import (
+    AuthorityGatedAutomationLoop,
+)
+from ai_multi_agent_platform.distributed.high_availability.service import (
+    ControlPlaneFailoverService,
+)
 
 from .approval_portability_composition import ControlPlane as _BaseControlPlane
 from .models import RequestContext

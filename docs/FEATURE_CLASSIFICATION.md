@@ -142,6 +142,7 @@ The Stable `control-plane-v1` row covers the shared `v1` protocol/foundation con
 | `repository-intelligence-core` | provider-neutral repository intelligence + deterministic local baseline | `repositories` | Core | Beta |
 | `observability-accounting` | public telemetry/health/usage/accounting views | `observability`, `accounting` | Core | Beta |
 | `cli-surface` | shared `platform` CLI framework/global conventions | `control_plane` | Core | Beta |
+| `mobile-client` | optional Android/iOS client profile over canonical Control Plane APIs | `control_plane` | Platform Extension | Beta |
 | `onboarding-first-run` | first-run status/commands plus CLI and browser onboarding workflow | `onboarding` | Platform Extension | Beta |
 | `memory-knowledge-search` | Memory, Knowledge, ContextBundle/context assembly and Search | `data`, `context`, `search` | Platform Extension | Beta |
 | `conversations-browser-terminal` | conversational, browser and terminal product capabilities | `conversations`, `browser`, `terminal` | Platform Extension | Beta |

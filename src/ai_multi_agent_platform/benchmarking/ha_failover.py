@@ -20,8 +20,7 @@ from ai_multi_agent_platform.distributed import (
     ResourceSnapshot,
     WorkerRecord,
 )
-from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.high_availability import (
+from ai_multi_agent_platform.distributed.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
     CoordinationUnavailable,
@@ -29,6 +28,7 @@ from ai_multi_agent_platform.high_availability import (
     InMemoryCoordinationProvider,
     StaleFencingToken,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 

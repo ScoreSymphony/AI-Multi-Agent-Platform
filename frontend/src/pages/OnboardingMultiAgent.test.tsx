@@ -125,6 +125,8 @@ describe("official multi-agent onboarding presentation", () => {
     );
 
     expect(html).toContain("Official multi-agent first-run result");
+    expect(html).toContain("Participating roles");
+    expect(html).toContain("developer · researcher · reviewer");
     expect(html).toContain("parallel root");
     expect(html).toContain("step-approach");
     expect(html).toContain("/results/result-final");
