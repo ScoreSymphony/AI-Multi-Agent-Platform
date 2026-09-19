@@ -1,4 +1,4 @@
-"""Scoped #45 federation over repository-intelligence text search.
+"""Scoped federation over repository-intelligence text search.
 
 This bridge deliberately does not copy repository/workspace source into the canonical global Search
 index. It invokes the authorized repository-intelligence capability on demand, converts bounded hits
@@ -57,7 +57,7 @@ class RepositorySearchCaller:
 
 
 class RepositoryIntelligenceSearchFederator:
-    """Expose authorized source hits as scoped #45 results without persistent duplicate indexing."""
+    """Expose authorized source hits as scoped search results without persistent duplicate indexing."""
 
     def __init__(self, invoker: CapabilityInvocationPort, *, max_candidates: int = 500) -> None:
         if not 1 <= max_candidates <= 500:
