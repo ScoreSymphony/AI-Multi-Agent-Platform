@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and execute the #1233 production security boundary conformance matrix."""
+"""Validate and execute the production security boundary conformance matrix.\n\nProvenance: introduced for issue #1233.\n"""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def _parser() -> argparse.ArgumentParser:
         "--matrix",
         type=Path,
         default=DEFAULT_MATRIX,
-        help="Path to the machine-readable #1233 security matrix.",
+        help="Path to the machine-readable production security boundary matrix.",
     )
     parser.add_argument(
         "--validate-only",
@@ -175,7 +175,7 @@ def validate_matrix(document: Mapping[str, object]) -> tuple[str, ...]:
     if document.get("schema_version") != 1:
         raise ValueError("schema_version must be 1")
     if document.get("issue") != 1233:
-        raise ValueError("matrix must be owned by issue #1233")
+        raise ValueError("matrix must declare the expected provenance identifier")
     threat_model = document.get("threat_model")
     if not isinstance(threat_model, str) or not threat_model.strip():
         raise ValueError("threat_model must name the maintained threat-model document")
@@ -190,7 +190,7 @@ def validate_matrix(document: Mapping[str, object]) -> tuple[str, ...]:
         missing = sorted(REQUIRED_GLOBAL_REGRESSIONS - actual_regressions)
         unexpected = sorted(actual_regressions - REQUIRED_GLOBAL_REGRESSIONS)
         raise ValueError(
-            "global_regressions do not match #1233 requirements; "
+            "global_regressions do not match the required security regression set; "
             f"missing={missing}, unexpected={unexpected}"
         )
 
@@ -238,7 +238,7 @@ def validate_matrix(document: Mapping[str, object]) -> tuple[str, ...]:
         missing = sorted(REQUIRED_SURFACES - actual_surfaces)
         unexpected = sorted(actual_surfaces - REQUIRED_SURFACES)
         raise ValueError(
-            "surface coverage does not match #1233; "
+            "surface coverage does not match the required security boundary set; "
             f"missing={missing}, unexpected={unexpected}"
         )
 
