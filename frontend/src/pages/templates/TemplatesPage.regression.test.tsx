@@ -1,10 +1,22 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ControlPlaneError } from "../../api/client";
 import { describe, expect, it, vi } from "vitest";
 import { TemplateClient, type CanonicalTemplate } from "../../api/templates";
 import type { Page } from "../../api/types";
 import { RouterProvider } from "../../app/router";
 import { TemplateLibraryState, TemplatesPage } from "./TemplatesPage";
+
+function retryableBackendError(message: string): ControlPlaneError {
+  return new ControlPlaneError(503, {
+    code: "unavailable",
+    category: "backend",
+    message,
+    request_id: "request_regression_retry",
+    correlation_id: "correlation_regression_retry",
+    retryable: true,
+  });
+}
 
 function page(items: CanonicalTemplate[] = []): Page<CanonicalTemplate> {
   return { items, next_cursor: null, total: items.length, limit: 50 };
@@ -46,7 +58,7 @@ describe("Templates route regression coverage", () => {
     )).toContain("Loading Templates…");
 
     const errorMarkup = renderToStaticMarkup(
-      <TemplateLibraryState templates={null} error={new Error("template service unavailable")} onRetry={retry} />,
+      <TemplateLibraryState templates={null} error={retryableBackendError("template service unavailable")} onRetry={retry} />,
     );
     expect(errorMarkup).toContain('role="alert"');
     expect(errorMarkup).toContain("template service unavailable");
