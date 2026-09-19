@@ -32,6 +32,8 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
   const { configuration } = useConfigurationSession(client);
 
   const loadModels = useCallback(async () => {
+    setModels(null);
+    setModelError(null);
     try {
       setModels(
         await client.listModels({
@@ -48,6 +50,8 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
   }, [client, modelPagination.cursor]);
 
   const loadProviders = useCallback(async () => {
+    setProviders(null);
+    setProviderError(null);
     try {
       setProviders(
         await client.listModelProviders({
@@ -64,6 +68,8 @@ export function ModelsPage({ client }: { client: ControlPlaneClient }) {
   }, [client, providerPagination.cursor]);
 
   const loadRoutingProfiles = useCallback(async () => {
+    setRoutingProfiles(null);
+    setRoutingError(null);
     try {
       setRoutingProfiles((await configuration.listRoutingProfiles({ limit: 100 })).items);
       setRoutingError(null);
