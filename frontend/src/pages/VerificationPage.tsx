@@ -8,7 +8,9 @@ import {
 } from "../api/verification";
 import { isControlPlaneError } from "../api/client";
 import type { Page } from "../api/types";
+import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
+import { PaginationControls } from "../components/Pagination";
 import {
   Card,
   CanonicalId,
@@ -25,13 +27,31 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
     null,
   );
   const [error, setError] = useState<unknown>(null);
+  const pendingPagination = useCursorPagination("verification:pending:created_at:asc");
+  const historyPagination = useCursorPagination("verification:history:created_at:desc");
+  const requirementPagination = useCursorPagination("verification:requirements:updated_at:desc");
 
   const load = useCallback(async () => {
     try {
       const [nextPending, nextHistory, nextRequirements] = await Promise.all([
-        client.listPendingReviews({ limit: 50, sort: "created_at", direction: "asc" }),
-        client.list({ limit: 50, sort: "created_at", direction: "desc" }),
-        client.listRequirements({ limit: 50, sort: "updated_at", direction: "desc" }),
+        client.listPendingReviews({
+          limit: 50,
+          cursor: pendingPagination.cursor,
+          sort: "created_at",
+          direction: "asc",
+        }),
+        client.list({
+          limit: 50,
+          cursor: historyPagination.cursor,
+          sort: "created_at",
+          direction: "desc",
+        }),
+        client.listRequirements({
+          limit: 50,
+          cursor: requirementPagination.cursor,
+          sort: "updated_at",
+          direction: "desc",
+        }),
       ]);
       setPending(nextPending);
       setHistory(nextHistory);
@@ -40,7 +60,12 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client]);
+  }, [
+    client,
+    historyPagination.cursor,
+    pendingPagination.cursor,
+    requirementPagination.cursor,
+  ]);
 
   useEffect(() => {
     void load();
@@ -75,6 +100,16 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
 
       <Card title="Pending review queue">
         {pending ? <VerificationTable verifications={pending.items} empty="No pending human reviews" /> : <LoadingState />}
+        {pending ? (
+          <PaginationControls
+            page={pending}
+            pageNumber={pendingPagination.pageNumber}
+            hasPrevious={pendingPagination.hasPrevious}
+            onPrevious={pendingPagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => pendingPagination.next(pending.next_cursor)}
+          />
+        ) : null}
       </Card>
 
       <Card title="Completion requirements">
@@ -83,6 +118,16 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
         ) : (
           <LoadingState />
         )}
+        {requirements ? (
+          <PaginationControls
+            page={requirements}
+            pageNumber={requirementPagination.pageNumber}
+            hasPrevious={requirementPagination.hasPrevious}
+            onPrevious={requirementPagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => requirementPagination.next(requirements.next_cursor)}
+          />
+        ) : null}
       </Card>
 
       <Card title="Verification history">
@@ -91,6 +136,16 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
         ) : (
           <LoadingState />
         )}
+        {history ? (
+          <PaginationControls
+            page={history}
+            pageNumber={historyPagination.pageNumber}
+            hasPrevious={historyPagination.hasPrevious}
+            onPrevious={historyPagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => historyPagination.next(history.next_cursor)}
+          />
+        ) : null}
       </Card>
     </div>
   );
