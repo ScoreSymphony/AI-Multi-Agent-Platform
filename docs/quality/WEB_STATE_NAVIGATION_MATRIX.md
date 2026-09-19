@@ -68,8 +68,8 @@ kind expansion. This branch therefore consumes those implementations instead of 
 | Observability / diagnostics | `/observability` | shared/domain | domain | N/A read projection | shared | canonical | partial/degraded data | canonical reload | maintained route | browser history |
 | Usage / limits | `/usage` | shared/domain | domain | N/A read projection | shared | canonical | manifest/shared | canonical reload | maintained route | browser history |
 | User-manageable config / secret references | `/settings` + owning Model/Tool/Integration/Application surfaces | shared | domain-specific | domain; secret references only | shared | canonical | shared/provider-specific | canonical reload | owning route | owning parent/history |
-| Research Evidence (#589) | **OWNER GAP** | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP | canonical owner exists | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP |
-| Decision Records (#598) | **OWNER GAP** | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP | canonical owner exists | OWNER GAP | OWNER GAP | OWNER GAP | OWNER GAP |
+| Research Evidence (#589) | `/research`, `/research/:id` | shared/domain | domain | URL filter validation + canonical query validation | shared | canonical owner-scoped resources | shared/Control Plane | ID reload + explicit refresh | yes | prefix parent |
+| Decision Records (#598) | `/decisions`, `/decisions/:id` | shared/domain | domain | URL filter validation + canonical query validation | shared | canonical visibility/authorization | shared/Control Plane | ID reload + explicit refresh | yes | prefix parent |
 
 ## Pending / mutation-state audit
 
@@ -165,20 +165,19 @@ This branch does **not** duplicate:
 - the destructive confirmations already added for Connection, Plugin, Marketplace, session,
   collaboration, Application and Repository actions.
 
-## Remaining domain-owned Web gaps
+## Final owner-domain integration
 
-The cross-cutting audit still finds the two owner-domain gaps already identified by the first #1234
-slice:
+The earlier #589/#598 owner gaps are implemented on the final #1234 integration follow-up:
 
-1. **#589 Research Evidence** — the owner claims browser inspection for Research Items, Sources,
-   Claims, Evidence, freshness/staleness, verification/provenance and downstream references, but the
-   maintained shell still has no dedicated route.
-2. **#598 Decision Records** — the owner claims Web list/search/filter/detail, linked evidence,
-   downstream references, supersession history and revisit status, but the maintained shell still
-   has no dedicated route.
+1. **#589 Research Evidence** now has discoverable list/filter and stable detail routes over the
+   canonical Research collections, including Sources/observations, Claims, Evidence freshness,
+   Verification bindings, originating workflow references and downstream Decision references
+   derived from canonical Decision Records.
+2. **#598 Decision Records** now has discoverable list/search/filter and stable detail routes with
+   alternatives/outcome, exact evidence/evaluation/Approval/ADR references, downstream provenance,
+   supersession/withdrawal history and review/revisit state.
 
-Those require real domain pages and therefore remain outside this branch. No new Tasks, Agents,
-Models, Memory, Worker, Marketplace or Automation feature page is introduced here.
+These remain subject to exact-head frontend and browser validation before #1234 acceptance.
 
 ## Acceptance boundary
 

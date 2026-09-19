@@ -68,4 +68,41 @@ describe("#598 canonical Decision Record frontend client", () => {
       expect(init.credentials).toBe("include");
     }
   });
+
+  it("routes create, supersede and withdraw through canonical Decision commands", async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(decision))
+      .mockResolvedValueOnce(jsonResponse({ ...decision, id: "decision_record_next", revision: 2, supersedes: decision.id }))
+      .mockResolvedValueOnce(jsonResponse({ ...decision, status: "withdrawn", withdrawal_reason: "obsolete" }));
+    const client = new DecisionRecordClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+    const payload = {
+      title: "Choose runtime",
+      subject: "runtime",
+      category: "architecture",
+      scope_type: "platform",
+      question: "Which runtime?",
+      alternatives: [{ label: "Runtime A", status: "selected", evidence_refs: [], trade_offs: [], unknowns: [] }],
+      outcome: "adopt",
+      rationale: "Evidence",
+    };
+
+    await client.create(payload);
+    await client.supersede(decision.id, payload);
+    await client.withdraw(decision.id, "obsolete");
+
+    const expected = [
+      ["decision-record.create", "decision-records"],
+      ["decision-record.supersede", decision.id],
+      ["decision-record.withdraw", decision.id],
+    ];
+    expected.forEach(([command, resourceRef], index) => {
+      const [rawUrl, init] = fetchSpy.mock.calls[index] as [string, RequestInit];
+      expect(new URL(rawUrl, "https://platform.invalid").pathname)
+        .toBe(`/api/v1/commands/${command}`);
+      expect(init.method).toBe("POST");
+      expect(init.credentials).toBe("include");
+      expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+      expect(JSON.parse(String(init.body)).resource_ref).toBe(resourceRef);
+    });
+  });
 });

@@ -258,6 +258,10 @@ export function searchResultPath(result: Pick<SearchResult, "resource_type" | "r
       return `/tasks/${id}`;
     case "run":
       return `/runs/${id}`;
+    case "research-item":
+      return `/research/${id}`;
+    case "decision-record":
+      return `/decisions/${id}`;
     case "artifact":
       return `/artifacts/${id}`;
     case "result":

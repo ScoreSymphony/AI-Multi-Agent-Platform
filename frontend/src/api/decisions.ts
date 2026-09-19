@@ -1,4 +1,6 @@
 import { ControlPlaneCollectionClient } from "./collections";
+import { ApiTransport } from "./transport";
+import type { ApiTransportOptions } from "./transport";
 import type { JsonValue, ListQuery, Page } from "./types";
 
 export type DecisionOutcome =
@@ -66,16 +68,17 @@ export interface CanonicalDecisionRecord {
   revisit_due: boolean;
 }
 
-export interface DecisionRecordClientOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
+export interface DecisionRecordClientOptions extends ApiTransportOptions {
+  transport?: ApiTransport;
 }
 
 export class DecisionRecordClient {
+  private readonly transport: ApiTransport;
   private readonly collections: ControlPlaneCollectionClient;
 
   constructor(options: DecisionRecordClientOptions = {}) {
-    this.collections = new ControlPlaneCollectionClient(options);
+    this.transport = options.transport ?? new ApiTransport(options);
+    this.collections = new ControlPlaneCollectionClient({ transport: this.transport });
   }
 
   list(query: ListQuery = {}): Promise<Page<CanonicalDecisionRecord>> {
@@ -84,5 +87,51 @@ export class DecisionRecordClient {
 
   get(decisionRecordId: string): Promise<CanonicalDecisionRecord> {
     return this.collections.get<CanonicalDecisionRecord>("decision-records", decisionRecordId);
+  }
+
+  create(payload: Record<string, JsonValue>): Promise<CanonicalDecisionRecord> {
+    return this.command("decision-record.create", "decision-records", payload);
+  }
+
+  supersede(
+    decisionRecordId: string,
+    payload: Record<string, JsonValue>,
+  ): Promise<CanonicalDecisionRecord> {
+    return this.command("decision-record.supersede", decisionRecordId, payload);
+  }
+
+  withdraw(decisionRecordId: string, reason: string): Promise<CanonicalDecisionRecord> {
+    return this.command("decision-record.withdraw", decisionRecordId, { reason });
+  }
+
+  linkProvenance(
+    decisionRecordId: string,
+    reference: DecisionReference,
+  ): Promise<CanonicalDecisionRecord> {
+    return this.command("decision-record.link-provenance", decisionRecordId, {
+      reference: {
+        kind: reference.kind,
+        resource_id: reference.resource_id,
+        revision: reference.revision,
+        digest: reference.digest,
+        locator: reference.locator,
+        metadata: reference.metadata,
+      },
+    });
+  }
+
+  private command(
+    command: string,
+    resourceRef: string,
+    payload: Record<string, JsonValue>,
+  ): Promise<CanonicalDecisionRecord> {
+    return this.transport.request<CanonicalDecisionRecord>(
+      `/commands/${encodeURIComponent(command)}`,
+      {
+        method: "POST",
+        idempotencyKey: crypto.randomUUID(),
+        body: { resource_ref: resourceRef, ...payload },
+      },
+    );
   }
 }

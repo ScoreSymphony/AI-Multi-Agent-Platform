@@ -71,6 +71,12 @@ describe("SearchPage", () => {
     expect(searchResultPath({ resource_type: "run", resource_id: "run_1" })).toBe(
       "/runs/run_1",
     );
+    expect(searchResultPath({ resource_type: "research-item", resource_id: "research_1" })).toBe(
+      "/research/research_1",
+    );
+    expect(searchResultPath({ resource_type: "decision-record", resource_id: "decision_1" })).toBe(
+      "/decisions/decision_1",
+    );
     expect(searchResultPath({ resource_type: "file", resource_id: "file_1" })).toBe(
       "/files/file_1",
     );
