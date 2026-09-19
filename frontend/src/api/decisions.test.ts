@@ -101,7 +101,7 @@ describe("#598 canonical Decision Record frontend client", () => {
         .toBe(`/api/v1/commands/${command}`);
       expect(init.method).toBe("POST");
       expect(init.credentials).toBe("include");
-      expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+      expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
       expect(JSON.parse(String(init.body)).resource_ref).toBe(resourceRef);
     });
   });
