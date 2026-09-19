@@ -117,8 +117,11 @@ longer presents a misleading generic retry action.
 
 The authenticated shell now retains the canonical manifest error and exposes a retry through the
 shared error state. A successful retry re-runs public manifest discovery and restores manifest-gated
-routes without a full browser restart. The browser still does not infer missing resources or mount
-private fallbacks.
+routes without a full browser restart. While the manifest itself is unavailable, resource gates defer
+to that shell-level Control Plane outage instead of simultaneously rendering a misleading optional
+"Canonical subsystem unavailable" state. Once a manifest is available, genuinely absent optional
+resources keep their existing unavailable/degraded presentation. The browser still does not infer
+missing resources or mount private fallbacks.
 
 ### 4. Router state discarded query strings
 
