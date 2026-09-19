@@ -132,10 +132,11 @@ export function renderShellRoute({
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
+  const manifestCommands = manifest?.commands ?? [];
   const repositoryManagement = {
-    attachLocal: manifest?.commands.includes("repository.local.attach") ?? false,
-    discover: manifest?.commands.includes("repository.discover") ?? false,
-    detach: manifest?.commands.includes("repository.detach") ?? false,
+    attachLocal: manifestCommands.includes("repository.local.attach"),
+    discover: manifestCommands.includes("repository.discover"),
+    detach: manifestCommands.includes("repository.detach"),
   };
   const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);
   const learningCapabilities = learningManifestCapabilities(manifestState, manifest);
