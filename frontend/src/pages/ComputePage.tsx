@@ -36,6 +36,8 @@ export function ComputePage({ client }: { client: ComputeClient }) {
   const workerJobPagination = useCursorPagination(WORKER_JOB_QUERY_KEY);
 
   const loadNodes = useCallback(async () => {
+    setNodes(null);
+    setNodeError(null);
     try {
       setNodes(await client.listNodes({ limit: 50, cursor: nodePagination.cursor }));
       setNodeError(null);
@@ -45,6 +47,8 @@ export function ComputePage({ client }: { client: ComputeClient }) {
   }, [client, nodePagination.cursor]);
 
   const loadWorkers = useCallback(async () => {
+    setWorkers(null);
+    setWorkerError(null);
     try {
       setWorkers(await client.listWorkers({ limit: 50, cursor: workerPagination.cursor }));
       setWorkerError(null);
@@ -54,6 +58,8 @@ export function ComputePage({ client }: { client: ComputeClient }) {
   }, [client, workerPagination.cursor]);
 
   const loadWorkerJobs = useCallback(async () => {
+    setWorkerJobs(null);
+    setWorkerJobError(null);
     try {
       setWorkerJobs(await client.listWorkerJobs({ limit: 50, cursor: workerJobPagination.cursor }));
       setWorkerJobError(null);
