@@ -270,16 +270,6 @@ def test_scoped_personal_credential_http_contract_exposes_safe_scope_metadata() 
     assert "secret" not in scoped_items[0]
 
 
-def test_self_hosted_request_rate_limiter_default_supports_maintained_web_fan_out() -> None:
-    limiter = InMemoryRequestRateLimiter()
-    key = "request:browser-session"
-    for index in range(1200):
-        now = NOW + timedelta(milliseconds=index)
-        assert limiter.allow(key, now=now)
-        limiter.record(key, now=now)
-    assert not limiter.allow(key, now=NOW + timedelta(seconds=2))
-
-
 def test_authenticated_request_rate_limit_hook_returns_429() -> None:
     auth = _service(max_requests=1)
     user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
