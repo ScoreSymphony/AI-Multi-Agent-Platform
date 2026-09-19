@@ -32,8 +32,8 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | First run / onboarding | `/onboarding` | `onboarding` + canonical Project/Workspace/Agent/Model/Task commands | Maintained guided path; final real-browser acceptance remains owned by #1164. |
 | Dashboard / status | `/` | health + recent canonical Task/Run state | Maintained overview with backend-owned state. |
 | Projects / Workspaces | `/projects`, `/projects/:id`, `/workspaces/:id` | canonical Project/Workspace APIs | Inventory/create/detail and stable deep links exist. Workspace deep links resolve back to the Projects navigation parent. |
-| Tasks / Plans / Steps / Runs / Results / Artifacts | `/tasks`, `/tasks/:id`, `/runs`, `/runs/:id`, `/plans/:id`, `/steps/:id`, `/results/:id`, `/artifacts/:id` | canonical kernel + reference collections | Task management and Run inspection are maintained; Plan/Step/Result/Artifact references have stable deep links and canonical Task/Plan relationships. |
-| Agents / Agent Teams | `/agents`, `/agents/:id`, `/agent-teams`, `/agent-teams/:id` | `agents`, `agent-teams`, `agent-runs` | Inventory/detail plus canonical configuration composition are maintained; no provider identity becomes lifecycle truth. |
+| Tasks / Plans / Steps / Runs / Results / Artifacts | `/tasks`, `/tasks/:id`, `/runs`, `/runs/:id`, `/plans`, `/plans/:id`, `/steps`, `/steps/:id`, `/results`, `/results/:id`, `/artifacts`, `/artifacts/:id` | canonical kernel + reference collections | Task management and Run inspection are maintained; active Run detail exposes the canonical cancel operation with explicit confirmation and a stable return to the Run inventory. Plan/Step/Result/Artifact now have stable overview routes as well as detail deep links; refresh preserves the selected domain because collection identity is encoded in the URL. The normal chain is navigable Task -> Plan -> Step -> filtered canonical Runs -> Result/Artifact, with Task/Run relationships linking directly to canonical references. |
+| Agents / Agent Teams | `/agents`, `/agents/:id`, `/agent-teams`, `/agent-teams/:id` | `agents`, `agent-teams`, `agent-runs`, canonical Task assignment projection | Inventory/create/detail/configure/clone are maintained. Detail views expose assigned canonical Tasks and their Plan/Run links without creating Agent-owned lifecycle state. Advertised `agent.delete` / `agent-team.delete` commands are surfaced only when present in the manifest and require explicit browser confirmation; server ownership/reference checks remain authoritative. |
 | Models / providers | `/models`, `/models/:id`, `/models/providers/:id` | model/provider inventory + canonical configuration commands | Inventory, health/configuration and stable detail routes exist. Routing-profile configuration is composed into the maintained Model surface. |
 | Tools / Capabilities / MCP | `/tools`, `/tools/:id`, `/tools/providers/:id` | `capabilities`, `capability-providers` | Capability/provider management is the product surface. MCP servers remain replaceable provider/adapter implementations and are intentionally not contacted directly by the browser. |
 | Files | `/files`, `/files/:id` | canonical `files` ResourceService | **Gap found and closed by #1234.** Authorized metadata, Project/owner scope, state, type, size/checksum and Artifact relationships are now reachable. Raw bytes, storage paths and provider-private identity remain intentionally non-Web. |
@@ -102,8 +102,9 @@ page:
 - durable detail state is reloaded from canonical IDs instead of being kept only in transient
   frontend selection state;
 - deep links now map to their stable navigation parent, including Workspace -> Projects,
-  Plan/Step/Result/Artifact -> Files & Artifacts, generated Template resources -> Templates and
-  Import/Export package/preview/report -> Import / Export.
+  Plan/Step/Result/Artifact overview and detail routes -> Files & Artifacts, generated Template resources -> Templates and
+  Import/Export package/preview/report -> Import / Export;
+- Plan/Step/Result/Artifact collection selection is URL-owned on the stable overview routes, so browser reload and direct navigation do not fall back to a transient default tab.
 
 #1234 also adds a navigation-closure regression guard: every discoverable primary sidebar route must
 resolve to a maintained route and may not silently fall through to the generic
@@ -144,6 +145,27 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
 7. **Documentation drift** — #87 was already closed, #79 was already browser-safe and frontend
    dependency pins had advanced beyond the documented values. `docs/FRONTEND.md` is reconciled in
    the same change.
+
+8. **Core reference refresh/deep-link gap** — Plan, Step, Result and Artifact had detail routes but their
+   only overview selection lived in transient state under `/files`. Added stable `/plans`, `/steps`,
+   `/results` and `/artifacts` over the same canonical collections, kept Files & Artifacts as the
+   navigation parent, linked Task/Run relationships directly to those canonical detail routes, and exposed
+   the canonical Step -> Run edge through Run subject filters. Agent and Agent Team details also project
+   their assigned canonical Tasks with Plan/Run links from Task truth rather than keeping a second runtime view.
+
+9. **Agent / Agent Team destructive-action gap** — the Control Plane already exposed named
+   `agent.delete` and `agent-team.delete` commands, but the maintained Web detail views did not surface
+   them. The typed configuration client now exposes those exact commands, the actions are manifest-gated,
+   and deletion requires explicit confirmation before the server performs owner/reference safety checks.
+
+10. **Task cancellation confirmation** — the maintained Task detail view exposed the canonical cancel
+    command directly. The action now requires an explicit confirmation before invoking the existing
+    Control Plane command; cancellation propagation and resulting lifecycle truth remain backend-owned.
+
+11. **Run lifecycle reachability gap** — the typed Web client already exposed canonical Run
+    cancellation, but Run detail was inspection-only and had no explicit return action. Active Run detail
+    now exposes confirmed `cancelRun(task_id, run_id)`, refresh, Task navigation and a stable Back to Runs
+    path; the Control Plane remains lifecycle authority.
 
 ## Remaining #1234 work outside this branch
 
