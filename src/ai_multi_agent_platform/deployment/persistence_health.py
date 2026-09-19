@@ -149,7 +149,8 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
                             severity="unavailable",
                             retryable=False,
                             action=(
-                                "restore or recreate the required store through its owning subsystem"
+                                "restore or recreate the required store through its "
+                                "owning subsystem"
                             ),
                         )
                     )
