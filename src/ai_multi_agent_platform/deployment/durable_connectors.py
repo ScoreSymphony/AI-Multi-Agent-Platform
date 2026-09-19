@@ -207,6 +207,7 @@ def _extend_base_deployment(
         telemetry=base.telemetry,
         health_provider=base.health_provider,
         persistence_health=base.persistence_health,
+        drain=base.drain,
         distributed_runtime=base.distributed_runtime,
         pre_authorization_lifecycle=base.pre_authorization_lifecycle,
         lifecycle_binding=base.lifecycle_binding,
