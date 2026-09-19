@@ -33,6 +33,8 @@ export function ObservabilityPage({
   const [selectedTaskId, setSelectedTaskId] = useState(initialTaskId);
   const [taskIdDraft, setTaskIdDraft] = useState(initialTaskId);
   const [timeline, setTimeline] = useState<TimelineItem[] | null>(null);
+  const [timelineNextCursor, setTimelineNextCursor] = useState<string | null>(null);
+  const [timelineTotal, setTimelineTotal] = useState<number | null>(null);
   const [taskError, setTaskError] = useState<unknown>(null);
   const [timelineError, setTimelineError] = useState<unknown>(null);
 
@@ -52,18 +54,23 @@ export function ObservabilityPage({
     }
   }, [client]);
 
-  const loadTimeline = useCallback(async () => {
+  const loadTimeline = useCallback(async (cursor?: string, append = false) => {
     if (!selectedTaskId) {
       setTimeline([]);
+      setTimelineNextCursor(null);
+      setTimelineTotal(0);
       setTimelineError(null);
       return;
     }
     try {
       const next = await client.timeline(selectedTaskId, {
-        limit: 200,
+        limit: 100,
+        cursor,
         direction: "asc",
       });
-      setTimeline(next.items);
+      setTimeline((current) => append && current ? [...current, ...next.items] : next.items);
+      setTimelineNextCursor(next.next_cursor);
+      setTimelineTotal(next.total);
       setTimelineError(null);
     } catch (error) {
       setTimelineError(error);
@@ -81,6 +88,8 @@ export function ObservabilityPage({
 
   useEffect(() => {
     setTimeline(null);
+    setTimelineNextCursor(null);
+    setTimelineTotal(null);
     void loadTimeline();
   }, [loadTimeline]);
 
@@ -163,7 +172,10 @@ export function ObservabilityPage({
       ) : null}
 
       <div className="metrics">
-        <Metric label="Timeline entries" value={timeline ? summary.total : "—"} />
+        <Metric
+          label="Timeline entries"
+          value={timeline ? `${summary.total} loaded / ${timelineTotal ?? summary.total} total` : "—"}
+        />
         <Metric label="Domain events" value={timeline ? summary.domainEvents : "—"} />
         <Metric label="Telemetry" value={timeline ? summary.telemetryEntries : "—"} />
         <Metric label="Failures" value={timeline ? summary.failures : "—"} />
@@ -184,6 +196,14 @@ export function ObservabilityPage({
         ) : (
           <TimelineTable items={timeline} />
         )}
+        {timelineNextCursor ? (
+          <button
+            type="button"
+            onClick={() => void loadTimeline(timelineNextCursor, true)}
+          >
+            Load more timeline entries
+          </button>
+        ) : null}
       </Card>
 
       {summary.components.length > 0 ? (
