@@ -918,7 +918,7 @@ async def test_hermes_full_marketplace_flow_preserves_replaceable_orchestrator_o
             item_types=frozenset({RegistryItemType.ORCHESTRATOR}),
         )
     )
-    assert discovered == (item,)
+    assert discovered == (replace(item, source_registry="local"),)
     requirements = service.inspect_requirements(item)
     assert requirements is not None
     assert requirements["required_extension_type"] == "orchestrator"

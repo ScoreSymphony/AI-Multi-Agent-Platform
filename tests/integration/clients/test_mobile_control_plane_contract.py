@@ -44,21 +44,21 @@ async def _request(
 
 
 def test_mobile_routes_project_real_single_node_control_plane_state(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        deployment = build_default_single_node_deployment(
-            SingleNodeConfig(
-                data_dir=tmp_path / "platform",
-                secure_cookie=False,
-            ),
-            enable_distributed_execution=True,
-        )
-        admin = deployment.bootstrap_admin("mobile-contract-admin", secrets.token_urlsafe(32))
-        credential = deployment.authentication.create_personal_access_token(
-            admin.user_id,
-            purpose="mobile-control-plane-contract",
-        )
-        token = credential.secret
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "platform",
+            secure_cookie=False,
+        ),
+        enable_distributed_execution=True,
+    )
+    admin = deployment.bootstrap_admin("mobile-contract-admin", secrets.token_urlsafe(32))
+    credential = deployment.authentication.create_personal_access_token(
+        admin.user_id,
+        purpose="mobile-control-plane-contract",
+    )
+    token = credential.secret
 
+    async def scenario() -> None:
         actor = await _request(deployment, token, "GET", "/api/v1/auth/me")
         assert actor.status == 200
         assert actor.body["actor_type"] == "human"
