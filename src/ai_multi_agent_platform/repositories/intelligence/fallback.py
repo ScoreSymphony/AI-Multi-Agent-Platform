@@ -2,7 +2,7 @@
 
 CapabilityRegistry already falls back when an optional provider is unavailable at resolution time.
 Repository indexes can become stale only after a repository-specific request is inspected, though.
-This coordinator handles that second case without bypassing #12: both the preferred attempt and the
+This coordinator handles that second case without bypassing canonical capability invocation: both the preferred attempt and the
 baseline fallback are ordinary capability-invocation calls with the same policy/governance context.
 """
 
