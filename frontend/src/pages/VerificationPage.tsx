@@ -6,6 +6,7 @@ import {
   VerificationClient,
   type VerificationReviewAction,
 } from "../api/verification";
+import { isControlPlaneError } from "../api/client";
 import type { Page } from "../api/types";
 import { AppLink } from "../app/router";
 import {
@@ -108,6 +109,7 @@ export function VerificationDetailPage({
   const [comment, setComment] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [requirementError, setRequirementError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState<ReviewAttempt | null>(null);
@@ -116,16 +118,23 @@ export function VerificationDetailPage({
     try {
       const nextVerification = await client.get(verificationId);
       setVerification(nextVerification);
-      const [nextRequirement, nextHistory] = await Promise.all([
-        client.getRequirement(nextVerification.task_id).catch(() => null),
-        client.list({
-          limit: 100,
-          sort: "created_at",
-          direction: "asc",
-          filters: { task_id: nextVerification.task_id },
-        }),
-      ]);
+      let nextRequirement: CanonicalVerificationRequirement | null = null;
+      let nextRequirementError: unknown = null;
+      try {
+        nextRequirement = await client.getRequirement(nextVerification.task_id);
+      } catch (nextError) {
+        if (!(isControlPlaneError(nextError) && nextError.status === 404)) {
+          nextRequirementError = nextError;
+        }
+      }
+      const nextHistory = await client.list({
+        limit: 100,
+        sort: "created_at",
+        direction: "asc",
+        filters: { task_id: nextVerification.task_id },
+      });
       setRequirement(nextRequirement);
+      setRequirementError(nextRequirementError);
       setHistory(nextHistory.items);
       setError(null);
     } catch (nextError) {
@@ -164,6 +173,7 @@ export function VerificationDetailPage({
         await load();
       } catch (nextError) {
         setActionError(nextError);
+        await load();
       } finally {
         setBusy(false);
       }
@@ -183,6 +193,8 @@ export function VerificationDetailPage({
       comment={comment}
       evidenceText={evidenceText}
       busy={busy}
+      loadError={error}
+      requirementError={requirementError}
       actionError={actionError}
       canReview={canReview}
       onComment={setComment}
@@ -206,6 +218,8 @@ export function VerificationDetailView({
   comment,
   evidenceText,
   busy,
+  loadError,
+  requirementError,
   actionError,
   canReview,
   onComment,
@@ -219,6 +233,8 @@ export function VerificationDetailView({
   comment: string;
   evidenceText: string;
   busy: boolean;
+  loadError: unknown;
+  requirementError: unknown;
   actionError: unknown;
   canReview: boolean;
   onComment: (value: string) => void;
@@ -244,6 +260,7 @@ export function VerificationDetailView({
       <div className="actions">
         <button onClick={onRefresh}>Refresh</button>
       </div>
+      {loadError ? <ErrorState error={loadError} onRetry={onRefresh} /> : null}
 
       <div className="grid-two">
         <Card title="Exact subject binding">
@@ -275,7 +292,11 @@ export function VerificationDetailView({
         </Card>
       </div>
 
-      {requirement ? (
+      {requirementError ? (
+        <Card title="Task completion policy">
+          <ErrorState error={requirementError} onRetry={onRefresh} />
+        </Card>
+      ) : requirement ? (
         <Card title="Task completion policy">
           <div className="detail-status">
             <StatusBadge value={requirement.completion.state} />
