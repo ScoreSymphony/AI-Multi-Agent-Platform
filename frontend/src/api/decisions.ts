@@ -108,7 +108,16 @@ export class DecisionRecordClient {
     decisionRecordId: string,
     reference: DecisionReference,
   ): Promise<CanonicalDecisionRecord> {
-    return this.command("decision-record.link-provenance", decisionRecordId, { reference });
+    return this.command("decision-record.link-provenance", decisionRecordId, {
+      reference: {
+        kind: reference.kind,
+        resource_id: reference.resource_id,
+        revision: reference.revision,
+        digest: reference.digest,
+        locator: reference.locator,
+        metadata: reference.metadata,
+      },
+    });
   }
 
   private command(
