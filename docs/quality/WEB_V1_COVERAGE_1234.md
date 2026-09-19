@@ -43,9 +43,9 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Approvals / Verification | `/approvals`, `/approvals/:id`, `/verification`, `/verification/:id` | canonical Approval/Verification resources + exact commands | Inspection, decision/review actions and evidence links are maintained. Missing decision commands degrade to read-only rather than fabricating authority. |
 | Automations | `/automations`, `/automations/:id` | `automations`, `automation-deliveries` + exact lifecycle commands | Create/update, pause/resume/disable, test, delivery history and retry are maintained. Scheduler evaluation and event/webhook ingestion remain system paths. |
 | Notifications | `/notifications` | `notifications` | Inventory and read/dismiss attention actions are maintained; a separate durable-detail lifecycle is not invented where the owner does not require one. |
-| Integrations / Connectors | `/integrations`, definition/connection detail routes | `connector-definitions`, `connections` | Connect/configure/enable/disable/health/sync/remove remain canonical. Connection removal now requires explicit confirmation. Plaintext secrets are never a browser field. |
+| Integrations / Connectors | `/integrations`, `/integrations/definitions/:id`, `/integrations/connections/:id` | `connector-definitions`, `connections` | Inventory, connect-time configuration, detail, enable/disable, health, sync, refresh and remove are maintained with stable deep links. The current canonical owner exposes no `connection.configure` / `connection.update` command, so post-connect configuration is deliberately not invented by Web; configuration is supplied to `connection.create` and later replacement is owner-defined. Connection removal requires explicit confirmation. Plaintext secrets are never a browser field. |
 | Repositories | `/repositories`, `/repositories/:id` | canonical repository collection/commands | **Gap found and closed by #1234.** The previous Web page exposed inventory/inspection plus fetch while the canonical V1 contract also supported registration and primary Git mutations. The maintained surface now provides managed local attach, Connection/provider discovery with optional attach, fetch, branch creation, checkout, commit, push and detach, all capability-/policy-gated through the Control Plane. |
-| Marketplace / Registry | `/marketplace` | `registry-items` + Marketplace commands | Existing unified Marketplace surface is maintained and uninstall now requires explicit confirmation. #1174 is consumed; final expanded-kind closure waits for #1221 rather than guessing an unstable contract. |
+| Marketplace / Registry | `/marketplace`, `/marketplace/items/:resourceId` | `registry-items`, `marketplace-kinds` + Marketplace commands | #1174 and the now-integrated #1221 contracts are consumed directly. Global discovery/filtering covers Agents, Agent Teams, Orchestrators, Executors, Model Providers, Capability Providers, selected platform-provider kinds and the earlier Tool/Skill/Plugin/Connector/Application/Content kinds, while future registered kinds remain generic. Source-qualified item details now have stable reloadable deep links. Install/update/uninstall stay delegated to canonical owner handlers; configuration/enable/disable remain on the advertised owner management surface rather than becoming Marketplace-owned lifecycle. Uninstall requires explicit confirmation. |
 | Import / Export | `/import-export`, package/preview/report deep links | `portability-packages`, `portability-import-previews`, `portability-import-reports`; `portability.export|package.validate|preview|import` | **Gap found and closed by #1234.** Export, package validation, server-owned preview and exact-preview import are reachable. Browser code cannot submit an ID mapping or mutation order. |
 | Templates / generated configuration | `/templates`, `/templates/:id`; generated Workflow/Capability Assignment/Model Routing Profile detail routes | canonical Template resources/commands plus owner-domain read projections | Maintained create/version/clone/fork/preview/apply paths; generated owner-domain resources use canonical deep links when a real route exists. |
 | Organizations / collaboration | `/organizations` | Organizations/Teams/Memberships/invitations/ownership/shares | #87 is closed and the maintained surface is active. Membership removal, invitation revocation and share revocation now require explicit confirmation. |
@@ -167,6 +167,12 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
     now exposes confirmed `cancelRun(task_id, run_id)`, refresh, Task navigation and a stable Back to Runs
     path; the Control Plane remains lifecycle authority.
 
+12. **Expanded Marketplace deep-link closure** — #1221 is now closed and integrated on the M3 collection branch.
+    The Marketplace already rendered its semantic kinds, owner metadata and lifecycle decisions, but
+    item detail was transient selection state inside `/marketplace`. Added source-qualified
+    `/marketplace/items/:resourceId` routes backed by canonical `registry-items` reads, preserving
+    reload/direct-link behavior without introducing Marketplace-owned runtime authority.
+
 ## Remaining #1234 work outside this branch
 
 This branch is intentionally a mergeable **coverage slice**, not the final #1234 closure branch.
@@ -190,16 +196,16 @@ the later collection branch, rather than leaving partial route/client work in th
 
 - **#1164** owns the maintained real-browser first-run/E2E workflow. #1234 consumes that evidence
   instead of creating a second competing harness.
-- **#1221** owns the final Marketplace expansion to Agents, Agent Teams, Orchestrators and platform
-  providers. #1234 can audit the current baseline but cannot freeze the expanded route/state matrix
-  before that issue stabilizes.
 - **#1174** is complete and is treated as the authoritative Marketplace-core baseline.
+- **#1221** is now closed and integrated through the M3 collection merge; its expanded semantic-kind
+  and canonical-owner contracts are consumed by the maintained Marketplace Web surface rather than
+  treated as a future dependency.
 - **#747** remains the final whole-product acceptance audit after #1234 and the other implementation
   work are complete.
 
-The implementation branch is therefore allowed to become merge-ready before #1164/#1221 close.
-#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164/#1221 are
-consumed and the exact final integrated Web state is rechecked.
+The implementation branch is therefore allowed to become merge-ready before #1164 closes; #1221 is already integrated.
+#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164 evidence is
+consumed and the exact final integrated Web state is rechecked. #1221 no longer blocks this matrix.
 
 ## Validation contract
 
@@ -214,5 +220,5 @@ frontend and repository checks, including:
 - maintained browser regression where selected by CI;
 - all branch-protection Required Checks.
 
-A green merge commit is implementation evidence, not a substitute for #1164/#1221 final dependency
+A green merge commit is implementation evidence, not a substitute for #1164 final dependency
 consumption or #747.

@@ -1,7 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { RegistryClient } from "/src/api/registry.ts";
-import { MarketplacePage } from "/src/pages/MarketplacePage.tsx";
+import { matchPath, RouterProvider, useRouter } from "/src/app/router.tsx";
+import { MARKETPLACE_ITEM_ROUTE, MarketplacePage } from "/src/pages/MarketplacePage.tsx";
 
 const calls = [];
 window.__marketplaceCalls = calls;
@@ -800,4 +801,21 @@ const fetchImpl = async (input, init = {}) => {
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
 
-createRoot(root).render(<MarketplacePage client={new RegistryClient({ fetchImpl })} />);
+const client = new RegistryClient({ fetchImpl });
+
+function MarketplaceHarnessApp() {
+  const { path } = useRouter();
+  const detailMatch = matchPath(MARKETPLACE_ITEM_ROUTE, path);
+  return (
+    <MarketplacePage
+      client={client}
+      selectedResourceId={detailMatch?.resourceId}
+    />
+  );
+}
+
+createRoot(root).render(
+  <RouterProvider>
+    <MarketplaceHarnessApp />
+  </RouterProvider>,
+);

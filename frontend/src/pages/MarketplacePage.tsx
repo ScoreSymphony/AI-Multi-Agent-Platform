@@ -9,7 +9,9 @@ import {
   type RegistryPreview,
   type RegistryTrustStatus,
 } from "../api/registry";
+import { isControlPlaneError } from "../api/client";
 import type { JsonValue, ListQuery, Page } from "../api/types";
+import { AppLink } from "../app/router";
 import {
   CanonicalId,
   Card,
@@ -24,6 +26,7 @@ import { technicalMetadata } from "../marketplace/technical";
 const TRUST_STATES: RegistryTrustStatus[] = ["trusted", "reviewed", "local", "untrusted"];
 const MATURITY_STATES: RegistryMaturity[] = ["stable", "beta", "experimental"];
 const PAGE_SIZE = 24;
+export const MARKETPLACE_ITEM_ROUTE = "/marketplace/items/:resourceId";
 
 const PRIMARY_KIND_GROUPS: Array<{ group: string; label: string; kinds: string[] }> = [
   {
@@ -105,7 +108,13 @@ function descriptor(
   };
 }
 
-export function MarketplacePage({ client }: { client: RegistryClient }) {
+export function MarketplacePage({
+  client,
+  selectedResourceId,
+}: {
+  client: RegistryClient;
+  selectedResourceId?: string;
+}) {
   const [page, setPage] = useState<Page<RegistryItem> | null>(null);
   const [kindDescriptors, setKindDescriptors] = useState<RegistryKindDescriptor[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -135,6 +144,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
   const [preview, setPreview] = useState<RegistryPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailReload, setDetailReload] = useState(0);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const listQuery = useMemo<ListQuery>(() => {
@@ -207,6 +217,34 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setPreview(null);
+    setActionError(null);
+    setSuccessMessage(null);
+    if (!selectedResourceId) {
+      setSelected(null);
+      setDetailLoading(false);
+      return;
+    }
+    let active = true;
+    setSelected(null);
+    setDetailLoading(true);
+    void client
+      .getByResourceId(selectedResourceId)
+      .then((detail) => {
+        if (active) setSelected(detail);
+      })
+      .catch((nextError) => {
+        if (active) setActionError(nextError);
+      })
+      .finally(() => {
+        if (active) setDetailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, selectedResourceId, detailReload]);
+
   const effectiveKindDescriptors = useMemo(
     () => mergeKindDescriptors(
       kindDescriptors,
@@ -247,21 +285,12 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
       fallbackDescriptor(selected.item_type, selected.route)
     : null;
 
-  const selectItem = async (item: RegistryItem) => {
-    setSelected(item);
-    setPreview(null);
-    setActionError(null);
-    setSuccessMessage(null);
-    setDetailLoading(true);
-    try {
-      const detail = await client.get(item.item_id, item.version, item.source_registry);
-      setSelected(detail);
-    } catch (nextError) {
-      setActionError(nextError);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  const selectedIsStaleForRoute = Boolean(
+    selectedResourceId &&
+    selected &&
+    marketplaceItemResourceId(selected) !== selectedResourceId,
+  );
+  const showDetailLoading = detailLoading || selectedIsStaleForRoute;
 
   const runPreview = async (item: RegistryItem) => {
     setBusy(true);
@@ -434,6 +463,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
     );
 
   const providerDisabled = error ? providerLooksDisabled(error) : false;
+  const providerAccessDenied = error ? isMarketplaceAccessFailure(error) : false;
 
   return (
     <div className="stack">
@@ -661,17 +691,22 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
           </label>
           <button type="submit">Reset filters</button>
         </form>
+        <div className="button-row">
+          <button type="button" onClick={() => void load(cursor)}>Refresh Marketplace</button>
+        </div>
 
         {error ? (
           <div className="stack">
-            <DegradedState
-              title={providerDisabled ? "Marketplace provider disabled" : "Marketplace provider unavailable"}
-              detail={
-                providerDisabled
-                  ? "This deployment does not expose the Registry Marketplace resource."
-                  : "The catalog provider could not be read. Existing component runtimes remain separate from Marketplace availability."
-              }
-            />
+            {!providerAccessDenied ? (
+              <DegradedState
+                title={providerDisabled ? "Marketplace provider disabled" : "Marketplace provider unavailable"}
+                detail={
+                  providerDisabled
+                    ? "This deployment does not expose the Registry Marketplace resource."
+                    : "The catalog provider could not be read. Existing component runtimes remain separate from Marketplace availability."
+                }
+              />
+            ) : null}
             <ErrorState error={error} onRetry={() => void load(cursor)} />
           </div>
         ) : null}
@@ -701,7 +736,6 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
                     effectiveKindDescriptors.find((entry) => entry.kind === item.item_type) ??
                     fallbackDescriptor(item.item_type, item.route)
                   }
-                  onInspect={() => void selectItem(item)}
                 />
               ))}
             </div>
@@ -717,8 +751,11 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
         ) : null}
       </Card>
 
-      {detailLoading ? <LoadingState label="Loading Marketplace details…" /> : null}
-      {selected ? (
+      {showDetailLoading ? <LoadingState label="Loading Marketplace details…" /> : null}
+      {selectedResourceId && !showDetailLoading && !selected && actionError ? (
+        <ErrorState error={actionError} onRetry={() => setDetailReload((value) => value + 1)} />
+      ) : null}
+      {selected && !selectedIsStaleForRoute ? (
         <MarketplaceDetail
           item={selected}
           descriptor={selectedKind ?? fallbackDescriptor(selected.item_type, selected.route)}
@@ -731,6 +768,7 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
           onUninstall={() => void uninstall()}
           onPin={() => void pin()}
           onUnpin={() => void unpin()}
+          onRefresh={() => setDetailReload((value) => value + 1)}
         />
       ) : null}
     </div>
@@ -740,11 +778,9 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
 function MarketplaceItemCard({
   item,
   descriptor,
-  onInspect,
 }: {
   item: RegistryItem;
   descriptor: RegistryKindDescriptor;
-  onInspect: () => void;
 }) {
   const technical = technicalMetadata(item);
   const compatible = platformCompatible(item);
@@ -775,7 +811,7 @@ function MarketplaceItemCard({
         <dt>Compatibility</dt><dd>{compatible === null ? "not evaluated" : compatible ? "compatible" : "incompatible"}</dd>
         <dt>State</dt><dd>{itemStateLabel(item)}</dd>
       </dl>
-      <button type="button" onClick={onInspect}>Inspect</button>
+      <AppLink href={marketplaceItemHref(item)}>Inspect</AppLink>
     </article>
   );
 }
@@ -792,6 +828,7 @@ function MarketplaceDetail({
   onUninstall,
   onPin,
   onUnpin,
+  onRefresh,
 }: {
   item: RegistryItem;
   descriptor: RegistryKindDescriptor;
@@ -804,6 +841,7 @@ function MarketplaceDetail({
   onUninstall: () => void;
   onPin: () => void;
   onUnpin: () => void;
+  onRefresh: () => void;
 }) {
   const operation = mutationOperation(item);
   const supportsOperation = operation ? operationSupported(item, operation, descriptor) : false;
@@ -966,9 +1004,14 @@ function MarketplaceDetail({
             Marketplace owns discovery and distribution only. Runtime and operational lifecycle
             remain in the canonical owner surface advertised for this component kind.
           </p>
-          <a href={managementPath}>Open {kindLabel(descriptor)} management</a>
+          <AppLink href={managementPath}>Open {kindLabel(descriptor)} management</AppLink>
         </div>
       ) : null}
+
+      <div className="button-row">
+        <AppLink href="/marketplace">Back to Marketplace</AppLink>
+        <button type="button" disabled={busy} onClick={onRefresh}>Refresh item</button>
+      </div>
 
       <div className="button-row">
         {operation && supportsOperation ? (
@@ -1542,6 +1585,21 @@ function humanizeKind(value: string): string {
     .join(" ");
 }
 
+function marketplaceItemResourceId(item: RegistryItem): string {
+  const qualified = item.qualified_id?.trim();
+  if (qualified) return qualified;
+  const versioned = `${item.item_id}@${item.version}`;
+  return item.source_registry ? `${item.source_registry}::${versioned}` : versioned;
+}
+
+function marketplaceItemHref(item: RegistryItem): string {
+  return `/marketplace/items/${encodeURIComponent(marketplaceItemResourceId(item))}`;
+}
+
+function isMarketplaceAccessFailure(error: unknown): boolean {
+  return isControlPlaneError(error) && (error.status === 401 || error.status === 403);
+}
+
 function providerLooksDisabled(error: unknown): boolean {
   const text = error instanceof Error ? error.message : String(error);
   const normalized = text.toLowerCase();
@@ -1555,10 +1613,14 @@ function providerLooksDisabled(error: unknown): boolean {
 
 export const marketplacePresentation = {
   humanizeKind,
+  marketplaceItemHref,
+  marketplaceItemResourceId,
   itemStateLabel,
   mutationOperation,
   mergeKindDescriptors,
   operationSupported,
+  providerLooksDisabled,
+  isMarketplaceAccessFailure,
   uninstallSupported,
   platformCompatible,
 };

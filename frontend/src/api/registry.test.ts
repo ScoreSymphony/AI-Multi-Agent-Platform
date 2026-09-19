@@ -27,6 +27,23 @@ describe("RegistryClient", () => {
     ]);
   });
 
+  it("loads source-qualified Marketplace resources by canonical resource ID", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "/api/v1/registry-items/private%3A%3Aexample.asset%401.2.3",
+      );
+      return jsonResponse({
+        id: "example.asset@1.2.3",
+        qualified_id: "private::example.asset@1.2.3",
+        type: "registry-item",
+      });
+    });
+    const client = new RegistryClient({ fetchImpl });
+
+    await client.getByResourceId("private::example.asset@1.2.3");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("previews and activates the exact Registry version through canonical commands", async () => {
     const calls: Array<{ url: string; body: unknown; idempotency: string | null }> = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
