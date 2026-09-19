@@ -124,6 +124,7 @@ export function ApprovalDetailPage({
   const [comment, setComment] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [decisionAttempt, setDecisionAttempt] = useState<ApprovalDecisionAttempt | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -140,18 +141,39 @@ export function ApprovalDetailPage({
 
   const decide = async (decision: "approve" | "deny") => {
     if (approval === null || approval.status !== "pending" || decisionState !== "available") return;
+    const normalizedComment = comment.trim();
+    const fingerprint = JSON.stringify({
+      decision,
+      approvalId: approval.id,
+      requestedActionDigest: approval.requested_action_digest,
+      comment: normalizedComment,
+    });
+    const attempt = decisionAttempt?.fingerprint === fingerprint
+      ? decisionAttempt
+      : {
+          fingerprint,
+          idempotencyKey: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
+        };
+    setDecisionAttempt(attempt);
     setBusy(true);
     setDecisionError(null);
     try {
-      const options = comment.trim() ? { comment } : {};
+      const options = {
+        ...(normalizedComment ? { comment: normalizedComment } : {}),
+        idempotencyKey: attempt.idempotencyKey,
+        correlationId: attempt.correlationId,
+      };
       const updated = decision === "approve"
         ? await client.approve(approval.id, approval.requested_action_digest, options)
         : await client.deny(approval.id, approval.requested_action_digest, options);
       setApproval(updated);
+      setDecisionAttempt(null);
       setComment("");
       setConfirmed(false);
     } catch (nextError) {
       setDecisionError(nextError);
+      await load();
     } finally {
       setBusy(false);
     }
@@ -175,6 +197,12 @@ export function ApprovalDetailPage({
       onDecision={decide}
     />
   );
+}
+
+interface ApprovalDecisionAttempt {
+  fingerprint: string;
+  idempotencyKey: string;
+  correlationId: string;
 }
 
 export function ApprovalDetailView({
