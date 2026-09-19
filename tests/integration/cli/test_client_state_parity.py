@@ -409,7 +409,6 @@ def test_cli_preserves_shared_canonical_core_error_semantics(tmp_path: Path) -> 
             }
 
 
-
 class _MarketplaceParityTransport:
     def __init__(self, payloads: Mapping[str, tuple[int, object] | object]) -> None:
         self.payloads = dict(payloads)
