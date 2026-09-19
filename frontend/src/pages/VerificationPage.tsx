@@ -6,8 +6,11 @@ import {
   VerificationClient,
   type VerificationReviewAction,
 } from "../api/verification";
+import { isControlPlaneError } from "../api/client";
 import type { Page } from "../api/types";
+import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
+import { PaginationControls } from "../components/Pagination";
 import {
   Card,
   CanonicalId,
@@ -24,13 +27,31 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
     null,
   );
   const [error, setError] = useState<unknown>(null);
+  const pendingPagination = useCursorPagination("verification:pending:created_at:asc");
+  const historyPagination = useCursorPagination("verification:history:created_at:desc");
+  const requirementPagination = useCursorPagination("verification:requirements:updated_at:desc");
 
   const load = useCallback(async () => {
     try {
       const [nextPending, nextHistory, nextRequirements] = await Promise.all([
-        client.listPendingReviews({ limit: 50, sort: "created_at", direction: "asc" }),
-        client.list({ limit: 50, sort: "created_at", direction: "desc" }),
-        client.listRequirements({ limit: 50, sort: "updated_at", direction: "desc" }),
+        client.listPendingReviews({
+          limit: 50,
+          cursor: pendingPagination.cursor,
+          sort: "created_at",
+          direction: "asc",
+        }),
+        client.list({
+          limit: 50,
+          cursor: historyPagination.cursor,
+          sort: "created_at",
+          direction: "desc",
+        }),
+        client.listRequirements({
+          limit: 50,
+          cursor: requirementPagination.cursor,
+          sort: "updated_at",
+          direction: "desc",
+        }),
       ]);
       setPending(nextPending);
       setHistory(nextHistory);
@@ -39,7 +60,12 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client]);
+  }, [
+    client,
+    historyPagination.cursor,
+    pendingPagination.cursor,
+    requirementPagination.cursor,
+  ]);
 
   useEffect(() => {
     void load();
@@ -74,6 +100,16 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
 
       <Card title="Pending review queue">
         {pending ? <VerificationTable verifications={pending.items} empty="No pending human reviews" /> : <LoadingState />}
+        {pending ? (
+          <PaginationControls
+            page={pending}
+            pageNumber={pendingPagination.pageNumber}
+            hasPrevious={pendingPagination.hasPrevious}
+            onPrevious={pendingPagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => pendingPagination.next(pending.next_cursor)}
+          />
+        ) : null}
       </Card>
 
       <Card title="Completion requirements">
@@ -82,6 +118,16 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
         ) : (
           <LoadingState />
         )}
+        {requirements ? (
+          <PaginationControls
+            page={requirements}
+            pageNumber={requirementPagination.pageNumber}
+            hasPrevious={requirementPagination.hasPrevious}
+            onPrevious={requirementPagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => requirementPagination.next(requirements.next_cursor)}
+          />
+        ) : null}
       </Card>
 
       <Card title="Verification history">
@@ -90,6 +136,16 @@ export function VerificationPage({ client }: { client: VerificationClient }) {
         ) : (
           <LoadingState />
         )}
+        {history ? (
+          <PaginationControls
+            page={history}
+            pageNumber={historyPagination.pageNumber}
+            hasPrevious={historyPagination.hasPrevious}
+            onPrevious={historyPagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => historyPagination.next(history.next_cursor)}
+          />
+        ) : null}
       </Card>
     </div>
   );
@@ -108,6 +164,7 @@ export function VerificationDetailPage({
   const [comment, setComment] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [requirementError, setRequirementError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState<ReviewAttempt | null>(null);
@@ -116,16 +173,23 @@ export function VerificationDetailPage({
     try {
       const nextVerification = await client.get(verificationId);
       setVerification(nextVerification);
-      const [nextRequirement, nextHistory] = await Promise.all([
-        client.getRequirement(nextVerification.task_id).catch(() => null),
-        client.list({
-          limit: 100,
-          sort: "created_at",
-          direction: "asc",
-          filters: { task_id: nextVerification.task_id },
-        }),
-      ]);
+      let nextRequirement: CanonicalVerificationRequirement | null = null;
+      let nextRequirementError: unknown = null;
+      try {
+        nextRequirement = await client.getRequirement(nextVerification.task_id);
+      } catch (nextError) {
+        if (!(isControlPlaneError(nextError) && nextError.status === 404)) {
+          nextRequirementError = nextError;
+        }
+      }
+      const nextHistory = await client.list({
+        limit: 100,
+        sort: "created_at",
+        direction: "asc",
+        filters: { task_id: nextVerification.task_id },
+      });
       setRequirement(nextRequirement);
+      setRequirementError(nextRequirementError);
       setHistory(nextHistory.items);
       setError(null);
     } catch (nextError) {
@@ -164,6 +228,7 @@ export function VerificationDetailPage({
         await load();
       } catch (nextError) {
         setActionError(nextError);
+        await load();
       } finally {
         setBusy(false);
       }
@@ -183,6 +248,8 @@ export function VerificationDetailPage({
       comment={comment}
       evidenceText={evidenceText}
       busy={busy}
+      loadError={error}
+      requirementError={requirementError}
       actionError={actionError}
       canReview={canReview}
       onComment={setComment}
@@ -206,6 +273,8 @@ export function VerificationDetailView({
   comment,
   evidenceText,
   busy,
+  loadError,
+  requirementError,
   actionError,
   canReview,
   onComment,
@@ -219,6 +288,8 @@ export function VerificationDetailView({
   comment: string;
   evidenceText: string;
   busy: boolean;
+  loadError: unknown;
+  requirementError: unknown;
   actionError: unknown;
   canReview: boolean;
   onComment: (value: string) => void;
@@ -244,6 +315,7 @@ export function VerificationDetailView({
       <div className="actions">
         <button onClick={onRefresh}>Refresh</button>
       </div>
+      {loadError ? <ErrorState error={loadError} onRetry={onRefresh} /> : null}
 
       <div className="grid-two">
         <Card title="Exact subject binding">
@@ -275,7 +347,11 @@ export function VerificationDetailView({
         </Card>
       </div>
 
-      {requirement ? (
+      {requirementError ? (
+        <Card title="Task completion policy">
+          <ErrorState error={requirementError} onRetry={onRefresh} />
+        </Card>
+      ) : requirement ? (
         <Card title="Task completion policy">
           <div className="detail-status">
             <StatusBadge value={requirement.completion.state} />

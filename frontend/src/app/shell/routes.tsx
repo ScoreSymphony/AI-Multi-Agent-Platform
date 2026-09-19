@@ -126,6 +126,8 @@ export function renderShellRoute({
   const modelRoutingProfileMatch = matchPath("/model-routing-profiles/:profileId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
+  const eventTaskMatch = matchPath("/events/:taskId", path);
+  const observabilityTaskMatch = matchPath("/observability/:taskId", path);
   const portabilityPackageMatch = matchPath("/import-export/packages/:packageId", path);
   const portabilityPreviewMatch = matchPath("/import-export/previews/:previewId", path);
   const portabilityReportMatch = matchPath("/import-export/reports/:reportId", path);
@@ -214,7 +216,9 @@ export function renderShellRoute({
   if (approvalMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals"><ApprovalDetailPage client={approvalClient} approvalId={approvalMatch.approvalId} decisionState={approvalDecisionState} /></ManifestResourcePage>;
   if (path === "/notifications") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Notifications" resource="notifications"><NotificationsPage client={notificationClient} /></ManifestResourcePage>;
   if (path === "/events") return <ObservabilityPage client={client} view="events" />;
+  if (eventTaskMatch) return <ObservabilityPage client={client} view="events" initialTaskId={eventTaskMatch.taskId} />;
   if (path === "/observability") return <ObservabilityPage client={client} view="observability" />;
+  if (observabilityTaskMatch) return <ObservabilityPage client={client} view="observability" initialTaskId={observabilityTaskMatch.taskId} />;
   if (path === "/usage") return <UsagePage client={client} manifest={manifest} />;
   if (path === "/settings") return <SettingsPage session={session} />;
   if (navItem) return <UnavailablePage item={navItem} manifest={manifest} />;

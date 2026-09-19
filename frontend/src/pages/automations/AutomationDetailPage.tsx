@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AutomationClient,
+  type AutomationState,
   type CanonicalAutomation,
   type CanonicalAutomationDelivery,
 } from "../../api/automations";
@@ -11,6 +12,7 @@ import { PaginationControls } from "../../components/Pagination";
 import {
   Card,
   CanonicalId,
+  DegradedState,
   ErrorState,
   LoadingState,
   StatusBadge,
@@ -84,6 +86,11 @@ export function AutomationDetailPage({
       setActionError(null);
     } catch (nextError) {
       setActionError(nextError);
+      try {
+        await loadAutomation();
+      } catch (refreshError) {
+        setError(refreshError);
+      }
     } finally {
       setBusy(false);
     }
@@ -91,6 +98,11 @@ export function AutomationDetailPage({
 
   async function update(draft: AutomationDraft) {
     await runAction(() => automations.update(automationId, toUpdateInput(draft)));
+  }
+
+  async function disable() {
+    if (!window.confirm(`Disable automation ${automationId}? Scheduled and event-driven delivery will stop until it is explicitly enabled again.`)) return;
+    await runAction(() => automations.disable(automationId));
   }
 
   async function runTest() {
@@ -142,28 +154,39 @@ export function AutomationDetailPage({
       {actionError ? <ErrorState error={actionError} /> : null}
 
       <Card title="Lifecycle controls">
+        {automation.state === "invalid" ? (
+          <DegradedState
+            title="Automation configuration is invalid"
+            detail={`Reason: ${automation.invalidation_reason_code ?? "unspecified"}. Revalidation is a canonical administrative lifecycle operation; the browser does not repair or replace configuration locally.`}
+          />
+        ) : null}
         <div className="actions">
-          {automation.state === "enabled" ? (
+          {automationLifecycleActions(automation.state).includes("pause") ? (
             <button disabled={busy} onClick={() => void runAction(() => automations.pause(automation.id))}>
               Pause
             </button>
           ) : null}
-          {automation.state === "paused" ? (
+          {automationLifecycleActions(automation.state).includes("resume") ? (
             <button disabled={busy} onClick={() => void runAction(() => automations.resume(automation.id))}>
-              Resume
+              {automation.state === "disabled" ? "Enable" : "Resume"}
             </button>
           ) : null}
-          {automation.state !== "disabled" ? (
-            <button disabled={busy} onClick={() => void runAction(() => automations.disable(automation.id))}>
+          {automationLifecycleActions(automation.state).includes("disable") ? (
+            <button disabled={busy} onClick={() => void disable()}>
               Disable
+            </button>
+          ) : null}
+          {automationLifecycleActions(automation.state).includes("revalidate") ? (
+            <button disabled={busy} onClick={() => void runAction(() => automations.revalidate(automation.id))}>
+              Revalidate
             </button>
           ) : null}
           <button disabled={busy} onClick={() => void load()}>Refresh</button>
         </div>
         <p>
-          State transitions go through the canonical #18 commands and remain subject to server-side
-          authorization. A disabled automation is not silently re-created or replaced by frontend
-          state.
+          State transitions go through canonical #18 commands and remain subject to server-side
+          authorization. Disable is reversible through canonical resume/enable semantics; no
+          automation.delete command exists, so the Web UI does not invent destructive deletion.
         </p>
       </Card>
 
@@ -204,6 +227,8 @@ export function AutomationDetailPage({
               base_backoff_seconds: automation.retry_policy.base_backoff_seconds,
               last_evaluated: formatAutomationDate(automation.last_evaluated_at),
               next_evaluation: formatAutomationDate(automation.next_evaluation_at),
+              invalidated_at: formatAutomationDate(automation.invalidated_at ?? null),
+              state_before_invalid: automation.state_before_invalid ?? "—",
             }}
           />
         </Card>
@@ -290,4 +315,14 @@ function DefinitionList({ values }: { values: Record<string, string | number> })
       ))}
     </dl>
   );
+}
+
+
+export type AutomationLifecycleAction = "pause" | "resume" | "disable" | "revalidate";
+
+export function automationLifecycleActions(state: AutomationState): AutomationLifecycleAction[] {
+  if (state === "enabled") return ["pause", "disable"];
+  if (state === "paused") return ["resume", "disable"];
+  if (state === "disabled") return ["resume"];
+  return ["revalidate"];
 }
