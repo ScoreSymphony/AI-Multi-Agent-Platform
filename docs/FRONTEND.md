@@ -131,21 +131,10 @@ Common loading, empty, error and degraded components are used across integrated 
 - unauthenticated/session-required outcomes;
 - authorization denial;
 - approval-required authorization outcomes;
-- missing/deleted-or-no-longer-visible resources;
-- validation failures;
-- stale/conflicting canonical state;
-- Control Plane transport failure;
 - unavailable/retryable subsystem failures;
 - ordinary contract/request failures.
 
-The shared error state exposes a Retry action only when the canonical error envelope marks the
-failure retryable. Unknown routes are rendered as a dedicated Not Found state rather than being
-conflated with an optional canonical subsystem that is not installed.
-
-The shell also distinguishes initial Control Plane discovery (`Checking API`) from a real manifest
-failure (`API unavailable`), so accessibility live regions do not announce a false outage during
-normal startup. A retryable manifest/Control Plane failure retains its canonical error and can
-re-run public manifest discovery in-place; recovery never mounts a private backend fallback.
+The shell also distinguishes initial Control Plane discovery (`Checking API`) from a real manifest failure (`API unavailable`), so accessibility live regions do not announce a false outage during normal startup.
 
 Reserved product routes inspect the Control Plane manifest. If a canonical resource is absent, they remain visibly unavailable and do not call private implementation services. Optional functional routes are not mounted while manifest discovery is unresolved, preventing speculative requests to unregistered collections. Chat is gated by `conversations`. Multi-resource domains require every canonical collection needed by the page before the functional surface is mounted: Evaluations requires `evaluation-suites` + `evaluation-runs`, Integrations requires `connector-definitions` + `connections`, Compute requires `nodes` + `workers` + `worker-jobs`, Knowledge requires `knowledge` + `knowledge-results`, and Import/Export requires `portability-packages` + `portability-import-previews` + `portability-import-reports`. Files & Artifacts is gated by `files`; Artifact/Result/Plan/Step detail routes continue to use their own canonical collections. Memory is independently gated by `memory`. Plugins intentionally differs: `plugins` is sufficient for installed lifecycle management, while `plugin-candidates` is optional and gates only discovery/install/update inspection. Approval inspection similarly remains available with only `approvals`, while decision controls require both safe `approval.approve` and `approval.deny` commands and fail closed to read-only when either is absent. Templates is deliberately stricter because the final #78 page exposes list/detail/instances, create-from-existing and mutation/preview/apply in one product surface: it requires `templates`, `template-instances`, `agents`, `agent-teams`, `automations`, `projects`, `workspaces`, `workflows`, `capability-assignments`, `model-routing-profiles` and the complete advertised `template.*` command set — including the Workflow, Capability Assignment and Model Routing Profile create-from-existing commands — before either Template route mounts. A missing command list or any missing requirement therefore degrades the whole Template surface instead of partially exposing controls that cannot be safely completed. The three new owner-domain generated-resource routes are also independently gated by their exact advertised collection, and their views consume only canonical read projections. Generated-resource navigation remains fail-closed for every other type: resources without a dedicated canonical browser detail surface remain visible by stable ID without a fabricated route.
 
@@ -186,7 +175,6 @@ The frontend test suite now includes focused contract coverage for:
 - canonical Portability package/preview/report collection forwarding plus exact `portability.export|package.validate|preview|import` commands; import sends only the server-issued Preview ID and never a client-owned ID mapping or mutation order;
 - canonical Approval read collection forwarding plus exact `approval.approve` / `approval.deny` routing, exact digest/body binding, BrowserSession CSRF, idempotency/correlation propagation, unauthorized/conflict handling, secret-payload absence and fail-closed decision manifest gating while read-only inspection remains usable;
 - global Search query/result navigation through the canonical Search endpoint;
-- refresh/back-forward-safe global Search filter state encoded in the browser URL, with unsupported URL values rejected to supported defaults;
 - canonical Terminal session/gateway client behavior;
 - constrained read-only extension collection URL/filter/cursor forwarding and path-injection rejection;
 - canonical Automation create/update/lifecycle/manual-test/retry command routing with idempotency;
@@ -227,4 +215,4 @@ An owning issue may still contain backend/distributed follow-up work while a sta
 
 #1234 re-audited this progressive model against current `main`. #87 is closed and the maintained Organizations surface consumes its canonical Control Plane resources. #79 already exposes the complete browser-safe portability workflow, so Import/Export is now activated over those exact resources and commands instead of remaining an obsolete reserved route. The same audit corrected Files & Artifacts to consume the already-available canonical `files` metadata projection from #13.
 
-Owning backend implementation remains insufficient by itself: a browser surface is activated only after the versioned canonical API exists on current `main`, and optional resources remain manifest-gated with no private fallback. The current M3 baseline already integrates #1164's maintained browser first-run evidence and #1221's Marketplace expansion, so #1234 now consumes both directly rather than treating either as a pending dependency or inventing competing frontend lifecycle state.
+Owning backend implementation remains insufficient by itself: a browser surface is activated only after the versioned canonical API exists on current `main`, and optional resources remain manifest-gated with no private fallback. Final #1234 closure still consumes #1164's maintained browser first-run evidence and waits for #1221 to stabilize the Marketplace expansion claimed for V1; those dependencies do not justify inventing competing frontend lifecycle state.
