@@ -531,7 +531,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             await self._force_lifespan_completion(
                 inner_task,
                 send=send,
-                response_sent=shutdown_response_sent(),
+                response_sent=shutdown_response_sent,
                 reason="resource_teardown_timeout",
                 timed_out=True,
             )
@@ -543,7 +543,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             await self._force_lifespan_completion(
                 inner_task,
                 send=send,
-                response_sent=shutdown_response_sent(),
+                response_sent=shutdown_response_sent,
                 reason="resource_teardown_failure",
                 timed_out=False,
             )
@@ -553,7 +553,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
         inner_task: asyncio.Task[None],
         *,
         send: ASGISend,
-        response_sent: bool,
+        response_sent: Callable[[], bool],
         reason: str,
         timed_out: bool,
     ) -> None:
@@ -582,7 +582,7 @@ class SingleNodeDrainASGI(ControlPlaneASGI):
             self._drain.mark_teardown_failure("lifespan_teardown_did_not_settle_after_cancel")
             inner_task.add_done_callback(observe_completion)
 
-        if not response_sent:
+        if not response_sent():
             await send({"type": "lifespan.shutdown.complete"})
         await self._drain.mark_completed()
 
