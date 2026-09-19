@@ -113,7 +113,13 @@ export function normalizeAppLinkHref(href: string | undefined): string | undefin
     if (resolved.origin === base.origin) {
       return `${resolved.pathname}${resolved.search}${resolved.hash}`;
     }
-    return resolved.href;
+    if (resolved.protocol === "https:") {
+      return `https://${resolved.host}${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+    if (resolved.protocol === "http:") {
+      return `http://${resolved.host}${resolved.pathname}${resolved.search}${resolved.hash}`;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
