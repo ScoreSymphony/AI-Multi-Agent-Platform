@@ -853,9 +853,7 @@ def external_effect_recovery_resource(
     evidence_refs: list[JsonValue] = []
     evidence_refs.extend(record.evidence_refs)
     metadata_namespaces: list[JsonValue] = []
-    metadata_namespaces.extend(
-        sorted({metadata.namespace for metadata in record.adapter_metadata})
-    )
+    metadata_namespaces.extend(sorted({metadata.namespace for metadata in record.adapter_metadata}))
     permitted_actions: list[JsonValue] = []
     permitted_actions.extend(record.permitted_actions)
 
@@ -905,12 +903,8 @@ def _replace_with_observation(
         disposition=disposition,
         reason=reason,
         result_ref=observation.result_ref or record.result_ref,
-        artifact_refs=tuple(
-            dict.fromkeys((*record.artifact_refs, *observation.artifact_refs))
-        ),
-        evidence_refs=tuple(
-            dict.fromkeys((*record.evidence_refs, *observation.evidence_refs))
-        ),
+        artifact_refs=tuple(dict.fromkeys((*record.artifact_refs, *observation.artifact_refs))),
+        evidence_refs=tuple(dict.fromkeys((*record.evidence_refs, *observation.evidence_refs))),
         adapter_metadata=observation.adapter_metadata or record.adapter_metadata,
         updated_at=_utc_now(),
     )
