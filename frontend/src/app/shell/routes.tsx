@@ -29,7 +29,7 @@ import { PluginCandidateDetailPage, PluginDetailPage, PluginsPage } from "../../
 import { ProjectDetailPage, WorkspaceDetailPage } from "../../pages/ProjectPages";
 import { ProjectsPage } from "../../pages/ProjectListPage";
 import { RepositoriesPage, RepositoryDetailPage } from "../../pages/RepositoriesPage";
-import { FileDetailPage, ReferencesPage } from "../../pages/ReferencePages";
+import { FileDetailPage, ReferenceCollectionPage, ReferencesPage } from "../../pages/ReferencePages";
 import { RunsPage } from "../../pages/RunListPage";
 import { SearchPage } from "../../pages/SearchPage";
 import { SettingsPage } from "../../pages/SettingsPage";
@@ -131,6 +131,7 @@ export function renderShellRoute({
   const portabilityPackageMatch = matchPath("/import-export/packages/:packageId", path);
   const portabilityPreviewMatch = matchPath("/import-export/previews/:previewId", path);
   const portabilityReportMatch = matchPath("/import-export/reports/:reportId", path);
+  const referenceCollection = referenceCollectionRoute(path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
@@ -167,12 +168,13 @@ export function renderShellRoute({
   if (capabilityAssignmentMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Capability Assignment" resource="capability-assignments"><CanonicalConfigurationDetailPage client={collections} collection="capability-assignments" resourceId={capabilityAssignmentMatch.assignmentId} /></ManifestResourcePage>;
   if (modelRoutingProfileMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Model Routing Profile" resource="model-routing-profiles"><CanonicalConfigurationDetailPage client={collections} collection="model-routing-profiles" resourceId={modelRoutingProfileMatch.profileId} /></ManifestResourcePage>;
   if (path === "/agents") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents"><AgentsPage client={client} /></ManifestResourcePage>;
-  if (agentMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents"><AgentDetailPage client={client} agentId={agentMatch.agentId} /></ManifestResourcePage>;
+  if (agentMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents"><AgentDetailPage client={client} agentId={agentMatch.agentId} canDelete={manifestCommands.includes("agent.delete")} /></ManifestResourcePage>;
   if (path === "/agent-teams") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamsPage client={client} /></ManifestResourcePage>;
-  if (agentTeamMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} /></ManifestResourcePage>;
+  if (agentTeamMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams"><AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} canDelete={manifestCommands.includes("agent-team.delete")} /></ManifestResourcePage>;
   if (path === "/organizations") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Organizations" resource="organizations"><OrganizationsPage client={organizationClient} /></ManifestResourcePage>;
   if (path === "/files") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Files & artifacts" resource="files"><ReferencesPage client={client} files={filesClient} /></ManifestResourcePage>;
   if (fileMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="File" resource="files"><FileDetailPage client={filesClient} fileId={fileMatch.fileId} /></ManifestResourcePage>;
+  if (referenceCollection) return <ManifestResourcePage state={manifestState} manifest={manifest} label={referenceCollectionLabel(referenceCollection)} resource={referenceCollection}><ReferenceCollectionPage client={client} collection={referenceCollection} /></ManifestResourcePage>;
   if (referenceMatch) return <VerificationBoundReferenceDetailPage client={client} verificationClient={verificationClient} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   if (path === "/memory") return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryPage client={memoryKnowledgeClient} /></ManifestResourcePage>;
   if (memoryMatch) return <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory"><MemoryDetailPage client={memoryKnowledgeClient} memoryId={memoryMatch.memoryId} /></ManifestResourcePage>;
@@ -223,6 +225,17 @@ export function renderShellRoute({
   if (path === "/settings") return <SettingsPage session={session} />;
   if (navItem) return <UnavailablePage item={navItem} manifest={manifest} />;
   return <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
+}
+
+function referenceCollectionRoute(path: string): ReferenceCollection | null {
+  for (const collection of ["artifacts", "results", "plans", "steps"] as const) {
+    if (path === `/${collection}`) return collection;
+  }
+  return null;
+}
+
+function referenceCollectionLabel(collection: ReferenceCollection): string {
+  return collection.charAt(0).toUpperCase() + collection.slice(1);
 }
 
 function referenceRoute(path: string): { collection: ReferenceCollection; resourceId: string } | null {

@@ -190,6 +190,7 @@ export function TaskDetailPage({
   }, [client, task?.plan_ref, taskId]);
 
   const command = async (action: "queue" | "start" | "cancel" | "retry") => {
+    if (action === "cancel" && !confirmTaskCancellation(task?.title ?? taskId)) return;
     setBusy(true);
     try {
       if (action === "queue") await client.queueTask(taskId);
@@ -314,10 +315,10 @@ export function TaskDetailPage({
           />
         </Card>
         <Card title="Canonical references">
-          <ReferenceList label="Plan" values={task.plan_ref ? [task.plan_ref] : []} />
-          <ReferenceList label="Steps" values={task.step_ids} />
-          <ReferenceList label="Artifacts" values={task.artifact_ids} />
-          <ReferenceList label="Results" values={task.result_ids} />
+          <ReferenceList label="Plan" collection="plans" values={task.plan_ref ? [task.plan_ref] : []} />
+          <ReferenceList label="Steps" collection="steps" values={task.step_ids} />
+          <ReferenceList label="Artifacts" collection="artifacts" values={task.artifact_ids} />
+          <ReferenceList label="Results" collection="results" values={task.result_ids} />
         </Card>
       </div>
       <TaskExecutionBudget budget={budget} error={budgetError} loading={budgetLoading} />
@@ -377,11 +378,27 @@ function RunTable({ runs }: { runs: CanonicalRun[] }) {
   );
 }
 
-function ReferenceList({ label, values }: { label: string; values: string[] }) {
+function ReferenceList({
+  label,
+  collection,
+  values,
+}: {
+  label: string;
+  collection: "artifacts" | "results" | "plans" | "steps";
+  values: string[];
+}) {
   return (
     <div className="reference-group">
       <strong>{label}</strong>
-      {values.length ? <ul>{values.map((value) => <li key={value}><CanonicalId value={value} /></li>)}</ul> : <span>—</span>}
+      {values.length ? (
+        <ul>
+          {values.map((value) => (
+            <li key={value}>
+              <AppLink href={`/${collection}/${value}`}><CanonicalId value={value} /></AppLink>
+            </li>
+          ))}
+        </ul>
+      ) : <span>—</span>}
     </div>
   );
 }
@@ -401,4 +418,11 @@ function timelineLabel(item: TimelineItem): string {
 
 function timelineTimestamp(item: TimelineItem): string {
   return item.type === "event" ? item.occurred_at : item.timestamp;
+}
+
+
+export function confirmTaskCancellation(taskLabel: string): boolean {
+  return window.confirm(
+    `Cancel Task "${taskLabel}"? The Control Plane will remain authoritative for cancellation propagation to active Plan/Step/Run work.`,
+  );
 }

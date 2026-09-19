@@ -226,13 +226,75 @@ export function RunsPage({ client }: { client: ControlPlaneClient }) {
 export function RunDetailPage({ client, runId }: { client: ControlPlaneClient; runId: string }) {
   const [run, setRun] = useState<CanonicalRun | null>(null);
   const [error, setError] = useState<unknown>(null);
-  useEffect(() => {
-    if (!isCanonicalId(runId)) { setError(new Error("This route does not contain a valid canonical Run ID.")); return; }
-    void client.getRun(runId).then(setRun).catch(setError);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!isCanonicalId(runId)) {
+      setError(new Error("This route does not contain a valid canonical Run ID."));
+      return;
+    }
+    try {
+      setRun(await client.getRun(runId));
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    }
   }, [client, runId]);
-  if (error) return <ErrorState error={error} />;
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (error && !run) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!run) return <LoadingState />;
-  return <div className="stack"><header className="page-header detail-header"><div><p className="eyebrow">Run</p><h1>Attempt {run.attempt}</h1><CanonicalId value={run.id} /></div><StatusBadge value={run.status} /></header>{run.error && <DegradedState title={`${run.error.category}: ${run.error.code}`} detail={run.error.message} />}{run.recovery_required && <DegradedState title="Recovery required" detail={run.recovery_reason ?? "The canonical Run is marked for recovery."} />}<div className="grid-two"><Card title="Run details"><DefinitionList values={{ task: run.task_id, subject: `${run.subject_type}:${run.subject_id}`, trace: run.trace_id ?? "—", correlation: run.correlation_id, started: run.started_at ? formatDate(run.started_at) : "—", finished: run.finished_at ? formatDate(run.finished_at) : "—" }} /></Card><Card title="References"><ReferenceList label="Artifacts" values={run.artifact_ids} /><ReferenceList label="Results" values={run.result_ids} /></Card></div><Card title="Output"><pre>{prettyJson(run.output)}</pre></Card></div>;
+
+  const canCancel = ["queued", "starting", "running"].includes(run.status);
+  const cancel = async () => {
+    if (!canCancel || !confirmRunCancellation(run.id)) return;
+    setBusy(true);
+    try {
+      setRun(await client.cancelRun(run.task_id, run.id));
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="stack">
+      <header className="page-header detail-header">
+        <div><p className="eyebrow">Run</p><h1>Attempt {run.attempt}</h1><CanonicalId value={run.id} /></div>
+        <StatusBadge value={run.status} />
+      </header>
+      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      <div className="actions">
+        <AppLink href="/runs">Back to Runs</AppLink>
+        <AppLink href={`/tasks/${run.task_id}`}>Open Task</AppLink>
+        {canCancel ? <button type="button" disabled={busy} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel Run"}</button> : null}
+        <button type="button" disabled={busy} onClick={() => void load()}>Refresh</button>
+      </div>
+      {run.error ? <DegradedState title={`${run.error.category}: ${run.error.code}`} detail={run.error.message} /> : null}
+      {run.recovery_required ? <DegradedState title="Recovery required" detail={run.recovery_reason ?? "The canonical Run is marked for recovery."} /> : null}
+      <div className="grid-two">
+        <Card title="Run details">
+          <DefinitionList values={{ task: run.task_id, subject: `${run.subject_type}:${run.subject_id}`, trace: run.trace_id ?? "—", correlation: run.correlation_id, started: run.started_at ? formatDate(run.started_at) : "—", finished: run.finished_at ? formatDate(run.finished_at) : "—" }} />
+        </Card>
+        <Card title="References">
+          <ReferenceList label="Artifacts" values={run.artifact_ids} />
+          <ReferenceList label="Results" values={run.result_ids} />
+        </Card>
+      </div>
+      <Card title="Output"><pre>{prettyJson(run.output)}</pre></Card>
+    </div>
+  );
+}
+
+export function confirmRunCancellation(runId: string): boolean {
+  return window.confirm(
+    `Cancel Run "${runId}"? The canonical Control Plane will determine the resulting Run and Task lifecycle state.`,
+  );
 }
 
 export function UnavailablePage({ item, manifest }: { item: { label: string; apiResource?: string }; manifest: APImanifest | null }) {
@@ -251,7 +313,26 @@ function RunTable({ runs, compact = false }: { runs: CanonicalRun[]; compact?: b
 }
 
 function ReferenceList({ label, values }: { label: string; values: string[] }) {
-  return <div className="reference-group"><strong>{label}</strong>{values.length ? <ul>{values.map((value) => <li key={value}><CanonicalId value={value} /></li>)}</ul> : <span>—</span>}</div>;
+  const collection =
+    label === "Artifacts" ? "artifacts" :
+    label === "Results" ? "results" :
+    label === "Plan" ? "plans" :
+    label === "Steps" ? "steps" :
+    null;
+  return (
+    <div className="reference-group">
+      <strong>{label}</strong>
+      {values.length ? (
+        <ul>
+          {values.map((value) => (
+            <li key={value}>
+              {collection ? <AppLink href={`/${collection}/${value}`}><CanonicalId value={value} /></AppLink> : <CanonicalId value={value} />}
+            </li>
+          ))}
+        </ul>
+      ) : <span>—</span>}
+    </div>
+  );
 }
 function DefinitionList({ values }: { values: Record<string, string | number> }) { return <dl>{Object.entries(values).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>; }
 function Metric({ label, value }: { label: string; value: string | number }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div>; }

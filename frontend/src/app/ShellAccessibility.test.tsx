@@ -218,6 +218,11 @@ describe("#17 shell accessibility semantics", () => {
 
     const result = renderShell("/results/result_1");
     expect(result).toMatch(/href="\/files"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/files"/);
+
+    const plans = renderShell("/plans");
+    expect(plans).toMatch(/href="\/files"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/files"/);
+    expect(plans).toContain("Checking Plans availability");
+    expect(plans).not.toContain("Unknown route");
   });
 
   it("routes Settings to the real browser-session surface", () => {

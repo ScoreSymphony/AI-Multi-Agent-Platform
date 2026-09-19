@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CanonicalAgent, CanonicalAgentRun, CanonicalAgentTeam } from "../api/agents";
 import { ControlPlaneClient } from "../api/client";
 import { useConfigurationSession } from "../api/configurationSession";
-import type { Page } from "../api/types";
+import type { CanonicalTask, Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
@@ -149,13 +149,16 @@ export function AgentsPage({ client }: { client: ControlPlaneClient }) {
 export function AgentDetailPage({
   client,
   agentId,
+  canDelete = false,
 }: {
   client: ControlPlaneClient;
   agentId: string;
+  canDelete?: boolean;
 }) {
   const [agent, setAgent] = useState<CanonicalAgent | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [editorMode, setEditorMode] = useState<"edit" | "clone" | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { configuration, collections } = useConfigurationSession(client);
 
   const load = useCallback(async () => {
@@ -170,6 +173,19 @@ export function AgentDetailPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const deleteAgent = async () => {
+    if (!agent || !canDelete) return;
+    if (!window.confirm(`Delete Agent "${agent.revision.profile.name}"? This removes the canonical Agent definition only when the Control Plane confirms it is safe and owned by the current actor.`)) return;
+    setDeleting(true);
+    try {
+      await configuration.deleteAgent(agent.id);
+      window.location.assign("/agents");
+    } catch (nextError) {
+      setError(nextError);
+      setDeleting(false);
+    }
+  };
 
   if (editorMode) {
     return (
@@ -212,8 +228,9 @@ export function AgentDetailPage({
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
       <div className="actions">
-        <button className="primary" type="button" onClick={() => setEditorMode("edit")}>Configure Agent</button>
-        <button type="button" onClick={() => setEditorMode("clone")}>Clone Agent</button>
+        <button className="primary" type="button" disabled={deleting} onClick={() => setEditorMode("edit")}>Configure Agent</button>
+        <button type="button" disabled={deleting} onClick={() => setEditorMode("clone")}>Clone Agent</button>
+        {canDelete ? <button type="button" disabled={deleting} onClick={() => void deleteAgent()}>{deleting ? "Deleting…" : "Delete Agent"}</button> : null}
       </div>
       <div className="grid-two">
         <Card title="Definition">
@@ -275,6 +292,12 @@ export function AgentDetailPage({
           />
         </Card>
       </div>
+      <AssignedWork
+        client={client}
+        assignmentKind="agent"
+        assignmentId={agent.id}
+        label="Agent"
+      />
     </div>
   );
 }
@@ -347,13 +370,16 @@ export function AgentTeamsPage({ client }: { client: ControlPlaneClient }) {
 export function AgentTeamDetailPage({
   client,
   teamId,
+  canDelete = false,
 }: {
   client: ControlPlaneClient;
   teamId: string;
+  canDelete?: boolean;
 }) {
   const [team, setTeam] = useState<CanonicalAgentTeam | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const { configuration } = useConfigurationSession(client);
 
   const load = useCallback(async () => {
@@ -368,6 +394,19 @@ export function AgentTeamDetailPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const deleteTeam = async () => {
+    if (!team || !canDelete) return;
+    if (!window.confirm(`Delete Agent Team "${team.revision.profile.name}"? This removes the canonical Team definition only when the Control Plane confirms it is safe and owned by the current actor.`)) return;
+    setDeleting(true);
+    try {
+      await configuration.deleteAgentTeam(team.id);
+      window.location.assign("/agent-teams");
+    } catch (nextError) {
+      setError(nextError);
+      setDeleting(false);
+    }
+  };
 
   if (editing) {
     return (
@@ -396,7 +435,10 @@ export function AgentTeamDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
-      <div className="actions"><button className="primary" type="button" onClick={() => setEditing(true)}>Configure Team</button></div>
+      <div className="actions">
+        <button className="primary" type="button" disabled={deleting} onClick={() => setEditing(true)}>Configure Team</button>
+        {canDelete ? <button type="button" disabled={deleting} onClick={() => void deleteTeam()}>{deleting ? "Deleting…" : "Delete Team"}</button> : null}
+      </div>
       <div className="grid-two">
         <Card title="Team policy">
           <DefinitionList
@@ -449,6 +491,94 @@ export function AgentTeamDetailPage({
           </div>
         )}
       </Card>
+      <AssignedWork
+        client={client}
+        assignmentKind="agent_team"
+        assignmentId={team.id}
+        label="Agent Team"
+      />
+    </div>
+  );
+}
+
+function AssignedWork({
+  client,
+  assignmentKind,
+  assignmentId,
+  label,
+}: {
+  client: ControlPlaneClient;
+  assignmentKind: "agent" | "agent_team";
+  assignmentId: string;
+  label: string;
+}) {
+  const [tasks, setTasks] = useState<Page<CanonicalTask> | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setTasks(
+        await client.listTasks({
+          limit: 100,
+          sort: "updated_at",
+          direction: "desc",
+          filters: {
+            agent_assignment_type: assignmentKind,
+            agent_assignment_id: assignmentId,
+          },
+        }),
+      );
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    }
+  }, [assignmentId, assignmentKind, client]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <Card title="Assigned work">
+      <p>
+        Canonical Tasks assigned to this {label}. Plan and Run links come from the Task projection;
+        the Agent or Team does not own a parallel lifecycle view.
+      </p>
+      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {!tasks && !error ? <LoadingState /> : null}
+      {tasks ? <AssignedWorkTable tasks={tasks.items} label={label} /> : null}
+      <div className="actions"><button type="button" onClick={() => void load()}>Refresh assigned work</button></div>
+    </Card>
+  );
+}
+
+export function AssignedWorkTable({
+  tasks,
+  label,
+}: {
+  tasks: CanonicalTask[];
+  label: string;
+}) {
+  if (tasks.length === 0) return <EmptyState title={`No Tasks assigned to this ${label}`} />;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>Task</th><th>Status</th><th>Plan</th><th>Runs</th></tr></thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr key={task.id}>
+              <td><AppLink href={`/tasks/${task.id}`}>{task.title}</AppLink><div><CanonicalId value={task.id} /></div></td>
+              <td><StatusBadge value={task.status} /></td>
+              <td>{task.plan_ref ? <AppLink href={`/plans/${task.plan_ref}`}><CanonicalId value={task.plan_ref} /></AppLink> : "—"}</td>
+              <td>
+                {task.run_ids.length ? task.run_ids.map((runId) => (
+                  <div key={runId}><AppLink href={`/runs/${runId}`}><CanonicalId value={runId} /></AppLink></div>
+                )) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
