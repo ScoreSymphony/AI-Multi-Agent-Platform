@@ -264,7 +264,9 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "tests/integration/cli/test_client_state_parity.py::"
                 "test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error",
                 "tests/integration/cli/test_client_state_parity.py::"
-                "test_cli_preserves_not_found_and_conflict_error_categories",
+                "test_cli_preserves_shared_canonical_core_error_semantics",
+                "tests/integration/cli/test_authentication_and_approvals.py::"
+                "test_approval_cli_deny_and_expired_conflict_paths",
                 "tests/integration/cli/test_client_state_parity.py::"
                 "test_cli_preserves_shared_marketplace_pagination_filter_sort_and_identity",
                 "tests/integration/cli/test_client_state_parity.py::"
@@ -304,6 +306,7 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
                 "--run",
                 "src/api/canonicalStateParity.test.ts",
                 "src/api/errorPresentation.test.ts",
+                "src/api/approvals.test.ts",
                 "src/pages/MarketplacePage.test.tsx",
                 "src/api/onboarding.multiAgent.test.ts",
             ),
