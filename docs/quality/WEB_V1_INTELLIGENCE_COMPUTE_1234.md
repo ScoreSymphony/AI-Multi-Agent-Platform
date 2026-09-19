@@ -87,7 +87,7 @@ domain-local interpretations.
 ## Remaining outside this slice
 
 - #589 Research Evidence and #598 Decision Records remain explicitly out of scope.
-- #1164 remains the owner of maintained real-browser first-run/E2E evidence.
-- #1221 remains the Marketplace expansion owner; this slice does not modify Marketplace.
+- #1164 real-browser first-run/E2E evidence is already integrated and closed on current `main`; this slice does not duplicate it.
+- #1221 Marketplace expansion is already integrated and closed on current `main`; this slice does not modify Marketplace.
 - #1234 remains open until all independent slices and dependency-owned evidence are integrated and
   rechecked on the final combined state.
