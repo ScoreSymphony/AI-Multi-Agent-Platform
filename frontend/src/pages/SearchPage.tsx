@@ -37,6 +37,7 @@ export function SearchPage({ client }: { client: ControlPlaneClient }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setPage(null);
     try {
       setPage(await client.search({ ...request, cursor: pagination.cursor }));
       setError(null);
