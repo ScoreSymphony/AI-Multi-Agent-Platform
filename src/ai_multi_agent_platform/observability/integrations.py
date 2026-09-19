@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Protocol
@@ -145,10 +146,12 @@ class AggregatedHealthProvider(ProviderContract):
         *,
         provider_id: str = "platform-observability-health",
         telemetry: Telemetry | None = None,
+        draining: Callable[[], bool] | None = None,
     ) -> None:
         self._dependencies = dependencies
         self._provider_id = provider_id
         self._telemetry = telemetry
+        self._draining = draining or (lambda: False)
         self._status = HealthStatus.UNKNOWN
         self._service_health = ServiceHealth(alive=True, readiness=ReadinessState.READY)
         self._last_states: dict[str, ReadinessState] = {}
@@ -244,7 +247,10 @@ class AggregatedHealthProvider(ProviderContract):
                         operator_action=self._operational_action,
                     )
                 )
-            self._service_health = aggregate_health(tuple(dependencies))
+            self._service_health = aggregate_health(
+                tuple(dependencies),
+                draining=self._draining(),
+            )
             self._observe_readiness_transition()
             if not self._service_health.ready:
                 self._status = HealthStatus.UNAVAILABLE
