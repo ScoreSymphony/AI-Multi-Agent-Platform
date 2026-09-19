@@ -242,6 +242,11 @@ Authentication transport remains replaceable and is completed by its dedicated s
 
 `GET /api/v1/tasks/{task_id}/events/stream` provides Server-Sent Events containing canonical platform `Event` data.
 
+Each `platform.event` frame carries the canonical Event ID as the SSE `id:` field. Browser
+reconnects may resume with the standard `Last-Event-ID` header; explicit clients may use the
+equivalent `after_event_id` query parameter. The Control Plane forwards either cursor to the
+canonical Event provider/repository so reconnects do not replay already-consumed Task history.
+
 When an `EventProvider` is configured, its `subscribe()` contract is used. Clients never subscribe directly to Hermes, Forge or worker-private event feeds.
 
 `GET /api/v1/tasks/{task_id}/timeline` exposes paginated canonical event history.
