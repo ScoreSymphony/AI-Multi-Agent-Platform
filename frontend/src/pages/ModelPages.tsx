@@ -253,7 +253,7 @@ export function ModelProviderDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
-      {!provider.available || provider.health !== "healthy" ? (
+      {provider.enabled && (!provider.available || provider.health !== "healthy") ? (
         <DegradedState
           title="Provider unavailable or degraded"
           detail={`Canonical provider state reports health=${provider.health} and available=${provider.available ? "yes" : "no"}. No provider-private fallback is used.`}
