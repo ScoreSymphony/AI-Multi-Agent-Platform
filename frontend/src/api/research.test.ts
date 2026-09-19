@@ -51,4 +51,40 @@ describe("#589 Research Evidence frontend client", () => {
       expect(init.credentials).toBe("include");
     }
   });
+
+  it("routes primary Research mutations through canonical commands with idempotency keys", async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "research_1", type: "research-item" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "source_1", type: "research-source" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "observation_1", type: "research-source-observation" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "claim_1", type: "research-claim" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "evidence_1", type: "research-evidence" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "evidence_2", type: "research-evidence" }));
+    const client = new ResearchClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.createItem({ title: "T", question: "Q", research_class: "project_research" });
+    await client.addSource("research_1", { source_type: "web", locator: "https://example.invalid", title: "S" });
+    await client.observeSource("source_1", { retrieved_at: "2026-09-19T12:00:00+00:00" });
+    await client.addClaim("research_1", { text: "Claim", category: "fact" });
+    await client.addEvidence("claim_1", { source_observation_id: "observation_1", relation: "supports" });
+    await client.revalidateEvidence("evidence_1", "observation_1");
+
+    const expected = [
+      ["research.create", "research-items"],
+      ["research.source.add", "research_1"],
+      ["research.source.observe", "source_1"],
+      ["research.claim.add", "research_1"],
+      ["research.evidence.add", "claim_1"],
+      ["research.evidence.revalidate", "evidence_1"],
+    ];
+    expected.forEach(([command, resourceRef], index) => {
+      const [rawUrl, init] = fetchSpy.mock.calls[index] as [string, RequestInit];
+      expect(new URL(rawUrl, "https://platform.invalid").pathname)
+        .toBe(`/api/v1/commands/${command}`);
+      expect(init.method).toBe("POST");
+      expect(init.credentials).toBe("include");
+      expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+      expect(JSON.parse(String(init.body)).resource_ref).toBe(resourceRef);
+    });
+  });
 });
