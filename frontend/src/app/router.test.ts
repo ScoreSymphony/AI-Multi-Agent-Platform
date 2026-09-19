@@ -15,21 +15,17 @@ describe("cross-cutting route matching", () => {
 
 
 describe("AppLink URL safety", () => {
-  const base = "https://app.example.test/current?view=1";
-
-  it("normalizes same-origin links and preserves safe external HTTP(S) links", () => {
-    expect(normalizeAppLinkHref("/tasks/task_123?tab=runs#latest", base))
+  it("normalizes internal links and preserves safe external HTTP(S) links", () => {
+    expect(normalizeAppLinkHref("/tasks/task_123?tab=runs#latest"))
       .toBe("/tasks/task_123?tab=runs#latest");
-    expect(normalizeAppLinkHref("/tasks/task_123", "about:blank"))
-      .toBe("/tasks/task_123");
-    expect(normalizeAppLinkHref("https://docs.example.test/guide", base))
+    expect(normalizeAppLinkHref("https://docs.example.test/guide"))
       .toBe("https://docs.example.test/guide");
   });
 
   it("rejects executable and malformed URL schemes", () => {
-    expect(normalizeAppLinkHref("javascript:alert(1)", base)).toBeUndefined();
-    expect(normalizeAppLinkHref("data:text/html,<script>alert(1)</script>", base)).toBeUndefined();
-    expect(normalizeAppLinkHref("vbscript:msgbox(1)", base)).toBeUndefined();
-    expect(normalizeAppLinkHref("http://[", base)).toBeUndefined();
+    expect(normalizeAppLinkHref("javascript:alert(1)")).toBeUndefined();
+    expect(normalizeAppLinkHref("data:text/html,<script>alert(1)</script>")).toBeUndefined();
+    expect(normalizeAppLinkHref("vbscript:msgbox(1)")).toBeUndefined();
+    expect(normalizeAppLinkHref("http://[")).toBeUndefined();
   });
 });
