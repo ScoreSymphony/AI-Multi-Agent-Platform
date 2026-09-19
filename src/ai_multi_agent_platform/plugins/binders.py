@@ -135,9 +135,7 @@ class OrchestratorRegistryBinder:
                 try:
                     self._agent_mappers.register(mapper)
                 except ContractError as rollback_error:
-                    exc.add_note(
-                        "Agent mapper rollback failed after orchestrator unregister error"
-                    )
+                    exc.add_note("Agent mapper rollback failed after orchestrator unregister error")
                     exc.add_note(str(rollback_error))
             raise
 
