@@ -25,6 +25,7 @@ from ai_multi_agent_platform.deployment.product_composition import (
     build_product_single_node_deployment,
 )
 from ai_multi_agent_platform.deployment.server import main as run_server
+from ai_multi_agent_platform.distributed import register_distributed_control_plane
 from ai_multi_agent_platform.distribution import (
     CanonicalDistributionRouter,
     DistributionService,
@@ -124,6 +125,12 @@ def build_default_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         application_release_gate_policy=release_gate_policy,
     )
+    if enable_distributed_execution:
+        distributed_runtime = deployment.distributed_runtime
+        if distributed_runtime is None:
+            raise RuntimeError("distributed execution enabled without a distributed runtime")
+        register_distributed_control_plane(deployment.control_plane, distributed_runtime)
+
     applications = compose_application_runtime(
         config,
         deployment,

@@ -31,7 +31,6 @@ from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.distributed import (
     DistributedExecutorArtifactProvider,
     JsonDistributedStateStore,
-    register_distributed_control_plane,
 )
 from ai_multi_agent_platform.distributed.pressure_control_plane import (
     register_pressure_control_plane,
@@ -92,11 +91,9 @@ def build_distributed_control_plane_deployment(
         JsonDistributedStateStore(config.database_dir / _DISTRIBUTED_STATE_FILE)
     )
 
-    # The shipped distributed server exposes the already-existing canonical distributed
-    # compute resources and admin commands. Runtime inspection/drain/maintenance use the
-    # same northbound
-    # Control Plane as the rest of the platform rather than a deployment-private shortcut.
-    register_distributed_control_plane(deployment.control_plane, runtime)
+    # The default composition already exposes the canonical distributed compute resources and
+    # admin commands when distributed execution is enabled. The advanced adapter only adds
+    # deployment-specific persistence, pressure and Worker-protocol concerns here.
     pressure_config = HostPressureDeploymentConfig.from_environment(os.environ)
     pressure_provider = configure_distributed_host_pressure(
         runtime,
