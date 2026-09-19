@@ -34,14 +34,11 @@ export function RouterProvider({ children }: { children: ReactNode }) {
 
   const navigate = useCallback((next: string) => {
     if (typeof window === "undefined") return;
-    const target = new URL(next, window.location.href);
-    if (target.origin !== window.location.origin) {
-      window.location.assign(target.href);
-      return;
-    }
+    const nextHref = normalizeInternalNavigationHref(next, window.location.href);
+    if (!nextHref) return;
 
+    const target = new URL(nextHref, window.location.origin);
     const normalizedPath = normalize(target.pathname);
-    const nextHref = `${normalizedPath}${target.search}${target.hash}`;
     const currentHref = `${normalize(window.location.pathname)}${window.location.search}${window.location.hash}`;
     if (nextHref !== currentHref) {
       window.history.pushState({}, "", nextHref);
@@ -117,6 +114,26 @@ export function normalizeAppLinkHref(href: string | undefined): string | undefin
       return `${resolved.pathname}${resolved.search}${resolved.hash}`;
     }
     return resolved.href;
+  } catch {
+    return undefined;
+  }
+}
+
+export function normalizeInternalNavigationHref(
+  href: string,
+  currentHref: string,
+): string | undefined {
+  try {
+    const current = new URL(currentHref);
+    const target = new URL(href, current);
+    if (
+      (target.protocol !== "http:" && target.protocol !== "https:")
+      || target.origin !== current.origin
+    ) {
+      return undefined;
+    }
+    const normalizedPath = normalize(target.pathname);
+    return `${normalizedPath}${target.search}${target.hash}`;
   } catch {
     return undefined;
   }
