@@ -132,7 +132,8 @@ keeps route matching independent from the query string.
 Search filters now serialize into the canonical browser URL. Supported values are parsed
 fail-closed, invalid mode/sort/direction/limit values fall back to supported defaults, and the form
 is restored from the URL after reload and Back/Forward. Cursor pagination remains transient and
-server-opaque; it is intentionally reset when the filter query changes.
+server-opaque; it is intentionally reset when the filter query changes. The prior result page is
+cleared while the new query is pending so a changed URL/filter cannot silently present stale results.
 
 ## Browser evidence
 
