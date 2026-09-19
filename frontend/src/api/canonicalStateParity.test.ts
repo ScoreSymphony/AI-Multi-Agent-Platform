@@ -83,6 +83,23 @@ describe("canonical CLI/Web resource parity", () => {
     expect(canonicalTask.correlation_id).toBe(canonicalRun.correlation_id);
   });
 
+  it("delegates omitted Task list defaults to the canonical Control Plane", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalTaskPage), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.listTasks();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/tasks");
+    expect(init.method).toBe("GET");
+  });
+
   it("preserves shared pagination, filter and sort semantics for Task lists", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(canonicalTaskPage), {
