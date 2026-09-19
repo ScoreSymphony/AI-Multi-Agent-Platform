@@ -24,7 +24,7 @@ import { NotificationsPage } from "../../pages/NotificationsPage";
 import { ObservabilityPage } from "../../pages/ObservabilityPage";
 import { OnboardingPage } from "../../pages/OnboardingPage";
 import { OrganizationsPage } from "../../pages/OrganizationsPage";
-import { OverviewPage, UnavailablePage } from "../../pages/Pages";
+import { NotFoundPage, OverviewPage, UnavailablePage } from "../../pages/Pages";
 import { PluginCandidateDetailPage, PluginDetailPage, PluginsPage } from "../../pages/PluginsPage";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../../pages/ProjectPages";
 import { ProjectsPage } from "../../pages/ProjectListPage";
@@ -218,7 +218,7 @@ export function renderShellRoute({
   if (path === "/usage") return <UsagePage client={client} manifest={manifest} />;
   if (path === "/settings") return <SettingsPage session={session} />;
   if (navItem) return <UnavailablePage item={navItem} manifest={manifest} />;
-  return <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
+  return <NotFoundPage path={path} />;
 }
 
 function referenceRoute(path: string): { collection: ReferenceCollection; resourceId: string } | null {
