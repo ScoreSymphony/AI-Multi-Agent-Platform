@@ -65,9 +65,7 @@ class ControlPlaneHealth:
                 available=descriptor.available,
             )
             provider_ready = (
-                probe_succeeded
-                and descriptor.available
-                and status is not HealthStatus.UNAVAILABLE
+                probe_succeeded and descriptor.available and status is not HealthStatus.UNAVAILABLE
             )
             dependencies = []
 
