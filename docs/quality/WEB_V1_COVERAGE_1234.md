@@ -187,10 +187,11 @@ integration follow-up:
   surface and stable detail route with linked evidence, alternatives, downstream references,
   immutable supersession, confirmed withdrawal and review/revisit state.
 
-The follow-up also fixes complete Marketplace kind-descriptor pagination and adjusts the replaceable
-self-hosted authenticated-request limiter default after the official #1164 browser acceptance path
-reproducibly exceeded the old implementation default. None of these changes may be treated as
-accepted until the exact integrated head passes the full frontend/CI/browser gate.
+The follow-up also fixes complete Marketplace kind-descriptor pagination and the Task SSE reconnect
+contract used by the official #1164 browser path. Task event frames now expose canonical SSE IDs and
+the Control Plane honors `Last-Event-ID` on reconnect, preventing replay-driven request storms
+without weakening the existing authenticated-request rate limit. None of these changes may be
+treated as accepted until the exact integrated head passes the full frontend/CI/browser gate.
 
 ## Remaining dependency-owned evidence
 
@@ -207,8 +208,8 @@ accepted until the exact integrated head passes the full frontend/CI/browser gat
 
 The implementation branch is therefore allowed to become merge-ready before #1164 closes; #1221 is already integrated.
 #1234 itself should remain open until the exact final integrated Web state, including the new
-#589/#598 surfaces and Marketplace/authentication follow-up, passes the full frontend and #1164
-browser acceptance gate. #1221 no longer blocks this matrix.
+#589/#598 surfaces plus the Marketplace and Task-SSE reconnect fixes, passes the full frontend and
+#1164 browser acceptance gate. #1221 no longer blocks this matrix.
 
 ## Validation contract
 
