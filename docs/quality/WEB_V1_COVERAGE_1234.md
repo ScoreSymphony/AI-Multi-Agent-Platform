@@ -8,6 +8,11 @@ The authoritative frontend boundary remains the versioned Control Plane. A route
 not authority to mutate a resource; authorization, approval, lifecycle and persistence remain
 server-owned.
 
+The dedicated cross-domain state/navigation matrix is maintained in
+`WEB_STATE_NAVIGATION_MATRIX_1234.md`. It records loading, empty, validation, backend-error,
+permission, offline, refresh, deep-link and Back behavior without duplicating owner-domain feature
+work.
+
 ## Audit method
 
 The audit compared:
@@ -134,18 +139,16 @@ the later collection branch, rather than leaving partial route/client work in th
 
 #1234 must not claim final closure from component tests alone:
 
-- **#1164** owns the maintained real-browser first-run/E2E workflow. #1234 consumes that evidence
-  instead of creating a second competing harness.
-- **#1221** owns the final Marketplace expansion to Agents, Agent Teams, Orchestrators and platform
-  providers. #1234 can audit the current baseline but cannot freeze the expanded route/state matrix
-  before that issue stabilizes.
-- **#1174** is complete and is treated as the authoritative Marketplace-core baseline.
+- **#1164** is now integrated on the audited `main`; #1234 consumes and extends that maintained
+  browser-first-run harness rather than creating a competing E2E architecture.
+- **#1221** is now integrated on the audited `main`; the expanded Marketplace kind surface is part
+  of the route/state baseline rather than a pending dependency.
+- **#1174** remains the authoritative completed Marketplace-core baseline.
 - **#747** remains the final whole-product acceptance audit after #1234 and the other implementation
   work are complete.
 
-The implementation branch is therefore allowed to become merge-ready before #1164/#1221 close.
-#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164/#1221 are
-consumed and the exact final integrated Web state is rechecked.
+#1234 itself should remain open until the #589/#598 Web follow-ups are integrated and the exact final
+integrated Web head is rechecked.
 
 ## Validation contract
 
