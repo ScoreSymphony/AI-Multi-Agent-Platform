@@ -262,10 +262,24 @@ export function searchResultPath(result: Pick<SearchResult, "resource_type" | "r
       return `/plans/${id}`;
     case "step":
       return `/steps/${id}`;
+    case "file":
+      return `/files/${id}`;
+    case "memory":
+      return `/memory/${id}`;
+    case "knowledge-source":
+      return `/knowledge/${id}`;
+    case "capability":
+      return `/tools/${id}`;
+    case "capability-provider":
+      return `/tools/providers/${id}`;
     case "model":
       return `/models/${id}`;
     case "model-provider":
       return `/models/providers/${id}`;
+    case "node":
+      return `/compute/nodes/${id}`;
+    case "worker":
+      return `/compute/workers/${id}`;
     case "approval":
       return `/approvals/${id}`;
     default:
