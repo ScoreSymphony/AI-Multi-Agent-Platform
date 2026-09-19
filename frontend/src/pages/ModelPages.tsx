@@ -147,6 +147,7 @@ export function ModelDetailPage({
           detail="The current client hint marks model commands as denied. The Control Plane remains authoritative."
         />
       ) : null}
+      {busy ? <p role="status">Applying canonical model state change…</p> : null}
       <div className="actions">
         <button className={model.enabled ? undefined : "primary"} disabled={busy} onClick={() => void toggle()}>
           {model.enabled ? "Disable model" : "Enable model"}
@@ -252,12 +253,19 @@ export function ModelProviderDetailPage({
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {provider.enabled && (!provider.available || provider.health !== "healthy") ? (
+        <DegradedState
+          title="Provider unavailable or degraded"
+          detail={`Canonical provider state reports health=${provider.health} and available=${provider.available ? "yes" : "no"}. No provider-private fallback is used.`}
+        />
+      ) : null}
       {permission === "denied" ? (
         <DegradedState
           title="Permission hint"
           detail="The current client hint marks provider commands as denied. The Control Plane remains authoritative."
         />
       ) : null}
+      {busy ? <p role="status">Applying canonical provider command…</p> : null}
       <div className="actions">
         {provider.enabled ? (
           <button disabled={busy} onClick={() => void command("disable")}>Disable provider</button>
