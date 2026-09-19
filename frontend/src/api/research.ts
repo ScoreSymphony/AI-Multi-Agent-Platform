@@ -10,7 +10,7 @@ export interface ResearchVerificationBinding {
   verification_id: string;
   subject_type: string;
   subject_id: string;
-  subject_revision: number;
+  subject_revision: string;
   subject_digest: string;
   created_at: string;
 }
