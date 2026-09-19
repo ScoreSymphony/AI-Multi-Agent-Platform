@@ -39,8 +39,8 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Files | `/files`, `/files/:id` | canonical `files` ResourceService | **Gap found and closed by #1234.** Authorized metadata, Project/owner scope, state, type, size/checksum and Artifact relationships are now reachable. Raw bytes, storage paths and provider-private identity remain intentionally non-Web. |
 | Memory / Knowledge | `/memory`, `/memory/:id`, `/knowledge`, `/knowledge/:id` | canonical Memory/Knowledge resources and commands | Inventory/query/detail/create/update/promotion/expiry/tombstone flows are maintained. Destructive Memory/Knowledge actions already require confirmation. |
 | Search | `/search` | canonical `/api/v1/search` | Global discovery is maintained over authorization-filtered canonical results; Search never becomes lifecycle authority. |
-| Research Evidence | `/research`, `/research/:id` | `research-items`, `research-sources`, `research-source-observations`, `research-claims`, `research-evidence` | #589 owner gap closed on the final integration follow-up: list/search/filter, stable item deep links, Sources/observations, Claims, Evidence freshness, Verification bindings, workflow provenance and downstream Decision references are inspectable without creating a Research-owned execution lifecycle. |
-| Decision Records | `/decisions`, `/decisions/:id` | `decision-records` | #598 owner gap closed on the final integration follow-up: list/search/filter, alternatives/outcome/rationale, exact evidence/evaluation/Approval/ADR references, downstream provenance, supersession/withdrawal and revisit state are inspectable. Decision history remains non-authoritative for permissions or activation. |
+| Research Evidence | `/research`, `/research/:id` | `research-items`, `research-sources`, `research-source-observations`, `research-claims`, `research-evidence` + `research.*` commands | #589 owner gap closed on the final integration follow-up: list/search/filter, stable item deep links, canonical Research creation, Source/observation/Claim/Evidence additions and revalidation are reachable when advertised; freshness, Verification bindings, workflow provenance and downstream Decision references remain inspectable without creating a Research-owned execution lifecycle. |
+| Decision Records | `/decisions`, `/decisions/:id` | `decision-records` + `decision-record.*` commands | #598 owner gap closed on the final integration follow-up: list/search/filter, create, immutable supersession and confirmed withdrawal are reachable when advertised; alternatives/outcome/rationale, exact evidence/evaluation/Approval/ADR references, downstream provenance and revisit state remain inspectable. Decision history remains non-authoritative for permissions or activation. |
 | Nodes / Workers / resources | `/compute`, Node/Worker/Job detail routes | `nodes`, `workers`, `worker-jobs` | Inventory, resource/health state and the advertised administrative command subset are maintained; scheduler/transport internals stay private. |
 | Approvals / Verification | `/approvals`, `/approvals/:id`, `/verification`, `/verification/:id` | canonical Approval/Verification resources + exact commands | Inspection, decision/review actions and evidence links are maintained. Missing decision commands degrade to read-only rather than fabricating authority. |
 | Automations | `/automations`, `/automations/:id` | `automations`, `automation-deliveries` + exact lifecycle commands | Create/update, pause/resume/disable, test, delivery history and retry are maintained. Scheduler evaluation and event/webhook ingestion remain system paths. |
@@ -180,12 +180,12 @@ Adding generic buttons for these boundaries would weaken, not improve, V1 archit
 The two owner-domain gaps identified by the earlier coverage slice are now implemented on the final
 integration follow-up:
 
-- **#589 Research Evidence** has a maintained navigation entry, canonical list/filter surface and
-  stable Research Item detail route with Source/observation, Claim, Evidence freshness,
-  Verification/provenance and downstream Decision inspection.
-- **#598 Decision Records** has a maintained navigation entry, canonical list/search/filter surface
-  and stable detail route with linked evidence, alternatives, downstream references, supersession
-  history and review/revisit state.
+- **#589 Research Evidence** has a maintained navigation entry, canonical list/filter/create
+  surface and stable Research Item detail route with Source/observation, Claim, Evidence creation
+  and revalidation, freshness, Verification/provenance and downstream Decision inspection.
+- **#598 Decision Records** has a maintained navigation entry, canonical list/search/filter/create
+  surface and stable detail route with linked evidence, alternatives, downstream references,
+  immutable supersession, confirmed withdrawal and review/revisit state.
 
 The follow-up also fixes complete Marketplace kind-descriptor pagination and adjusts the replaceable
 self-hosted authenticated-request limiter default after the official #1164 browser acceptance path
