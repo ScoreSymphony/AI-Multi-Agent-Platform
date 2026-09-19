@@ -148,7 +148,9 @@ class SingleNodePersistenceHealthProvider(ProviderContract):
                             component=spec.path,
                             severity="unavailable",
                             retryable=False,
-                            action="restore or recreate the required store through its owning subsystem",
+                            action=(
+                                "restore or recreate the required store through its owning subsystem"
+                            ),
                         )
                     )
                 continue

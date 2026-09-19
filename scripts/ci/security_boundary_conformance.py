@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Validate and execute the production security boundary conformance matrix.\n\nProvenance: introduced for issue #1233.\n"""
+"""Validate and execute the production security boundary conformance matrix.
+
+Provenance: introduced for issue #1233.
+"""
 
 from __future__ import annotations
 

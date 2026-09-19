@@ -1,4 +1,6 @@
-"""Compatibility namespace for canonical :mod:`ai_multi_agent_platform.distributed.high_availability`."""
+"""Compatibility namespace for canonical
+:mod:`ai_multi_agent_platform.distributed.high_availability`.
+"""
 
 from .contracts import (
     AuthorityGrant,
