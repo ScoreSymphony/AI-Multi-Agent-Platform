@@ -8,11 +8,6 @@ The authoritative frontend boundary remains the versioned Control Plane. A route
 not authority to mutate a resource; authorization, approval, lifecycle and persistence remain
 server-owned.
 
-The dedicated cross-domain state/navigation matrix is maintained in
-`WEB_STATE_NAVIGATION_MATRIX.md`. It records loading, empty, validation, backend-error,
-permission, offline, refresh, deep-link and Back behavior without duplicating owner-domain feature
-work.
-
 ## Audit method
 
 The audit compared:
@@ -34,7 +29,7 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Domain | Maintained Web surface | Canonical boundary | State/action conclusion |
 | --- | --- | --- | --- |
 | Authentication / sessions | sign-in boundary, `/settings` | browser-session + `auth/*` | Login, current identity, renewal, session list/revoke, logout, loading and canonical auth errors are maintained. Session revocation now requires explicit confirmation. |
-| First run / onboarding | `/onboarding` | `onboarding` + canonical Project/Workspace/Agent/Model/Task commands | Maintained guided path; the integrated #1164 real-browser acceptance path is consumed as evidence. |
+| First run / onboarding | `/onboarding` | `onboarding` + canonical Project/Workspace/Agent/Model/Task commands | Maintained guided path; final real-browser acceptance remains owned by #1164. |
 | Dashboard / status | `/` | health + recent canonical Task/Run state | Maintained overview with backend-owned state. |
 | Projects / Workspaces | `/projects`, `/projects/:id`, `/workspaces/:id` | canonical Project/Workspace APIs | Inventory/create/detail and stable deep links exist. Workspace deep links resolve back to the Projects navigation parent. |
 | Tasks / Plans / Steps / Runs / Results / Artifacts | `/tasks`, `/tasks/:id`, `/runs`, `/runs/:id`, `/plans/:id`, `/steps/:id`, `/results/:id`, `/artifacts/:id` | canonical kernel + reference collections | Task management and Run inspection are maintained; Plan/Step/Result/Artifact references have stable deep links and canonical Task/Plan relationships. |
@@ -50,7 +45,7 @@ invent a raw-byte mutation/download API just to satisfy a generic CRUD checklist
 | Notifications | `/notifications` | `notifications` | Inventory and read/dismiss attention actions are maintained; a separate durable-detail lifecycle is not invented where the owner does not require one. |
 | Integrations / Connectors | `/integrations`, definition/connection detail routes | `connector-definitions`, `connections` | Connect/configure/enable/disable/health/sync/remove remain canonical. Connection removal now requires explicit confirmation. Plaintext secrets are never a browser field. |
 | Repositories | `/repositories`, `/repositories/:id` | canonical repository collection/commands | **Gap found and closed by #1234.** The previous Web page exposed inventory/inspection plus fetch while the canonical V1 contract also supported registration and primary Git mutations. The maintained surface now provides managed local attach, Connection/provider discovery with optional attach, fetch, branch creation, checkout, commit, push and detach, all capability-/policy-gated through the Control Plane. |
-| Marketplace / Registry | `/marketplace` | `registry-items` + Marketplace commands | Existing unified Marketplace surface is maintained and uninstall requires explicit confirmation. #1174 is consumed and the integrated #1221 expanded-kind surface is part of the audited V1 baseline. |
+| Marketplace / Registry | `/marketplace` | `registry-items` + Marketplace commands | Existing unified Marketplace surface is maintained and uninstall now requires explicit confirmation. #1174 is consumed; final expanded-kind closure waits for #1221 rather than guessing an unstable contract. |
 | Import / Export | `/import-export`, package/preview/report deep links | `portability-packages`, `portability-import-previews`, `portability-import-reports`; `portability.export|package.validate|preview|import` | **Gap found and closed by #1234.** Export, package validation, server-owned preview and exact-preview import are reachable. Browser code cannot submit an ID mapping or mutation order. |
 | Templates / generated configuration | `/templates`, `/templates/:id`; generated Workflow/Capability Assignment/Model Routing Profile detail routes | canonical Template resources/commands plus owner-domain read projections | Maintained create/version/clone/fork/preview/apply paths; generated owner-domain resources use canonical deep links when a real route exists. |
 | Organizations / collaboration | `/organizations` | Organizations/Teams/Memberships/invitations/ownership/shares | #87 is closed and the maintained surface is active. Membership removal, invitation revocation and share revocation now require explicit confirmation. |
@@ -139,16 +134,18 @@ the later collection branch, rather than leaving partial route/client work in th
 
 #1234 must not claim final closure from component tests alone:
 
-- **#1164** is now integrated on the audited `main`; #1234 consumes and extends that maintained
-  browser-first-run harness rather than creating a competing E2E architecture.
-- **#1221** is now integrated on the audited `main`; the expanded Marketplace kind surface is part
-  of the route/state baseline rather than a pending dependency.
-- **#1174** remains the authoritative completed Marketplace-core baseline.
+- **#1164** owns the maintained real-browser first-run/E2E workflow. #1234 consumes that evidence
+  instead of creating a second competing harness.
+- **#1221** owns the final Marketplace expansion to Agents, Agent Teams, Orchestrators and platform
+  providers. #1234 can audit the current baseline but cannot freeze the expanded route/state matrix
+  before that issue stabilizes.
+- **#1174** is complete and is treated as the authoritative Marketplace-core baseline.
 - **#747** remains the final whole-product acceptance audit after #1234 and the other implementation
   work are complete.
 
-#1234 itself should remain open until the #589/#598 Web follow-ups are integrated and the exact final
-integrated Web head is rechecked.
+The implementation branch is therefore allowed to become merge-ready before #1164/#1221 close.
+#1234 itself should remain open until #589/#598 Web follow-ups are integrated, #1164/#1221 are
+consumed and the exact final integrated Web state is rechecked.
 
 ## Validation contract
 
