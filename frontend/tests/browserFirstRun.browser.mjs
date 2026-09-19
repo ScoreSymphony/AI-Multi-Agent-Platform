@@ -490,8 +490,9 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 
-  // #1234 consumes the maintained #1164 browser harness for representative cross-domain
-  // navigation. Deep-linked canonical detail state must survive reload, Search filters must
+  // Keep representative cross-domain navigation in the maintained browser-first-run harness.
+  // Historical context: #1234 consumes #1164 rather than creating a competing E2E architecture.
+  // Deep-linked canonical detail state must survive reload, Search filters must
   // survive reload/back navigation, and an unknown URL must remain distinct from an optional
   // provider/resource-unavailable state.
   const taskPath = `/tasks/${encodeURIComponent(createdTask.id)}`;
