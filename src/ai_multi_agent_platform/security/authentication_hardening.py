@@ -134,7 +134,7 @@ class InMemoryRequestRateLimiter:
     def __init__(
         self,
         *,
-        max_requests: int = 1200,
+        max_requests: int = 600,
         window: timedelta = timedelta(minutes=1),
     ) -> None:
         if max_requests < 1 or window <= timedelta(0):
