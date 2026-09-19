@@ -37,6 +37,8 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   const { configuration } = useConfigurationSession(client);
 
   const loadCapabilities = useCallback(async () => {
+    setCapabilities(null);
+    setCapabilityError(null);
     try {
       setCapabilities(
         await client.listCapabilities({
@@ -53,6 +55,8 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   }, [capabilityPagination.cursor, client]);
 
   const loadProviders = useCallback(async () => {
+    setProviders(null);
+    setProviderError(null);
     try {
       setProviders(
         await client.listCapabilityProviders({
@@ -69,6 +73,8 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   }, [client, providerPagination.cursor]);
 
   const loadAssignments = useCallback(async () => {
+    setAssignments(null);
+    setAssignmentError(null);
     try {
       setAssignments((await configuration.listCapabilityAssignments({ limit: 100 })).items);
       setAssignmentError(null);
