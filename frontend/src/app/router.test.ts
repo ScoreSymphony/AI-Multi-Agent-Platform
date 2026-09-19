@@ -33,6 +33,7 @@ describe("AppLink URL safety", () => {
     expect(normalizeAppLinkHref("javascript:alert(1)")).toBeUndefined();
     expect(normalizeAppLinkHref("data:text/html,<script>alert(1)</script>")).toBeUndefined();
     expect(normalizeAppLinkHref("vbscript:msgbox(1)")).toBeUndefined();
+    expect(normalizeAppLinkHref("blob:https://router.invalid/id")).toBeUndefined();
     expect(normalizeAppLinkHref("http://[")).toBeUndefined();
   });
 });
