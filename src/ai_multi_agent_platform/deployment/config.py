@@ -28,7 +28,14 @@ _SINGLE_NODE_SCHEMA = ConfigurationSchema(
             "deployment": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["data_dir", "host", "port", "secure_cookie", "log_level"],
+                "required": [
+                    "data_dir",
+                    "host",
+                    "port",
+                    "secure_cookie",
+                    "log_level",
+                    "shutdown_timeout_seconds",
+                ],
                 "properties": {
                     "data_dir": {"type": "string", "minLength": 1},
                     "host": {"type": "string", "minLength": 1},
@@ -37,6 +44,11 @@ _SINGLE_NODE_SCHEMA = ConfigurationSchema(
                     "log_level": {
                         "type": "string",
                         "enum": ["critical", "error", "warning", "info", "debug"],
+                    },
+                    "shutdown_timeout_seconds": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 3600,
                     },
                     "registry_catalog": {"type": ["string", "null"]},
                     "registry_signature_keys": {"type": ["string", "null"]},
@@ -56,6 +68,7 @@ _DEFAULTS = ConfigLayer(
             "port": 8000,
             "secure_cookie": True,
             "log_level": "info",
+            "shutdown_timeout_seconds": 30,
             "registry_catalog": None,
             "registry_signature_keys": None,
             "application_release_gate_policy": None,
@@ -74,6 +87,7 @@ class SingleNodeConfig:
     port: int = 8000
     secure_cookie: bool = True
     log_level: str = "info"
+    shutdown_timeout_seconds: int = 30
     registry_catalog: Path | None = None
     registry_signature_keys: Path | None = None
     application_release_gate_policy: Path | None = None
@@ -172,6 +186,11 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         )
     if "AI_MAP_LOG_LEVEL" in source:
         target["log_level"] = source["AI_MAP_LOG_LEVEL"].strip().lower()
+    if "AI_MAP_SHUTDOWN_TIMEOUT_SECONDS" in source:
+        try:
+            target["shutdown_timeout_seconds"] = int(source["AI_MAP_SHUTDOWN_TIMEOUT_SECONDS"])
+        except ValueError as exc:
+            raise ConfigurationError("AI_MAP_SHUTDOWN_TIMEOUT_SECONDS must be an integer") from exc
     if "AI_MAP_REGISTRY_CATALOG" in source:
         target["registry_catalog"] = _optional_path_text(
             source["AI_MAP_REGISTRY_CATALOG"], "AI_MAP_REGISTRY_CATALOG"
@@ -215,6 +234,7 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         port=int(deployment["port"]),
         secure_cookie=secure_cookie,
         log_level=str(deployment["log_level"]),
+        shutdown_timeout_seconds=int(deployment["shutdown_timeout_seconds"]),
         registry_catalog=_resolved_path(deployment.get("registry_catalog")),
         registry_signature_keys=_resolved_path(deployment.get("registry_signature_keys")),
         application_release_gate_policy=_resolved_path(
