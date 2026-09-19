@@ -31,14 +31,23 @@ interface ResearchFilters {
   status?: string;
 }
 
-export function ResearchPage({ client }: { client: ResearchClient }) {
+export function ResearchPage({
+  client,
+  commands = [],
+}: {
+  client: ResearchClient;
+  commands?: readonly string[];
+}) {
   const { search, navigate } = useRouter();
   const filters = useMemo(() => researchFiltersFromQuery(search), [search]);
   const queryKey = useMemo(() => JSON.stringify(filters), [filters]);
   const pagination = useCursorPagination(queryKey);
   const [page, setPage] = useState<Page<CanonicalResearchItem> | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const commandSet = useMemo(() => new Set(commands), [commands]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +82,37 @@ export function ResearchPage({ client }: { client: ResearchClient }) {
     navigate(researchFiltersToPath(new FormData(event.currentTarget)));
   };
 
+  const createItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setCreating(true);
+    setActionError(null);
+    try {
+      const created = await client.createItem({
+        title: requiredFormValue(form, "title"),
+        question: requiredFormValue(form, "question"),
+        research_class: requiredFormValue(form, "research_class"),
+        data_class: optionalFormValue(form, "data_class") ?? "standard",
+        project_id: optionalFormValue(form, "project_id") ?? null,
+        workspace_id: optionalFormValue(form, "workspace_id") ?? null,
+        task_id: optionalFormValue(form, "task_id") ?? null,
+        plan_id: optionalFormValue(form, "plan_id") ?? null,
+        run_id: optionalFormValue(form, "run_id") ?? null,
+        constraints: [],
+        freshness_policy: {
+          max_age_seconds: null,
+          revalidate_on_source_change: true,
+        },
+        metadata: {},
+      });
+      navigate(`/research/${encodeURIComponent(created.id)}`);
+    } catch (nextError) {
+      setActionError(nextError);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="stack">
       <header className="page-header">
@@ -84,6 +124,33 @@ export function ResearchPage({ client }: { client: ResearchClient }) {
           Tasks, Runs, Verification and Decisions retain their own authority.
         </p>
       </header>
+
+      {commandSet.has("research.create") ? (
+        <Card title="Create Research Item">
+          {actionError ? <ErrorState error={actionError} /> : null}
+          <form className="form-grid" onSubmit={(event) => void createItem(event)}>
+            <label>Title<input name="title" required /></label>
+            <label>Question<input name="question" required /></label>
+            <label>
+              Research class
+              <select name="research_class" defaultValue="project_research">
+                <option value="task_research">task_research</option>
+                <option value="project_research">project_research</option>
+                <option value="domain_research">domain_research</option>
+              </select>
+            </label>
+            <label>Data class<input name="data_class" defaultValue="standard" required /></label>
+            <label>Project ID<input name="project_id" placeholder="optional" /></label>
+            <label>Workspace ID<input name="workspace_id" placeholder="optional" /></label>
+            <label>Task ID<input name="task_id" placeholder="optional" /></label>
+            <label>Plan ID<input name="plan_id" placeholder="optional" /></label>
+            <label>Run ID<input name="run_id" placeholder="optional" /></label>
+            <button className="primary" disabled={creating}>
+              {creating ? "Creating…" : "Create Research Item"}
+            </button>
+          </form>
+        </Card>
+      ) : null}
 
       <Card title="Research filters">
         <form className="form-grid" onSubmit={submit}>
@@ -135,10 +202,12 @@ export function ResearchDetailPage({
   client,
   decisions,
   researchItemId,
+  commands = [],
 }: {
   client: ResearchClient;
   decisions: DecisionRecordClient;
   researchItemId: string;
+  commands?: readonly string[];
 }) {
   const [item, setItem] = useState<CanonicalResearchItem | null>(null);
   const [sources, setSources] = useState<CanonicalResearchSource[]>([]);
@@ -148,6 +217,9 @@ export function ResearchDetailPage({
   const [linkedDecisions, setLinkedDecisions] = useState<CanonicalDecisionRecord[]>([]);
   const [decisionError, setDecisionError] = useState<unknown>(null);
   const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const commandSet = useMemo(() => new Set(commands), [commands]);
 
   const load = useCallback(async () => {
     try {
@@ -192,6 +264,81 @@ export function ResearchDetailPage({
     void load();
   }, [load]);
 
+  const runAction = async (label: string, action: () => Promise<unknown>) => {
+    setBusyAction(label);
+    setActionError(null);
+    try {
+      await action();
+      await load();
+    } catch (nextError) {
+      setActionError(nextError);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const addSource = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void runAction("source", () => client.addSource(researchItemId, {
+      source_type: requiredFormValue(form, "source_type"),
+      locator: requiredFormValue(form, "locator"),
+      title: requiredFormValue(form, "title"),
+      trust_classification: optionalFormValue(form, "trust_classification") ?? "unclassified",
+      metadata: {},
+    }));
+  };
+
+  const observeSource = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void runAction("observation", () => client.observeSource(
+      requiredFormValue(form, "source_id"),
+      {
+        retrieved_at: new Date().toISOString(),
+        revision: optionalFormValue(form, "revision") ?? null,
+        content_digest: optionalFormValue(form, "content_digest") ?? null,
+        identity_proven: form.get("identity_proven") === "on",
+        metadata: {},
+      },
+    ));
+  };
+
+  const addClaim = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void runAction("claim", () => client.addClaim(researchItemId, {
+      text: requiredFormValue(form, "text"),
+      category: requiredFormValue(form, "category"),
+      confidence: requiredFormValue(form, "confidence"),
+      metadata: {},
+    }));
+  };
+
+  const addEvidence = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void runAction("evidence", () => client.addEvidence(
+      requiredFormValue(form, "claim_id"),
+      {
+        source_observation_id: requiredFormValue(form, "source_observation_id"),
+        relation: requiredFormValue(form, "relation"),
+        location_ref: optionalFormValue(form, "location_ref") ?? null,
+        artifact_id: optionalFormValue(form, "artifact_id") ?? null,
+        extraction_method: optionalFormValue(form, "extraction_method") ?? "manual",
+      },
+    ));
+  };
+
+  const revalidateEvidence = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void runAction("revalidate", () => client.revalidateEvidence(
+      requiredFormValue(form, "evidence_id"),
+      requiredFormValue(form, "source_observation_id"),
+    ));
+  };
+
   if (error && !item) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!item) return <LoadingState label="Loading Research Item…" />;
 
@@ -210,6 +357,82 @@ export function ResearchDetailPage({
       </header>
 
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {actionError ? <ErrorState error={actionError} /> : null}
+
+      {commandSet.has("research.source.add")
+        || commandSet.has("research.source.observe")
+        || commandSet.has("research.claim.add")
+        || commandSet.has("research.evidence.add")
+        || commandSet.has("research.evidence.revalidate") ? (
+        <Card title="Extend canonical evidence graph">
+          <div className="grid-two">
+            {commandSet.has("research.source.add") ? (
+              <form className="form-grid" onSubmit={addSource}>
+                <h3>Add Source</h3>
+                <label>Title<input name="title" required /></label>
+                <label>Locator<input name="locator" required /></label>
+                <label>
+                  Source type
+                  <select name="source_type" defaultValue="web">
+                    {["web","repository","repository_intelligence","document","dataset","paper","api_response","other"].map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Trust classification<input name="trust_classification" defaultValue="unclassified" /></label>
+                <button disabled={busyAction !== null}>{busyAction === "source" ? "Adding…" : "Add Source"}</button>
+              </form>
+            ) : null}
+            {commandSet.has("research.source.observe") ? (
+              <form className="form-grid" onSubmit={observeSource}>
+                <h3>Record Source Observation</h3>
+                <label>Source ID<input name="source_id" required /></label>
+                <label>Revision<input name="revision" /></label>
+                <label>Content digest<input name="content_digest" /></label>
+                <label><input type="checkbox" name="identity_proven" /> Identity proven</label>
+                <button disabled={busyAction !== null}>{busyAction === "observation" ? "Recording…" : "Record Observation"}</button>
+              </form>
+            ) : null}
+            {commandSet.has("research.claim.add") ? (
+              <form className="form-grid" onSubmit={addClaim}>
+                <h3>Add Claim</h3>
+                <label>Claim text<textarea name="text" required /></label>
+                <label>Category<input name="category" required /></label>
+                <label>
+                  Confidence
+                  <select name="confidence" defaultValue="unknown">
+                    {["unknown","low","medium","high"].map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <button disabled={busyAction !== null}>{busyAction === "claim" ? "Adding…" : "Add Claim"}</button>
+              </form>
+            ) : null}
+            {commandSet.has("research.evidence.add") ? (
+              <form className="form-grid" onSubmit={addEvidence}>
+                <h3>Add Evidence</h3>
+                <label>Claim ID<input name="claim_id" required /></label>
+                <label>Source observation ID<input name="source_observation_id" required /></label>
+                <label>
+                  Relation
+                  <select name="relation" defaultValue="supports">
+                    {["supports","contradicts","contextualizes","derives_from"].map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label>Location ref<input name="location_ref" /></label>
+                <label>Artifact ID<input name="artifact_id" /></label>
+                <label>Extraction method<input name="extraction_method" defaultValue="manual" /></label>
+                <button disabled={busyAction !== null}>{busyAction === "evidence" ? "Adding…" : "Add Evidence"}</button>
+              </form>
+            ) : null}
+            {commandSet.has("research.evidence.revalidate") ? (
+              <form className="form-grid" onSubmit={revalidateEvidence}>
+                <h3>Revalidate Evidence</h3>
+                <label>Evidence ID<input name="evidence_id" required /></label>
+                <label>New source observation ID<input name="source_observation_id" required /></label>
+                <button disabled={busyAction !== null}>{busyAction === "revalidate" ? "Revalidating…" : "Revalidate"}</button>
+              </form>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid-two">
         <Card title="Question & scope">
@@ -437,6 +660,16 @@ function researchFiltersToPath(data: FormData): string {
   }
   const query = params.toString();
   return query ? `${RESEARCH_ROUTE}?${query}` : RESEARCH_ROUTE;
+}
+
+function requiredFormValue(form: FormData, key: string): string {
+  const value = String(form.get(key) ?? "").trim();
+  if (!value) throw new Error(`${key} is required`);
+  return value;
+}
+
+function optionalFormValue(form: FormData, key: string): string | undefined {
+  return clean(String(form.get(key) ?? ""));
 }
 
 function clean(value: string | null): string | undefined {
