@@ -10,6 +10,7 @@ import { ControlPlaneCollectionClient } from "../../api/collections";
 import type { Page } from "../../api/types";
 import { AutomationForm } from "./AutomationForm";
 import { DeliveryTable } from "./AutomationTables";
+import { automationLifecycleActions } from "./AutomationDetailPage";
 import { AutomationInventoryState, AutomationsPage } from "./AutomationsPage";
 
 vi.mock("../../app/router", () => ({
@@ -161,6 +162,14 @@ describe("Automations page regression coverage", () => {
     expect(html).toContain('type="submit"');
     expect(html).toContain("disabled");
     expect(html).toContain("Saving…");
+  });
+
+  it("maps the full canonical lifecycle without inventing delete", () => {
+    expect(automationLifecycleActions("enabled")).toEqual(["pause", "disable"]);
+    expect(automationLifecycleActions("paused")).toEqual(["resume", "disable"]);
+    expect(automationLifecycleActions("disabled")).toEqual(["resume"]);
+    expect(automationLifecycleActions("invalid")).toEqual(["revalidate"]);
+    expect(automationLifecycleActions("disabled")).not.toContain("delete");
   });
 
   it("keeps retry as a native keyboard-activatable button and disables it while busy", () => {
