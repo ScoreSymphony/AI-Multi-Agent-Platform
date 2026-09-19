@@ -320,6 +320,22 @@ def test_cli_and_public_api_share_pagination_filter_sort_semantics(tmp_path: Pat
         )
         assert code == 0 and not error
 
+    code, cli_default_page, error = _invoke(config, transport, "task", "list")
+    assert code == 0 and not error
+    cli_default_data = cli_default_page["data"]
+    assert isinstance(cli_default_data, dict)
+
+    api_default_page = asyncio.run(
+        transport.http.handle(HTTPRequest(method="GET", path="/api/v1/tasks"))
+    )
+    assert api_default_page.status == 200
+    assert api_default_page.body == cli_default_data
+    assert cli_default_data["limit"] == 50
+    default_items = cli_default_data["items"]
+    assert isinstance(default_items, list)
+    default_ids = [item["id"] for item in default_items if isinstance(item, dict)]
+    assert default_ids == sorted(default_ids)
+
     list_arguments = (
         "task",
         "list",
