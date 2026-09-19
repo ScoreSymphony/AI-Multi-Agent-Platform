@@ -568,9 +568,9 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
             correlation_id=correlation_id,
             api_version=api_version,
         ),
-        exit_code=4 if blocking
+        exit_code=4 if blocking else 1 if degraded else 0,
+    )
 
-rn "no operator action required"
 
 
 def _project_command(
