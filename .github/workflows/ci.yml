@@ -243,6 +243,24 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm run build
+      - name: Install optional mobile client dependencies
+        working-directory: mobile
+        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Typecheck optional mobile client
+        working-directory: mobile
+        run: npm run typecheck
+      - name: Test optional mobile client
+        working-directory: mobile
+        run: npm test
+      - name: Validate Expo mobile configuration
+        working-directory: mobile
+        run: npm run check:expo
+      - name: Export Android mobile smoke bundle
+        working-directory: mobile
+        run: npm run smoke:android
+      - name: Export iOS mobile smoke bundle
+        working-directory: mobile
+        run: npm run smoke:ios
       - name: Install Chromium regression runner
         shell: bash
         run: |

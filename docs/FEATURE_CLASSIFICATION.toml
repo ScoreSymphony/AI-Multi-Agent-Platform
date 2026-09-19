@@ -191,6 +191,17 @@ compatibility = "Shared CLI framework conventions are Beta; feature-specific CLI
 user_signaling = "documentation"
 
 [[feature]]
+id = "mobile-client"
+name = "Optional Android/iOS Control Plane client"
+owners = ["control_plane"]
+role = "platform_extension"
+stability = "beta"
+public_surfaces = ["optional Android/iOS client profile over public /api/v1 Control Plane semantics"]
+docs = ["mobile/README.md", "docs/adr/0016-optional-mobile-control-plane-client.md"]
+compatibility = "The mobile client is a supported Beta northbound projection. Canonical lifecycle and authorization remain owned by the versioned Control Plane; mobile UI/tooling may evolve in bounded non-patch releases with migration guidance."
+user_signaling = "documentation"
+
+[[feature]]
 id = "onboarding-first-run"
 name = "First-run Onboarding"
 owners = ["onboarding"]

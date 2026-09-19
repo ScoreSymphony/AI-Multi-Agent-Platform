@@ -99,5 +99,6 @@ When adding functionality:
 
 - `src/ai_multi_agent_platform/` — platform-owned runtime, domain, adapter and Worker code; root package ownership is governed by `docs/PACKAGE_BOUNDARIES.md`
 - `frontend/` — web frontend
+- `mobile/` — optional Android/iOS northbound Control Plane client
 - `docs/` — authoritative architecture/product documentation and curated project status
 - `tests/` — unit, contract, integration and end-to-end tests
