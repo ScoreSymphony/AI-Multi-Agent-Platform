@@ -58,7 +58,7 @@ describe("canonical frontend error presentation", () => {
     ).toBe("Not found");
     expect(
       describeError(controlPlaneError(422, {
-        code: "validation_error",
+        code: "invalid_request",
         category: "request",
         message: "invalid value",
       })).title,
@@ -70,6 +70,26 @@ describe("canonical frontend error presentation", () => {
         message: "revision changed",
       })).title,
     ).toBe("State changed");
+  });
+
+  it("does not misclassify an unsupported 400 response as validation", () => {
+    const presentation = describeError(controlPlaneError(400, {
+      code: "unsupported_capability",
+      category: "contract",
+      message: "semantic search unavailable",
+    }));
+    expect(presentation.title).toBe("Request failed");
+  });
+
+  it("labels model unavailability as a subsystem outage", () => {
+    const presentation = describeError(controlPlaneError(503, {
+      code: "model_unavailable",
+      category: "provider",
+      message: "local model is offline",
+      retryable: true,
+    }));
+    expect(presentation.title).toBe("Subsystem unavailable");
+    expect(presentation.hint).toContain("retryable");
   });
 
   it("labels transport failures as Control Plane availability failures", () => {
