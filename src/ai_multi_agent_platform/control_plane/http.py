@@ -538,9 +538,7 @@ class ControlPlaneASGI:
                     {
                         "type": "http.response.body",
                         "body": (
-                            f"id: {event_id}\n"
-                            f"event: platform.event\n"
-                            f"data: {payload}\n\n"
+                            f"id: {event_id}\nevent: platform.event\ndata: {payload}\n\n"
                         ).encode(),
                         "more_body": True,
                     }
