@@ -130,6 +130,14 @@ def test_cli_task_run_and_timeline_flow_uses_control_plane_only(tmp_path: Path) 
     assert code == 0
     assert run_show["data"]["id"] == run_id
 
+    api_run = asyncio.run(
+        transport.http.handle(HTTPRequest(method="GET", path=f"/api/v1/runs/{run_id}"))
+    )
+    assert api_run.status == 200
+    assert isinstance(api_run.body, dict)
+    assert api_run.body["id"] == run_id
+    assert api_run.body["task_id"] == task_id
+
     asyncio.run(
         kernel.record_run_outcome(
             idempotency_key="cli-test-failure",
@@ -177,6 +185,13 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
     project_id = project["data"]["id"]
     assert isinstance(project_id, str)
 
+    api_project = asyncio.run(
+        transport.http.handle(HTTPRequest(method="GET", path=f"/api/v1/projects/{project_id}"))
+    )
+    assert api_project.status == 200
+    assert isinstance(api_project.body, dict)
+    assert api_project.body["id"] == project_id
+
     code, workspace, _ = _invoke(
         config,
         transport,
@@ -187,6 +202,16 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
     )
     assert code == 0
     assert workspace["data"]["project_id"] == project_id
+    workspace_id = workspace["data"]["id"]
+    assert isinstance(workspace_id, str)
+
+    api_workspace = asyncio.run(
+        transport.http.handle(HTTPRequest(method="GET", path=f"/api/v1/workspaces/{workspace_id}"))
+    )
+    assert api_workspace.status == 200
+    assert isinstance(api_workspace.body, dict)
+    assert api_workspace.body["id"] == workspace_id
+    assert api_workspace.body["project_id"] == project_id
 
     stdout = StringIO()
     stderr = StringIO()
@@ -294,6 +319,22 @@ def test_cli_and_public_api_share_pagination_filter_sort_semantics(tmp_path: Pat
             "test",
         )
         assert code == 0 and not error
+
+    code, cli_default_page, error = _invoke(config, transport, "task", "list")
+    assert code == 0 and not error
+    cli_default_data = cli_default_page["data"]
+    assert isinstance(cli_default_data, dict)
+
+    api_default_page = asyncio.run(
+        transport.http.handle(HTTPRequest(method="GET", path="/api/v1/tasks"))
+    )
+    assert api_default_page.status == 200
+    assert api_default_page.body == cli_default_data
+    assert cli_default_data["limit"] == 50
+    default_items = cli_default_data["items"]
+    assert isinstance(default_items, list)
+    default_ids = [item["id"] for item in default_items if isinstance(item, dict)]
+    assert default_ids == sorted(default_ids)
 
     list_arguments = (
         "task",

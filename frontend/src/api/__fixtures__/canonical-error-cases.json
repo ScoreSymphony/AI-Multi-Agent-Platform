@@ -1,4 +1,72 @@
 {
+  "validation": {
+    "status": 400,
+    "body": {
+      "code": "invalid_request",
+      "category": "validation",
+      "message": "request validation failed",
+      "request_id": "request_client_validation",
+      "correlation_id": "corr_client_validation",
+      "retryable": false,
+      "details": {
+        "field": "objective"
+      }
+    }
+  },
+  "invalid_cursor": {
+    "status": 400,
+    "body": {
+      "code": "invalid_cursor",
+      "category": "validation",
+      "message": "cursor is invalid",
+      "request_id": "request_client_invalid_cursor",
+      "correlation_id": "corr_client_invalid_cursor",
+      "retryable": false
+    }
+  },
+  "unauthenticated": {
+    "status": 401,
+    "body": {
+      "code": "unauthorized",
+      "category": "authentication",
+      "message": "authentication is required",
+      "request_id": "request_client_unauthenticated",
+      "correlation_id": "corr_client_unauthenticated",
+      "retryable": false
+    }
+  },
+  "forbidden": {
+    "status": 403,
+    "body": {
+      "code": "forbidden",
+      "category": "authorization",
+      "message": "operation is forbidden",
+      "request_id": "request_client_forbidden",
+      "correlation_id": "corr_client_forbidden",
+      "retryable": false,
+      "details": {
+        "authorization_outcome": "deny",
+        "policy_id": "local:user:issue-1236"
+      }
+    }
+  },
+  "approval_required": {
+    "status": 403,
+    "body": {
+      "code": "forbidden",
+      "category": "authorization",
+      "message": "action requires approval by local policy",
+      "request_id": "request_client_approval_required",
+      "correlation_id": "corr_client_approval_required",
+      "retryable": false,
+      "details": {
+        "authorization_outcome": "require_approval",
+        "approval_id": "approval_123e4567-e89b-42d3-a456-426614174030",
+        "requested_action_digest": "sha256:issue-1236-exact-action",
+        "policy_id": "local:user:issue-1236"
+      }
+    }
+  },
   "not_found": {
     "status": 404,
     "body": {
@@ -24,6 +92,42 @@
       "retryable": false,
       "details": {
         "resource_type": "task"
+      }
+    }
+  },
+  "unavailable": {
+    "status": 503,
+    "body": {
+      "code": "unavailable",
+      "category": "availability",
+      "message": "requested subsystem is unavailable",
+      "request_id": "request_client_unavailable",
+      "correlation_id": "corr_client_unavailable",
+      "retryable": false
+    }
+  },
+  "retryable_backend_failure": {
+    "status": 503,
+    "body": {
+      "code": "transient_failure",
+      "category": "transient",
+      "message": "backend operation failed transiently",
+      "request_id": "request_client_transient",
+      "correlation_id": "corr_client_transient",
+      "retryable": true
+    }
+  },
+  "non_retryable_backend_failure": {
+    "status": 502,
+    "body": {
+      "code": "backend_error",
+      "category": "backend",
+      "message": "internal platform operation failed",
+      "request_id": "request_client_backend",
+      "correlation_id": "corr_client_backend",
+      "retryable": false,
+      "details": {
+        "exception_type": "RuntimeError"
       }
     }
   }
