@@ -51,6 +51,32 @@ describe("MobileSessionStore", () => {
     );
   });
 
+  it("clears persisted session material on explicit sign-out", async () => {
+    const storage = new MemoryStorage();
+    const store = new MobileSessionStore(storage);
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          actor_id: "user-1",
+          actor_type: "human",
+          authentication_method: "personal_access",
+          credential_id: "cred-1",
+          authenticated_at: "2026-09-19T00:00:00Z",
+          expires_at: null,
+          organization_id: null,
+          project_id: null,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await store.activate("https://platform.example", "secret-token", fetchImpl);
+    await store.clear();
+
+    expect(await store.current()).toBeNull();
+    expect(await store.getToken()).toBeNull();
+  });
+
   it("does not persist an invalid credential", async () => {
     const storage = new MemoryStorage();
     const store = new MobileSessionStore(storage);
