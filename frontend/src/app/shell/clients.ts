@@ -7,6 +7,7 @@ import { ControlPlaneClient } from "../../api/client";
 import { ControlPlaneCollectionClient } from "../../api/collections";
 import { ConversationClient } from "../../api/conversations";
 import { ComputeClient } from "../../api/compute";
+import { DecisionRecordClient } from "../../api/decisions";
 import { EvaluationClient } from "../../api/evaluations";
 import { FilesClient } from "../../api/files";
 import { GoalClient } from "../../api/goals";
@@ -21,6 +22,7 @@ import { PluginsClient } from "../../api/plugins";
 import { PortabilityClient } from "../../api/portability";
 import { RegistryClient } from "../../api/registry";
 import { RepositoryCollectionClient } from "../../api/repositories";
+import { ResearchClient } from "../../api/research";
 import { SetupClient } from "../../api/setup";
 import { TemplateClient } from "../../api/templates";
 import { VerificationClient } from "../../api/verification";
@@ -39,6 +41,7 @@ export function useShellClients(baseUrl: string) {
   const automationClient = useMemo(() => new AutomationClient({ transport }), [transport]);
   const goalClient = useMemo(() => new GoalClient({ transport }), [transport]);
   const computeClient = useMemo(() => new ComputeClient({ transport }), [transport]);
+  const decisionRecordClient = useMemo(() => new DecisionRecordClient({ transport }), [transport]);
   const evaluationClient = useMemo(() => new EvaluationClient({ transport }), [transport]);
   const filesClient = useMemo(() => new FilesClient({ transport }), [transport]);
   const governanceClient = useMemo(() => new GovernanceClient({ transport }), [transport]);
@@ -50,6 +53,7 @@ export function useShellClients(baseUrl: string) {
   const pluginsClient = useMemo(() => new PluginsClient({ transport }), [transport]);
   const portabilityClient = useMemo(() => new PortabilityClient({ transport }), [transport]);
   const registryClient = useMemo(() => new RegistryClient({ transport }), [transport]);
+  const researchClient = useMemo(() => new ResearchClient({ transport }), [transport]);
   const templateClient = useMemo(() => new TemplateClient({ transport }), [transport]);
   const verificationClient = useMemo(() => new VerificationClient({ transport }), [transport]);
 
@@ -66,6 +70,7 @@ export function useShellClients(baseUrl: string) {
     automationClient,
     goalClient,
     computeClient,
+    decisionRecordClient,
     evaluationClient,
     filesClient,
     governanceClient,
@@ -77,6 +82,7 @@ export function useShellClients(baseUrl: string) {
     pluginsClient,
     portabilityClient,
     registryClient,
+    researchClient,
     templateClient,
     verificationClient,
   };
