@@ -131,7 +131,7 @@ class OrchestratorRegistryBinder:
         try:
             self._registry.unregister(provider_id)
         except ContractError as exc:
-            if removed_mapper and self._agent_mappers is not None:
+            if removed_mapper and self._agent_mappers is not None and mapper is not None:
                 try:
                     self._agent_mappers.register(mapper)
                 except ContractError as rollback_error:
