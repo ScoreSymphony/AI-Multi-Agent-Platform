@@ -12,7 +12,7 @@ describe("#1234 Research and Decision maintained Web surfaces", () => {
     const client = new ResearchClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
     const markup = renderToStaticMarkup(
       <RouterProvider>
-        <ResearchPage client={client} />
+        <ResearchPage client={client} commands={["research.create"]} />
       </RouterProvider>,
     );
 
@@ -20,6 +20,7 @@ describe("#1234 Research and Decision maintained Web surfaces", () => {
     expect(markup).toContain("Research filters");
     expect(markup).toContain("Research class");
     expect(markup).toContain("Status");
+    expect(markup).toContain("Create Research Item");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -28,7 +29,7 @@ describe("#1234 Research and Decision maintained Web surfaces", () => {
     const client = new DecisionRecordClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
     const markup = renderToStaticMarkup(
       <RouterProvider>
-        <DecisionRecordsPage client={client} />
+        <DecisionRecordsPage client={client} commands={["decision-record.create"]} />
       </RouterProvider>,
     );
 
@@ -37,6 +38,7 @@ describe("#1234 Research and Decision maintained Web surfaces", () => {
     expect(markup).toContain("Category");
     expect(markup).toContain("Scope type");
     expect(markup).toContain("Status");
+    expect(markup).toContain("Create Decision Record");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
