@@ -181,13 +181,27 @@ export function TaskDetailPage({
   }, [task?.project_id]);
 
   useEffect(() => {
+    let active = true;
+    let liveRefreshTimer: number | null = null;
+
+    const scheduleLiveRefresh = () => {
+      if (!active || liveRefreshTimer !== null) return;
+      liveRefreshTimer = window.setTimeout(() => {
+        liveRefreshTimer = null;
+        if (active) void load();
+      }, 250);
+    };
+
     void load();
     const stream = new TaskEventStream({
       baseUrl: client.baseUrl,
       taskId,
       onEvent: () => {
         setLiveError(null);
-        void load();
+        // A stream without a cursor can replay the durable Task history. Coalesce that
+        // replay into bounded canonical refreshes instead of starting one full detail
+        // reload per historical event and starving every in-flight Task read.
+        scheduleLiveRefresh();
       },
       onError: (streamError) => setLiveError(describeLiveStreamError(streamError)),
       onState: (state) => {
@@ -197,6 +211,8 @@ export function TaskDetailPage({
     });
     stream.open();
     return () => {
+      active = false;
+      if (liveRefreshTimer !== null) window.clearTimeout(liveRefreshTimer);
       loadGeneration.current += 1;
       stream.close();
     };
