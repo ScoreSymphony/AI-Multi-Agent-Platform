@@ -506,10 +506,11 @@ class ControlPlaneASGI:
                 await _send_response(prepared, send)
                 return
             context = _request_context(prepared, request_id, correlation_id)
+            cursor = query.get("after_event_id") or headers.get("last-event-id")
             stream = await self._http._control_plane.subscribe_task_events(
                 context,
                 segments[1],
-                after_event_id=query.get("after_event_id"),
+                after_event_id=cursor,
             )
             await send(
                 {
@@ -526,11 +527,21 @@ class ControlPlaneASGI:
             )
             started = True
             async for event in stream:
+                event_id = event.get("id")
+                if not isinstance(event_id, str) or not event_id:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "canonical task event stream item is missing an event id",
+                    )
                 payload = json.dumps(event, separators=(",", ":"), default=str)
                 await send(
                     {
                         "type": "http.response.body",
-                        "body": f"event: platform.event\ndata: {payload}\n\n".encode(),
+                        "body": (
+                            f"id: {event_id}\n"
+                            f"event: platform.event\n"
+                            f"data: {payload}\n\n"
+                        ).encode(),
                         "more_body": True,
                     }
                 )
