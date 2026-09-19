@@ -31,8 +31,7 @@ def test_client_consistency_scenarios_bind_task_run_result_parity() -> None:
     assert "test_cli_preserves_shared_task_query_pagination_and_error_semantics" in cli_command
     assert "test_cli_core_lifecycle_mutations_use_the_shared_public_routes" in cli_command
     assert (
-        "test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error"
-        in cli_command
+        "test_cli_mutation_uses_idempotency_key_and_does_not_retry_retryable_error" in cli_command
     )
     assert "test_cli_preserves_not_found_and_conflict_error_categories" in cli_command
     assert "test_cli_and_public_api_share_the_same_canonical_task_state" in cli_command

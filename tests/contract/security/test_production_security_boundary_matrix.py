@@ -26,8 +26,7 @@ def test_production_security_boundary_matrix_is_complete_and_resolvable() -> Non
 
 def test_release_profile_requires_production_security_boundary_conformance() -> None:
     scenarios = {
-        scenario.scenario_id: scenario
-        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
     }
     scenario = scenarios["SEC-BND"]
 

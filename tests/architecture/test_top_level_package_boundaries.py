@@ -279,8 +279,7 @@ def test_high_availability_root_is_behavior_free_compatibility_namespace() -> No
             if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
                 continue
             if isinstance(node, ast.Assign) and all(
-                isinstance(target, ast.Name) and target.id == "__all__"
-                for target in node.targets
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
             ):
                 continue
             violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: {type(node).__name__}")
@@ -324,8 +323,7 @@ def test_repository_intelligence_root_is_behavior_free_compatibility_namespace()
             if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
                 continue
             if isinstance(node, ast.Assign) and all(
-                isinstance(target, ast.Name) and target.id == "__all__"
-                for target in node.targets
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
             ):
                 continue
             violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: {type(node).__name__}")
