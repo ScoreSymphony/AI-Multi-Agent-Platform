@@ -572,7 +572,6 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
     )
 
 
-
 def _project_command(
     args: argparse.Namespace,
     client: ControlPlaneClient,
