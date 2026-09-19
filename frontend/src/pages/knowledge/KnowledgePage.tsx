@@ -81,6 +81,7 @@ export function KnowledgePage({ client }: { client: MemoryKnowledgeClient }) {
       <Card title="Register Knowledge source">
         <p>For a Project-scoped source, both target ref and Project ID are the canonical Project ID. For an unscoped source, target ref is the authenticated actor's canonical principal ref.</p>
         {actionError ? <ErrorState error={actionError} /> : null}
+        {registering ? <p role="status">Registering canonical Knowledge source…</p> : null}
         <KnowledgeRegisterForm disabled={registering} onSubmit={registerSource} />
         {created ? <p role="status">Registered <AppLink href={`/knowledge/${encodeURIComponent(created.id)}`}><CanonicalId value={created.id} /></AppLink></p> : null}
       </Card>
