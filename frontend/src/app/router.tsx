@@ -127,7 +127,7 @@ function readBrowserLocation(): RouterLocation {
   if (typeof window === "undefined") return { path: "/", search: "" };
   return {
     path: normalize(window.location.pathname),
-    search: window.location.search,
+    search: window.location.search ?? "",
   };
 }
 
