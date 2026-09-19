@@ -29,6 +29,7 @@ export function KnowledgeSearchPanel({ client }: { client: MemoryKnowledgeClient
   const [request, setRequest] = useState<KnowledgeSearchDraft | null>(null);
   const [page, setPage] = useState<Page<CanonicalKnowledgeResult> | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
   const queryKey = request
     ? [request.query, request.mode, request.sourceId, request.projectId].join("|")
     : "idle";
@@ -36,6 +37,7 @@ export function KnowledgeSearchPanel({ client }: { client: MemoryKnowledgeClient
 
   const load = useCallback(async () => {
     if (!request) return;
+    setLoading(true);
     try {
       setPage(await client.searchKnowledge({
         query: request.query,
@@ -49,6 +51,8 @@ export function KnowledgeSearchPanel({ client }: { client: MemoryKnowledgeClient
     } catch (nextError) {
       setError(nextError);
       setPage(null);
+    } finally {
+      setLoading(false);
     }
   }, [client, pagination.cursor, request]);
 
@@ -63,6 +67,9 @@ export function KnowledgeSearchPanel({ client }: { client: MemoryKnowledgeClient
       setError(new Error("Knowledge query is required"));
       return;
     }
+    setPage(null);
+    setError(null);
+    pagination.reset();
     setRequest({ ...draft, query });
   }
 
@@ -77,7 +84,8 @@ export function KnowledgeSearchPanel({ client }: { client: MemoryKnowledgeClient
       </form>
       <p className="muted">Retrieval rows are query-scoped projections, not durable canonical result resources.</p>
       {error ? <ErrorState error={error} onRetry={request ? () => void load() : undefined} /> : null}
-      {request && !page && !error ? <LoadingState /> : null}
+      {loading && !page && !error ? <LoadingState label="Searching Knowledge…" /> : null}
+      {loading && page ? <p role="status">Refreshing Knowledge results…</p> : null}
       {page ? <KnowledgeResultTable results={page.items} /> : null}
       {page ? <PaginationControls page={page} pageNumber={pagination.pageNumber} hasPrevious={pagination.hasPrevious} onPrevious={pagination.previous} onRefresh={() => void load()} onNext={() => pagination.next(page.next_cursor)} /> : null}
     </Card>
