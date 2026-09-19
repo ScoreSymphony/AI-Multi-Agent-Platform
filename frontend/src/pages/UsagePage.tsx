@@ -8,6 +8,8 @@ import type {
   MeasurementQuality,
   Page,
 } from "../api/types";
+import { useCursorPagination } from "../app/pagination";
+import { PaginationControls } from "../components/Pagination";
 import {
   Card,
   DegradedState,
@@ -42,6 +44,11 @@ export function UsagePage({
   const [loading, setLoading] = useState(false);
   const [scopeDraft, setScopeDraft] = useState("");
   const [scopeFilter, setScopeFilter] = useState("");
+  const recordPagination = useCursorPagination(
+    `usage-records:${scopeFilter || "all"}:timestamp:desc`,
+  );
+  const aggregatePagination = useCursorPagination("usage-aggregates:metric_type:asc");
+  const budgetPagination = useCursorPagination("usage-budgets:metric_type:asc");
 
   useEffect(() => {
     if (manifest) {
@@ -81,7 +88,8 @@ export function UsagePage({
       requests.push({
         collection: "usage-records",
         request: client.listUsageRecords({
-          limit: 100,
+          limit: 50,
+          cursor: recordPagination.cursor,
           sort: "timestamp",
           direction: "desc",
           q: scopeFilter || undefined,
@@ -91,13 +99,23 @@ export function UsagePage({
     if (available.has("usage-aggregates")) {
       requests.push({
         collection: "usage-aggregates",
-        request: client.listUsageAggregates({ limit: 200, sort: "metric_type", direction: "asc" }),
+        request: client.listUsageAggregates({
+          limit: 50,
+          cursor: aggregatePagination.cursor,
+          sort: "metric_type",
+          direction: "asc",
+        }),
       });
     }
     if (available.has("usage-budgets")) {
       requests.push({
         collection: "usage-budgets",
-        request: client.listUsageBudgets({ limit: 200, sort: "metric_type", direction: "asc" }),
+        request: client.listUsageBudgets({
+          limit: 50,
+          cursor: budgetPagination.cursor,
+          sort: "metric_type",
+          direction: "asc",
+        }),
       });
     }
 
@@ -120,7 +138,14 @@ export function UsagePage({
     });
     setFailures(nextFailures);
     setLoading(false);
-  }, [client, runtimeManifest, scopeFilter]);
+  }, [
+    aggregatePagination.cursor,
+    budgetPagination.cursor,
+    client,
+    recordPagination.cursor,
+    runtimeManifest,
+    scopeFilter,
+  ]);
 
   useEffect(() => {
     void load();
@@ -202,6 +227,16 @@ export function UsagePage({
             pagination. `unavailable` is displayed as unavailable, never as zero.
           </p>
           {loading && !records ? <LoadingState /> : <UsageRecordTable records={records?.items ?? []} />}
+          {records ? (
+            <PaginationControls
+              page={records}
+              pageNumber={recordPagination.pageNumber}
+              hasPrevious={recordPagination.hasPrevious}
+              onPrevious={recordPagination.previous}
+              onRefresh={() => void load()}
+              onNext={() => recordPagination.next(records.next_cursor)}
+            />
+          ) : null}
         </Card>
       ) : null}
 
@@ -216,6 +251,16 @@ export function UsagePage({
           ) : (
             <UsageAggregateTable aggregates={aggregates?.items ?? []} />
           )}
+          {aggregates ? (
+            <PaginationControls
+              page={aggregates}
+              pageNumber={aggregatePagination.pageNumber}
+              hasPrevious={aggregatePagination.hasPrevious}
+              onPrevious={aggregatePagination.previous}
+              onRefresh={() => void load()}
+              onNext={() => aggregatePagination.next(aggregates.next_cursor)}
+            />
+          ) : null}
         </Card>
       ) : null}
 
@@ -226,6 +271,16 @@ export function UsagePage({
             enforcement and approval behavior.
           </p>
           {loading && !budgets ? <LoadingState /> : <UsageBudgetTable budgets={budgets?.items ?? []} />}
+          {budgets ? (
+            <PaginationControls
+              page={budgets}
+              pageNumber={budgetPagination.pageNumber}
+              hasPrevious={budgetPagination.hasPrevious}
+              onPrevious={budgetPagination.previous}
+              onRefresh={() => void load()}
+              onNext={() => budgetPagination.next(budgets.next_cursor)}
+            />
+          ) : null}
         </Card>
       ) : null}
 
