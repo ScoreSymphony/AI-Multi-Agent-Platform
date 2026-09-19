@@ -64,8 +64,8 @@ Authorization/approval policy itself remains server-owned. `J-web` retains canon
 
 The fast platform-conformance profile keeps this behavior claim-blocking rather than documentation-only:
 
-- `J-cli` runs shared Task/Run/Result parity, fixture-level query/error parity, a live CLI ↔ public API pagination/filter/sort/cursor comparison, shared core lifecycle-route parity, mutation idempotency/no-auto-retry, a real bidirectional CLI ↔ public API Task-state test, canonical authorization denial, and approval-required → approved retry behavior.
-- `J-web` runs the shared canonical-state parity suite (including core lifecycle-route, mutation idempotency/no-auto-retry, deep-link and reload contracts) plus canonical frontend error presentation, including the distinction between unauthenticated, denied and approval-required outcomes.
+- `J-cli` runs shared Task/Run/Result parity, fixture-level query/error parity, a live CLI ↔ public API pagination/filter/sort/cursor comparison, shared core lifecycle-route parity, mutation idempotency/no-auto-retry, a real bidirectional CLI ↔ public API Task-state test, canonical authorization denial, approval-required → approved retry behavior, and the maintained CLI assertion for the official first-run command identity.
+- `J-web` runs the shared canonical-state parity suite (including core lifecycle-route, mutation idempotency/no-auto-retry, deep-link and reload contracts), canonical frontend error presentation, and the maintained Web onboarding assertion for the same official first-run command identity.
 
 The security tests are intentionally reused instead of reimplementing authorization policy in a client-specific conformance harness. The client under test receives the same server-owned outcome and may only render or transport it.
 
