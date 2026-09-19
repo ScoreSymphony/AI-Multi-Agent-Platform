@@ -105,18 +105,10 @@ export function AppLink({
   return <a href={safeHref} target={target} onClick={handleClick} {...rest}>{children}</a>;
 }
 
-export function normalizeAppLinkHref(
-  href: string | undefined,
-  baseHref = typeof window === "undefined" || typeof window.location?.href !== "string"
-    ? "https://router.invalid/"
-    : window.location.href,
-): string | undefined {
+export function normalizeAppLinkHref(href: string | undefined): string | undefined {
   if (!href) return href;
   try {
-    let base = new URL(baseHref);
-    if (base.protocol !== "http:" && base.protocol !== "https:") {
-      base = new URL("https://router.invalid/");
-    }
+    const base = new URL("https://router.invalid/");
     const resolved = new URL(href, base);
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
       return undefined;
