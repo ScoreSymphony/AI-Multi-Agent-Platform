@@ -401,7 +401,7 @@ export function TaskDetailPage({
               </li>
             ))}
           </ol>
-        )}
+        ) : null}
       </Card>
     </div>
   );
