@@ -163,6 +163,23 @@ async function taskInventory(page) {
   });
 }
 
+async function standardAgentTeamInventory(page) {
+  return page.evaluate(async () => {
+    const [{ BrowserSessionClient }, { ControlPlaneClient }] = await Promise.all([
+      import("/src/api/browserSession.ts"),
+      import("/src/api/client.ts"),
+    ]);
+    const session = new BrowserSessionClient();
+    const client = new ControlPlaneClient({ transport: session.transport });
+    const teams = await client.listAgentTeams({ limit: 100 });
+    return teams.items.map((team) => ({
+      id: team.id,
+      starterKey: team.revision.profile.metadata.starter_key ?? null,
+      starterKind: team.revision.profile.metadata.starter_kind ?? null,
+    }));
+  });
+}
+
 async function readPublicApiResource(page, path) {
   return page.evaluate(async (resourcePath) => {
     const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
@@ -605,7 +622,49 @@ try {
   }
 
   await page.getByRole("heading", { name: "Optional General Assistant setup", exact: true }).waitFor();
+  const standardBootstrapResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/v1/commands/standard-agent.bootstrap")
+      && response.request().method() === "POST",
+  );
   await (await waitForButton(page, "Bootstrap standard Agents")).click();
+  const standardBootstrapResponse = await standardBootstrapResponsePromise;
+  if (!standardBootstrapResponse.ok()) {
+    throw new Error(
+      `Standard Agent/Team bootstrap failed with ${standardBootstrapResponse.status()}: ${await standardBootstrapResponse.text()}`,
+    );
+  }
+  const standardBootstrapResult = await standardBootstrapResponse.json();
+  const expectedTeamKeys = [
+    ...(standardBootstrapResult.installed_team_keys ?? []),
+    ...(standardBootstrapResult.preserved_team_keys ?? []),
+  ].sort();
+  if (expectedTeamKeys.length === 0) {
+    throw new Error(
+      `Standard bootstrap exposed no canonical Agent Team keys: ${JSON.stringify(standardBootstrapResult)}`,
+    );
+  }
+  const standardTeams = await standardAgentTeamInventory(page);
+  for (const teamKey of expectedTeamKeys) {
+    const team = standardTeams.find(
+      (candidate) => candidate.starterKey === teamKey && candidate.starterKind === "team",
+    );
+    if (!team) {
+      throw new Error(
+        `Standard Agent Team ${teamKey} was not visible through the public agent-teams collection: ${JSON.stringify(standardTeams)}`,
+      );
+    }
+    const teamViaApi = await readPublicApiResource(page, `/agent-teams/${team.id}`);
+    requireCanonicalIdentity(teamViaApi, team.id, `Standard Agent Team ${teamKey}`);
+    if (
+      teamViaApi.revision?.profile?.metadata?.starter_key !== teamKey
+      || teamViaApi.revision?.profile?.metadata?.starter_kind !== "team"
+    ) {
+      throw new Error(
+        `Standard Agent Team metadata diverged through the public API: ${JSON.stringify(teamViaApi)}`,
+      );
+    }
+  }
   await (await waitForButton(page, "Create editable General Assistant")).click();
 
   await page.getByRole("heading", { name: "Optional single-Agent first task", exact: true }).waitFor();
