@@ -47,7 +47,6 @@ def safe_credential(credential: StoredCredential) -> dict[str, JsonValue]:
     }
 
 
-
 def safe_mobile_device(
     device: MobileDevice,
     credential: StoredCredential | None,
