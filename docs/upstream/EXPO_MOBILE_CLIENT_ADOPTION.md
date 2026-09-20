@@ -52,7 +52,10 @@ cache.
   `expo-secure-store`.
 - A revoked/expired credential receives canonical 401 handling and is removed from device
   storage.
-- Deep links cannot carry executable commands.
+- Ordinary resource deep links cannot carry executable commands. The versioned
+  `aiagentplatform://pair` envelope is the only authentication-bootstrap exception and carries
+  only HTTPS origin, pairing-request ID and short-lived one-time proof; opening it never consumes
+  the challenge automatically.
 
 ## Resource/deployment footprint
 
