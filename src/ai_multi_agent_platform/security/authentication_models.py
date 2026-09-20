@@ -23,6 +23,7 @@ class AuthenticationMethod(StrEnum):
     WORKER_TOKEN = "worker_token"
     AUTOMATION_TOKEN = "automation_token"
     INTEGRATION_TOKEN = "integration_token"
+    MOBILE_DEVICE_TOKEN = "mobile_device_token"
     EXTERNAL_IDP = "external_idp"
 
 
@@ -32,6 +33,7 @@ class CredentialKind(StrEnum):
     WORKER = "worker"
     AUTOMATION = "automation"
     INTEGRATION = "integration"
+    MOBILE = "mobile"
 
 
 class AuthenticationFailure(StrEnum):
@@ -127,6 +129,49 @@ class StoredCredential:
 
     def active(self, *, now: datetime) -> bool:
         return self.revoked_at is None and (self.expires_at is None or now < self.expires_at)
+
+
+@dataclass(frozen=True, slots=True)
+class MobilePairingChallenge:
+    pairing_id: str
+    user_id: str
+    server_origin: str
+    secret_verifier: str
+    created_at: datetime
+    expires_at: datetime
+    protocol_version: str = "1"
+    consumed_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    failed_attempts: int = 0
+    correlation_id: str | None = None
+
+    def active(self, *, now: datetime) -> bool:
+        return self.consumed_at is None and self.cancelled_at is None and now < self.expires_at
+
+
+@dataclass(frozen=True, slots=True)
+class PairedMobileDevice:
+    device_id: str
+    user_id: str
+    credential_id: str
+    display_name: str
+    server_origin: str
+    created_at: datetime
+    platform: str | None = None
+    metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+
+
+@dataclass(frozen=True, slots=True)
+class MobilePairingGrant:
+    pairing_id: str
+    server_origin: str
+    secret: str
+    expires_at: datetime
+    protocol_version: str
+    pairing_uri: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +276,9 @@ __all__ = [
     "IssuedCredential",
     "LocalUserAccount",
     "LoginResult",
+    "MobilePairingChallenge",
+    "MobilePairingGrant",
+    "PairedMobileDevice",
     "ReplayProtector",
     "SessionGrant",
     "StoredCredential",
