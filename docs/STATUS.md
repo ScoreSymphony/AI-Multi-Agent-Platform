@@ -14,6 +14,27 @@ Repository documentation/operations owns this status document. Update it at mean
 
 ## Current integration status
 
+> Curated integration note: 2026-09-20, during the final Operational V1 product-readiness audit
+> against `main@bc8b0374cf41a51275809d57ceb25dcf53f92b13`.
+
+The repository is in final Operational V1 product-readiness, release-candidate hardening and
+publication preparation. Full platform conformance is complete, the supported reference baseline is
+the self-hosted single-node product path, and the first formal publication targets `1.0.0` only
+after the exact release candidate satisfies the repository release process and all release-blocking
+findings are resolved. No GitHub release or semantic-version tag has been published yet.
+
+The current product architecture remains provider-neutral: canonical Task/Plan/Step/Run state and
+Result/Artifact/Verification lineage are platform-owned; Web and CLI are Control Plane clients;
+distributed Node/Worker execution and other advanced profiles extend the same contracts; Hermes,
+LiteLLM and MCP remain optional integrations; the Forge execution integration is retired and
+retained only as historical architecture/provenance evidence.
+
+Exact open work-item and release-blocker state remains intentionally outside this curated status
+document. Use live GitHub issue/PR state and the terminal readiness audit for that information, and
+use [RELEASE_PROCESS.md](RELEASE_PROCESS.md) for publication requirements.
+
+## Historical integration snapshot — 2026-09-11
+
 > Curated integration note: 2026-09-11, after merge of [PR #782](https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/782) into `main` at commit `19b5b882478ad3ff3947006ae97c9d6228cc93b0`.
 
 The repository is in active product-integration, acceptance, hardening and operating-envelope work rather than foundational platform construction. Canonical lifecycle/domain ownership, Control Plane APIs, execution/model/tool/provider boundaries, Agents/Agent Teams, authorization/approvals, Workspaces/files/Artifacts, Memory/Knowledge, Search, Automations, distributed Worker execution, durable Plan/Step coordination, Registry/Marketplace support and release/update foundations already exist in the repository.
