@@ -21,7 +21,7 @@ from ai_multi_agent_platform.observability.trace import (
     trace_usage_resource,
 )
 
-from .http import HTTPRequest, HTTPResponse
+from .http import HTTPRequest, HTTPResponse, _page_query
 from .models import API_VERSION, APIException, PageQuery, RequestContext, paginate, validation_error
 from .run_contract import ControlPlane as _RunControlPlane
 from .run_contract import ControlPlaneHTTP as _RunControlPlaneHTTP
@@ -184,7 +184,9 @@ class ControlPlaneHTTP(_RunControlPlaneHTTP):
                     message="method not allowed",
                 )
             if len(segments) == 3:
-                page = await control_plane.task_trace(context, segments[1], query)
+                page = await control_plane.task_trace(
+                    context, segments[1], _page_query(request.query)
+                )
                 return self._response(200, page, request_id, correlation_id)
             item = await control_plane.trace_node(context, segments[1], segments[3])
             return self._response(200, item, request_id, correlation_id)
