@@ -404,14 +404,16 @@ class ControlPlaneHTTP:
             page = await self._control_plane.list_model_providers(context, query)
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2:
-            if ":" in segments[1]:
-                provider_id, command = segments[1].rsplit(":", 1)
-                if command not in {"enable", "disable", "refresh-health"}:
-                    raise APIException(
-                        status=404,
-                        code="not_found",
-                        message="unknown model-provider command",
-                    )
+            command = next(
+                (
+                    candidate
+                    for candidate in ("enable", "disable", "refresh-health")
+                    if segments[1].endswith(f":{candidate}")
+                ),
+                None,
+            )
+            if command is not None:
+                provider_id = segments[1].removesuffix(f":{command}")
                 if request.method != "POST":
                     raise APIException(
                         status=405,
@@ -465,14 +467,16 @@ class ControlPlaneHTTP:
             page = await self._control_plane.list_models(context, query)
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2:
-            if ":" in segments[1]:
-                model_id, command = segments[1].rsplit(":", 1)
-                if command not in {"enable", "disable"}:
-                    raise APIException(
-                        status=404,
-                        code="not_found",
-                        message="unknown model command",
-                    )
+            command = next(
+                (
+                    candidate
+                    for candidate in ("enable", "disable")
+                    if segments[1].endswith(f":{candidate}")
+                ),
+                None,
+            )
+            if command is not None:
+                model_id = segments[1].removesuffix(f":{command}")
                 if request.method != "POST":
                     raise APIException(
                         status=405,
