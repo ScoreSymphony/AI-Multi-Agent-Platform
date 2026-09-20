@@ -604,19 +604,6 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     headers=headers,
                 )
 
-            registered_routes = getattr(
-                self._extended_control_plane,
-                "registered_routes",
-                (),
-            )
-            normalized_path = request.path.rstrip("/") or "/"
-            if any(route_path == normalized_path for _, route_path in registered_routes):
-                raise APIException(
-                    status=405,
-                    code="method_not_allowed",
-                    message="method not allowed",
-                )
-
             segments = [segment for segment in relative.split("/") if segment]
             if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
@@ -695,7 +682,31 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                 correlation_id,
             )
 
-        return await super().handle(request)
+        base_response = await super().handle(request)
+        is_route_not_found = (
+            base_response.status == 404
+            and isinstance(base_response.body, dict)
+            and base_response.body.get("code") == "not_found"
+            and base_response.body.get("message") == "route not found"
+        )
+        if is_route_not_found:
+            normalized_path = request.path.rstrip("/") or "/"
+            registered_routes = getattr(
+                self._extended_control_plane,
+                "registered_routes",
+                (),
+            )
+            if any(route_path == normalized_path for _, route_path in registered_routes):
+                return self._error_response(
+                    APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    ),
+                    request_id,
+                    correlation_id,
+                )
+        return base_response
 
 
 def build_openapi(
