@@ -281,24 +281,39 @@ startup reconciliation remains the sole ordinary restart authority.
 See [Single-node graceful drain and shutdown recovery](SINGLE_NODE_DRAIN_SHUTDOWN.md) for the
 in-flight disposition matrix, forced-stop behavior, telemetry and operator recovery procedure.
 
-## Update and backup hooks
+## Backup, restore, and upgrades
 
-#40 owns the tested backup/restore and hardware-relocation contract, while #41 owns platform
-and schema upgrade/migration rules. Until those issues are complete, do not claim a live
-snapshot or cross-version migration guarantee from this profile.
+The supported single-node backup/restore path is the completed #40 contract implemented by
+`platform-backup`; the maintained operator runbook is
+[Backup, restore, and disaster recovery](BACKUP_RESTORE.md). Backup format v1 is deliberately
+offline/quiesced: stop every process that can write the deployment data root before creating a
+backup, pass `--quiesced`, and verify the completed backup before depending on it.
 
-For a conservative same-version operator copy today:
+A minimal operator sequence is:
 
-1. stop `platform-server` cleanly;
-2. preserve the deployment configuration separately;
-3. copy the complete `AI_MAP_DATA_DIR` as one unit, including every SQLite database and the
-   `files/`, `workspaces/` and `executor/` directories;
-4. retain that copy before changing package/version state;
-5. restart with the original data root and verify `/api/v1/health`, `/api/v1/readiness` and
-   `platform-server smoke`.
+```bash
+platform-backup create \
+  --data-dir /srv/ai-map/data \
+  --destination /srv/backups/ai-map \
+  --quiesced
+platform-backup verify /srv/backups/ai-map
+platform-backup restore /srv/backups/ai-map \
+  --target-data-dir /srv/ai-map-restored/data
+platform-server recover-restore
+```
 
-This is an operational hook, not a substitute for #40 relocation/restore tests or #41
-migration guarantees.
+Restore publishes only after manifest, checksum, SQLite-integrity and durable-layout validation,
+then leaves the restored deployment behind the recovery/readiness gate until canonical recovery
+and cross-store validation succeed. Follow the runbook for build-commit pinning, secret-provider
+recovery, relocation, post-restore validation and failure handling. This profile does **not** claim
+a live cross-provider snapshot while writers are running.
+
+Platform/schema upgrades use the completed #41 `platform-upgrade` lifecycle documented in
+[Platform upgrades and migrations](UPGRADES.md). For a real release transition, preflight the
+source/target version vectors, create and verify the required source-release backup, quiesce/drain
+writers, apply the supported migration path, and validate readiness plus the canonical smoke before
+resuming work. Cross-version behavior is guaranteed only for explicitly supported migration paths;
+do not infer arbitrary downgrade or cross-version compatibility from the deployment profile alone.
 
 ## Uninstall and data retention
 
@@ -421,10 +436,11 @@ prevent the Stage-1 Control Plane from starting, becoming ready or executing
 `platform-server smoke`. When they are enabled, failures in the public edge may make the web
 surface unreachable without changing canonical Task/Run state.
 
-Multiple schedulable local Worker processes are intentionally not defined by this Stage-2
-slice. #14 owns the shared local/remote Node/Worker registration, capability declaration,
-reservation and scheduling contracts; #240 packages those contracts into advanced distributed
-and heterogeneous deployment profiles after they are stable.
+Multiple schedulable local and remote Workers are not required by this Stage-2 baseline.
+The completed #14 contracts provide shared Node/Worker registration, capability declaration,
+reservation and scheduling semantics, and completed #240 packages those contracts into advanced
+distributed and heterogeneous deployment profiles. Operators may adopt those advanced profiles
+without changing the single-server baseline documented here.
 
 ## Resource guidance
 
@@ -439,16 +455,28 @@ needed by the chosen local workloads and measure:
 
 The reference path itself is CPU-only and requires no accelerator.
 
-## Follow-up deployment integrations
+## Advanced deployment integrations and remaining work
 
 The repository has a production-shaped Stage-1 single-node baseline plus the Stage-2
-single-server process/network hardening reference. Advanced deployment concerns are tracked as
-follow-up integrations rather than remaining completion blockers for #39:
+single-server process/network hardening reference. Several advanced operational foundations that
+were originally tracked as follow-up work are now complete:
 
-- #240 packages multiple-local-Worker, distributed-Worker and heterogeneous multi-device
-  profiles after #14's canonical Worker/scheduler contracts are available;
-- #40 adds tested backup/restore and hardware relocation;
-- #41 adds schema/platform upgrade lifecycle;
-- #89 may later add optional Control Plane HA/failover.
+- #14 defines the canonical Node/Worker registry, capability, reservation and scheduling contracts,
+  while #240 packages multiple-local-Worker, distributed-Worker and heterogeneous multi-device
+  deployment profiles;
+- #40 provides tested offline/quiesced backup, verified restore and hardware-relocation behavior
+  through `platform-backup` and [the backup/restore runbook](BACKUP_RESTORE.md);
+- #41 provides the explicit platform/schema upgrade and migration lifecycle through
+  `platform-upgrade` and [the upgrade runbook](UPGRADES.md);
+- #89 provides the optional Control Plane HA/fencing/promotion semantics documented in
+  [Control Plane high availability](CONTROL_PLANE_HIGH_AVAILABILITY.md).
 
-Single-node/single-server production remains a valid topology after those additions.
+HA remains **optional/advanced** and is not a dependency of the ordinary single-node or
+single-server topology. The #89 semantics are complete, but a production-shaped independent
+multi-process/multi-host Control Plane profile still depends on later work tracked by #956
+(shared PostgreSQL durable-state adapters) and #566 (the combined production HA composition and
+failover proof).
+
+Single-node/single-server production remains a valid topology independently of those optional HA
+extensions. Formal release publication/version finalization remains separate downstream work in
+#1237 rather than a prerequisite introduced by this deployment guide.
