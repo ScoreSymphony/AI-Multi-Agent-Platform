@@ -269,7 +269,6 @@ def add_repository_parser(
     _add_mutation_arguments(change_update)
 
 
-
 def _add_mutation_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--approval-id")
     parser.add_argument("--idempotency-key")
