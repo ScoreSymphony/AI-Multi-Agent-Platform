@@ -298,6 +298,40 @@ def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
     asyncio.run(scenario())
 
 
+def test_exact_route_does_not_shadow_registered_resource_method() -> None:
+    async def create_widget(request: HTTPRequest) -> HTTPResponse:
+        del request
+        return HTTPResponse(status=202, body={"status": "accepted"})
+
+    module = ControlPlaneModule(
+        name="domain.widgets",
+        resource_services={
+            "widgets": InMemoryResourceService(
+                ({"id": "widget-1", "type": "widget", "name": "One"},)
+            )
+        },
+        routes=(ControlPlaneRoute("POST", "/api/v1/widgets", create_widget),),
+    )
+    http = ControlPlaneHTTP(_control_plane(module))
+
+    async def scenario() -> None:
+        listed = await http.handle(HTTPRequest(method="GET", path="/api/v1/widgets"))
+        assert listed.status == 200
+        assert isinstance(listed.body, dict)
+        assert listed.body["total"] == 1
+
+        created = await http.handle(HTTPRequest(method="POST", path="/api/v1/widgets"))
+        assert created.status == 202
+        assert created.body == {"status": "accepted"}
+
+        wrong_method = await http.handle(HTTPRequest(method="DELETE", path="/api/v1/widgets"))
+        assert wrong_method.status == 405
+        assert isinstance(wrong_method.body, dict)
+        assert wrong_method.body["code"] == "method_not_allowed"
+
+    asyncio.run(scenario())
+
+
 def test_openapi_contributors_run_in_deterministic_module_order() -> None:
     def contribute(name: str):
         def apply(specification: dict[str, Any]) -> None:
