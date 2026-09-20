@@ -516,6 +516,33 @@ def test_live_task_update_stream_uses_canonical_event_payloads() -> None:
         assert b"platform.event" in bodies
         assert b"task.created" in bodies
         assert b"fake-events" not in bodies
+        first_event_id = events[0]["id"]
+        assert isinstance(first_event_id, str)
+        assert f"id: {first_event_id}\n".encode() in bodies
+
+        reconnect_messages: list[dict[str, Any]] = []
+
+        async def reconnect_send(message: dict[str, Any]) -> None:
+            reconnect_messages.append(message)
+
+        await app(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": f"/api/v1/tasks/{task_id}/events/stream",
+                "query_string": b"",
+                "headers": [(b"last-event-id", first_event_id.encode())],
+            },
+            receive,
+            reconnect_send,
+        )
+        assert live_events.subscribe_calls[-1][1] == first_event_id
+        reconnect_bodies = b"".join(
+            message.get("body", b"")
+            for message in reconnect_messages
+            if message.get("type") == "http.response.body"
+        )
+        assert b"task.created" not in reconnect_bodies
 
     asyncio.run(scenario())
 

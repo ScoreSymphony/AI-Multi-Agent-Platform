@@ -1,0 +1,90 @@
+import { describe, expect, it, vi } from "vitest";
+import { ResearchClient } from "./research";
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+describe("#589 Research Evidence frontend client", () => {
+  it("reads canonical Research collections through the versioned Control Plane", async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [], next_cursor: null, total: 0, limit: 50 }))
+      .mockResolvedValueOnce(jsonResponse({ id: "research_1", type: "research-item" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "source_1", type: "research-source" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "observation_1", type: "research-source-observation" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "claim_1", type: "research-claim" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "evidence_1", type: "research-evidence" }));
+    const client = new ResearchClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.listItems({
+      q: "runtime",
+      filters: { research_class: "project_research", status: "current" },
+    });
+    await client.getItem("research_1");
+    await client.getSource("source_1");
+    await client.getObservation("observation_1");
+    await client.getClaim("claim_1");
+    await client.getEvidence("evidence_1");
+
+    const listUrl = new URL(fetchSpy.mock.calls[0][0] as string, "https://platform.invalid");
+    expect(listUrl.pathname).toBe("/api/v1/research-items");
+    expect(listUrl.searchParams.get("q")).toBe("runtime");
+    expect(listUrl.searchParams.get("filter[research_class]")).toBe("project_research");
+    expect(listUrl.searchParams.get("filter[status]")).toBe("current");
+
+    expect(new URL(fetchSpy.mock.calls[1][0] as string, "https://platform.invalid").pathname)
+      .toBe("/api/v1/research-items/research_1");
+    expect(new URL(fetchSpy.mock.calls[2][0] as string, "https://platform.invalid").pathname)
+      .toBe("/api/v1/research-sources/source_1");
+    expect(new URL(fetchSpy.mock.calls[3][0] as string, "https://platform.invalid").pathname)
+      .toBe("/api/v1/research-source-observations/observation_1");
+    expect(new URL(fetchSpy.mock.calls[4][0] as string, "https://platform.invalid").pathname)
+      .toBe("/api/v1/research-claims/claim_1");
+    expect(new URL(fetchSpy.mock.calls[5][0] as string, "https://platform.invalid").pathname)
+      .toBe("/api/v1/research-evidence/evidence_1");
+
+    for (const [, init] of fetchSpy.mock.calls as Array<[string, RequestInit]>) {
+      expect(init.method).toBe("GET");
+      expect(init.credentials).toBe("include");
+    }
+  });
+
+  it("routes primary Research mutations through canonical commands with idempotency keys", async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "research_1", type: "research-item" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "source_1", type: "research-source" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "observation_1", type: "research-source-observation" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "claim_1", type: "research-claim" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "evidence_1", type: "research-evidence" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "evidence_2", type: "research-evidence" }));
+    const client = new ResearchClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.createItem({ title: "T", question: "Q", research_class: "project_research" });
+    await client.addSource("research_1", { source_type: "web", locator: "https://example.invalid", title: "S" });
+    await client.observeSource("source_1", { retrieved_at: "2026-09-19T12:00:00+00:00" });
+    await client.addClaim("research_1", { text: "Claim", category: "fact" });
+    await client.addEvidence("claim_1", { source_observation_id: "observation_1", relation: "supports" });
+    await client.revalidateEvidence("evidence_1", "observation_1");
+
+    const expected = [
+      ["research.create", "research-items"],
+      ["research.source.add", "research_1"],
+      ["research.source.observe", "source_1"],
+      ["research.claim.add", "research_1"],
+      ["research.evidence.add", "claim_1"],
+      ["research.evidence.revalidate", "evidence_1"],
+    ];
+    expected.forEach(([command, resourceRef], index) => {
+      const [rawUrl, init] = fetchSpy.mock.calls[index] as [string, RequestInit];
+      expect(new URL(rawUrl, "https://platform.invalid").pathname)
+        .toBe(`/api/v1/commands/${command}`);
+      expect(init.method).toBe("POST");
+      expect(init.credentials).toBe("include");
+      expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+      expect(JSON.parse(String(init.body)).resource_ref).toBe(resourceRef);
+    });
+  });
+});

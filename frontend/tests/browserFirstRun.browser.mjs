@@ -775,6 +775,16 @@ try {
   await signIn(page);
   await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
 
+  // #1234 final owner-domain closure: both previously missing V1 inspection surfaces must be
+  // reachable through the maintained authenticated browser shell without private API calls.
+  await page.goto(`${frontendUrl}/research`);
+  await page.getByRole("heading", { name: "Research Evidence", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Research Items", exact: true }).waitFor();
+
+  await page.goto(`${frontendUrl}/decisions`);
+  await page.getByRole("heading", { name: "Decision Records", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Decision history", exact: true }).waitFor();
+
   // Keep representative cross-domain navigation in the maintained browser-first-run harness.
   // Historical context: #1234 consumes #1164 rather than creating a competing E2E architecture.
   // Deep-linked canonical detail state must survive reload, Search filters must

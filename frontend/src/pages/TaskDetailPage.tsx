@@ -53,7 +53,11 @@ export function TaskDetailPage({
 }) {
   const [task, setTask] = useState<CanonicalTask | null>(null);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
+  const [runsError, setRunsError] = useState<unknown>(null);
+  const [runsLoading, setRunsLoading] = useState(true);
   const [events, setEvents] = useState<TimelineItem[]>([]);
+  const [timelineError, setTimelineError] = useState<unknown>(null);
+  const [timelineLoading, setTimelineLoading] = useState(true);
   const [budget, setBudget] = useState<TaskExecutionBudgetProjection | null>(null);
   const [budgetError, setBudgetError] = useState<unknown>(null);
   const [budgetLoading, setBudgetLoading] = useState(true);
@@ -67,6 +71,7 @@ export function TaskDetailPage({
   const [liveState, setLiveState] = useState<LiveConnectionState>("connecting");
   const [liveError, setLiveError] = useState<string | null>(null);
   const loadGeneration = useRef(0);
+  const primaryTaskLoaded = useRef(false);
   const permission = usePermissionHint("task:command", taskId);
   const movePermission = usePermissionHint("task:move-project", taskId);
 
@@ -76,45 +81,86 @@ export function TaskDetailPage({
       if (generation === loadGeneration.current) {
         setError(new Error("This route does not contain a valid canonical Task ID."));
         setBudgetLoading(false);
+        setRunsLoading(false);
+        setTimelineLoading(false);
       }
       return;
     }
+
     setBudgetLoading(true);
+    setRunsLoading(true);
+    setTimelineLoading(true);
+    setRunsError(null);
+    setTimelineError(null);
+
+    let nextTask: CanonicalTask;
     try {
-      const budgetRequest = client
-        .getTaskExecutionBudget(taskId)
-        .then((value) => ({ value, error: null as unknown }))
-        .catch((nextError: unknown) => {
-          if (isControlPlaneError(nextError) && nextError.status === 404) {
-            return { value: null, error: null };
-          }
-          return { value: null, error: nextError };
-        });
-      const [nextTask, nextRuns, timeline, nextBudget] = await Promise.all([
-        client.getTask(taskId),
-        client.listTaskRuns(taskId, { limit: 100, sort: "created_at", direction: "desc" }),
-        client.timeline(taskId, { limit: 100, direction: "asc" }),
-        budgetRequest,
-      ]);
-      if (generation !== loadGeneration.current) return;
-      setTask(nextTask);
-      setRuns(nextRuns.items);
-      setEvents(timeline.items);
-      setBudget(nextBudget.value);
-      setBudgetError(nextBudget.error);
-      setBudgetLoading(false);
-      setError(null);
-      if (nextTask.plan_ref === null) {
-        setWorkflow(null);
-        setWorkflowError(null);
-        setWorkflowUnavailable(false);
-      }
+      nextTask = await client.getTask(taskId);
     } catch (nextError) {
       if (generation === loadGeneration.current) {
         setError(nextError);
         setBudgetLoading(false);
+        setRunsLoading(false);
+        setTimelineLoading(false);
       }
+      return;
     }
+
+    if (generation !== loadGeneration.current) return;
+
+    // Canonical Task identity is the primary detail state. Render it as soon as that
+    // owner read succeeds; supporting projections must not hold the whole page in
+    // Loading when Runs, Timeline or Budget are slow/degraded.
+    setTask(nextTask);
+    primaryTaskLoaded.current = true;
+    setError(null);
+    if (nextTask.plan_ref === null) {
+      setWorkflow(null);
+      setWorkflowError(null);
+      setWorkflowUnavailable(false);
+    }
+
+    const budgetRequest = client
+      .getTaskExecutionBudget(taskId)
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((nextError: unknown) => {
+        if (isControlPlaneError(nextError) && nextError.status === 404) {
+          return { value: null, error: null };
+        }
+        return { value: null, error: nextError };
+      });
+
+    const [runsResult, timelineResult, budgetResult] = await Promise.allSettled([
+      client.listTaskRuns(taskId, { limit: 100, sort: "created_at", direction: "desc" }),
+      client.timeline(taskId, { limit: 100, direction: "asc" }),
+      budgetRequest,
+    ]);
+    if (generation !== loadGeneration.current) return;
+
+    if (runsResult.status === "fulfilled") {
+      setRuns(runsResult.value.items);
+      setRunsError(null);
+    } else {
+      setRunsError(runsResult.reason);
+    }
+    setRunsLoading(false);
+
+    if (timelineResult.status === "fulfilled") {
+      setEvents(timelineResult.value.items);
+      setTimelineError(null);
+    } else {
+      setTimelineError(timelineResult.reason);
+    }
+    setTimelineLoading(false);
+
+    if (budgetResult.status === "fulfilled") {
+      setBudget(budgetResult.value.value);
+      setBudgetError(budgetResult.value.error);
+    } else {
+      setBudget(null);
+      setBudgetError(budgetResult.reason);
+    }
+    setBudgetLoading(false);
   }, [client, taskId]);
 
   useEffect(() => {
@@ -137,13 +183,29 @@ export function TaskDetailPage({
   }, [task?.project_id]);
 
   useEffect(() => {
+    let active = true;
+    let liveRefreshTimer: number | null = null;
+    primaryTaskLoaded.current = false;
+
+    const scheduleLiveRefresh = () => {
+      if (!active || liveRefreshTimer !== null) return;
+      liveRefreshTimer = window.setTimeout(() => {
+        liveRefreshTimer = null;
+        if (active) void load();
+      }, 250);
+    };
+
     void load();
     const stream = new TaskEventStream({
       baseUrl: client.baseUrl,
       taskId,
       onEvent: () => {
         setLiveError(null);
-        void load();
+        // The initial canonical Task read owns first paint. A stream without a cursor can
+        // replay the durable history immediately, so ignore refresh triggers until that
+        // first owner read has completed; the subsequent Timeline read covers the replayed
+        // history. After first paint, coalesce live events into bounded refreshes.
+        if (primaryTaskLoaded.current) scheduleLiveRefresh();
       },
       onError: (streamError) => setLiveError(describeLiveStreamError(streamError)),
       onState: (state) => {
@@ -153,6 +215,9 @@ export function TaskDetailPage({
     });
     stream.open();
     return () => {
+      active = false;
+      if (liveRefreshTimer !== null) window.clearTimeout(liveRefreshTimer);
+      primaryTaskLoaded.current = false;
       loadGeneration.current += 1;
       stream.close();
     };
@@ -335,11 +400,18 @@ export function TaskDetailPage({
           <LoadingState />
         )}
       </Card>
-      <Card title="Runs"><RunTable runs={runs} /></Card>
+      <Card title="Runs">
+        {runsLoading ? <LoadingState label="Loading Task runs…" /> : null}
+        {!runsLoading && runsError ? <ErrorState error={runsError} onRetry={() => void load()} /> : null}
+        {!runsLoading && !runsError ? <RunTable runs={runs} /> : null}
+      </Card>
       <Card title="Timeline">
-        {events.length === 0 ? (
+        {timelineLoading ? <LoadingState label="Loading Task timeline…" /> : null}
+        {!timelineLoading && timelineError ? <ErrorState error={timelineError} onRetry={() => void load()} /> : null}
+        {!timelineLoading && !timelineError && events.length === 0 ? (
           <EmptyState title="No events yet" />
-        ) : (
+        ) : null}
+        {!timelineLoading && !timelineError && events.length > 0 ? (
           <ol className="timeline">
             {events.map((event) => (
               <li key={event.id}>
@@ -351,7 +423,7 @@ export function TaskDetailPage({
               </li>
             ))}
           </ol>
-        )}
+        ) : null}
       </Card>
     </div>
   );
