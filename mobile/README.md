@@ -35,16 +35,21 @@ canonical browser frontend.
 
 ## Authentication and secrets
 
-Mobile uses an already-issued bearer credential. Activation validates the credential through
-`GET /api/v1/auth/me` before it is persisted.
+Mobile pairing uses a short-lived, single-use server challenge created from an authenticated
+Web/CLI session. The QR/deep-link or fallback code contains pairing material only; it is never a
+durable bearer credential. The mobile app displays and validates the target Control Plane origin
+before consuming the challenge.
 
-The raw credential and server URL are stored through `expo-secure-store`; the credential is
-not written to ordinary application storage. Remote servers require HTTPS. Loopback HTTP is
-accepted only for explicit local development.
+Successful consumption returns a dedicated scoped mobile credential exactly once. The app
+immediately validates it through `GET /api/v1/auth/me` and only then persists the credential and
+server URL through `expo-secure-store`. The credential is never written to ordinary application
+storage. Remote servers require HTTPS; loopback HTTP remains available only for explicit local
+development.
 
-This first slice does not create/recover/reveal credentials and does not emulate the browser
-HttpOnly-cookie/CSRF session model. Credential issuance and revocation remain canonical server
-operations exposed through existing trusted Web/CLI/operator flows.
+Paired devices and their non-secret created/last-used/revoked state remain server-owned. Web
+Settings can list and revoke one or all devices. Revocation invalidates the bearer credential on
+the next canonical request; the mobile client clears its local secure-store entry when canonical
+authentication reports 401.
 
 ## Offline semantics
 
@@ -73,11 +78,16 @@ authoritative Notification state.
 
 ## Deep links
 
-The app registers `aiagentplatform://`. Only allowlisted canonical resource kinds and opaque,
-bounded canonical IDs are accepted. Query-string commands, arbitrary URLs, provider/private
-identifiers and path traversal are rejected.
+The app registers `aiagentplatform://`. Ordinary deep links accept only allowlisted canonical
+resource kinds and opaque, bounded canonical IDs. Query-string commands, arbitrary URLs,
+provider/private identifiers and path traversal are rejected.
 
-A deep link selects the relevant read surface; it never executes an approval, verification or
+The one special `aiagentplatform://pair` link is a versioned authentication bootstrap envelope.
+It carries only the validated HTTPS Control Plane origin, opaque pairing request ID and
+short-lived one-time code. Opening it never pairs automatically: the app shows the server identity
+and requires explicit confirmation before the public pairing endpoint is called.
+
+Resource deep links select read surfaces only; they never execute an approval, verification or
 Task mutation.
 
 ## Initial workflows
