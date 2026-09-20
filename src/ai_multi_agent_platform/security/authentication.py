@@ -16,6 +16,7 @@ from .authentication_accounts import AuthenticationAccountService
 from .authentication_audit import emit_authentication_audit
 from .authentication_credentials import AuthenticationCredentialService
 from .authentication_external import AuthenticationExternalIdentityService
+from .authentication_mobile import MobilePairingError, MobilePairingService
 from .authentication_models import (
     AuthenticatedActor,
     AuthenticationAuditRecord,
@@ -31,6 +32,9 @@ from .authentication_models import (
     IssuedCredential,
     LocalUserAccount,
     LoginResult,
+    MobilePairingChallenge,
+    MobilePairingGrant,
+    PairedMobileDevice,
     ReplayProtector,
     SessionGrant,
     StoredCredential,
@@ -106,6 +110,7 @@ class LocalAuthenticationService:
             require_account_active=self._require_account_active,
             audit=self._audit,
         )
+        self.mobile_pairing = MobilePairingService(self)
 
     def bootstrap_first_admin(
         self,
@@ -574,6 +579,11 @@ __all__ = [
     "LocalAuthenticationService",
     "LocalUserAccount",
     "LoginResult",
+    "MobilePairingChallenge",
+    "MobilePairingError",
+    "MobilePairingGrant",
+    "MobilePairingService",
+    "PairedMobileDevice",
     "ReplayProtector",
     "ScryptPasswordHasher",
     "SessionGrant",
