@@ -25,6 +25,11 @@ from ai_multi_agent_platform.security.authentication import (
 
 from .http import HTTPRequest, HTTPResponse, _request_context
 from .models import API_VERSION, APIError, APIException, api_exception_from_contract
+from .mobile_pairing_http import (
+    mobile_device_grant_body,
+    mobile_pairing_openapi_paths,
+    parse_mobile_pairing_consume,
+)
 from .search_contract import ControlPlaneHTTP as _ControlPlaneHTTP
 
 
@@ -213,50 +218,20 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             return response
 
         if request.method == "POST" and relative == "/auth/mobile-pairings:consume":
-            _require_only_fields(
-                request.body,
-                {
-                    "pairing_code",
-                    "pairing_id",
-                    "server_origin",
-                    "device_name",
-                    "device_platform",
-                    "protocol_version",
-                },
-            )
-            pairing_code = _required_string(request.body, "pairing_code")
-            server_origin = _required_string(request.body, "server_origin")
-            device_name = _required_string(request.body, "device_name")
-            device_platform = _required_string(request.body, "device_platform")
-            pairing_id = _optional_string(request.body.get("pairing_id"))
-            protocol_version = _protocol_version(request.body.get("protocol_version"))
+            pairing = parse_mobile_pairing_consume(request.body)
             grant = self._authentication.consume_mobile_pairing(
-                pairing_code,
-                server_origin=server_origin,
-                device_name=device_name,
-                device_platform=device_platform,
-                pairing_id=pairing_id,
-                protocol_version=protocol_version,
+                pairing.pairing_code,
+                server_origin=pairing.server_origin,
+                device_name=pairing.device_name,
+                device_platform=pairing.device_platform,
+                pairing_id=pairing.pairing_id,
+                protocol_version=pairing.protocol_version,
                 correlation_id=correlation_id,
             )
+            credential = self._authentication.store.credentials.get(grant.device.credential_id)
             return self._response(
                 201,
-                {
-                    "device": safe_mobile_device(
-                        grant.device,
-                        self._authentication.store.credentials.get(grant.device.credential_id),
-                    ),
-                    "credential": {
-                        "id": grant.credential.credential_id,
-                        "secret": grant.credential.secret,
-                        "expires_at": (
-                            grant.credential.expires_at.isoformat()
-                            if grant.credential.expires_at
-                            else None
-                        ),
-                        "secret_display": "one_time",
-                    },
-                },
+                mobile_device_grant_body(grant, credential),
                 request_id,
                 correlation_id,
             )
@@ -801,32 +776,6 @@ def _required_string(payload: dict[str, JsonValue], name: str) -> str:
     return value
 
 
-def _optional_string(value: JsonValue | None) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError("optional string value must be non-empty when provided")
-    return value.strip()
-
-
-def _protocol_version(value: JsonValue | None) -> int:
-    if value is None:
-        return 1
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise APIException(
-            status=400,
-            code="invalid_request",
-            message="protocol_version must be an integer",
-        )
-    if value != 1:
-        raise APIException(
-            status=400,
-            code="invalid_request",
-            message="unsupported mobile pairing protocol version",
-        )
-    return value
-
-
 def _optional_datetime(value: JsonValue | None) -> datetime | None:
     if value is None:
         return None
@@ -979,97 +928,14 @@ def _augment_authentication_openapi(
                 ),
             )
         },
-        f"/api/{API_VERSION}/auth/mobile-pairings": {
-            "post": _auth_operation(
-                "createMobilePairing",
-                "Create a short-lived single-use mobile pairing challenge.",
-                request_fields=("server_origin",),
-                status="201",
-                parameters=(csrf_parameter,),
-            )
-        },
-        f"/api/{API_VERSION}/auth/mobile-pairings:consume": {
-            "post": {
-                **_auth_operation(
-                    "consumeMobilePairing",
-                    "Consume a short-lived mobile pairing challenge and issue one device credential.",
-                    public=True,
-                    status="201",
-                ),
-                "requestBody": {
-                    "required": True,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "pairing_code": {"type": "string"},
-                                    "pairing_id": {"type": "string"},
-                                    "server_origin": {"type": "string", "format": "uri"},
-                                    "device_name": {"type": "string"},
-                                    "device_platform": {
-                                        "type": "string",
-                                        "enum": ["android", "ios"],
-                                    },
-                                    "protocol_version": {"type": "integer", "enum": [1]},
-                                },
-                                "required": [
-                                    "pairing_code",
-                                    "server_origin",
-                                    "device_name",
-                                    "device_platform",
-                                ],
-                                "additionalProperties": False,
-                            }
-                        }
-                    },
-                },
-            }
-        },
-        f"/api/{API_VERSION}/auth/mobile-pairings/{{pairing_id}}:cancel": {
-            "post": _auth_operation(
-                "cancelMobilePairing",
-                "Cancel an unused pairing challenge owned by the current user.",
-                parameters=(
-                    {
-                        "name": "pairing_id",
-                        "in": "path",
-                        "required": True,
-                        "schema": {"type": "string"},
-                    },
-                    csrf_parameter,
-                ),
-            )
-        },
-        f"/api/{API_VERSION}/auth/mobile-devices": {
-            "get": _auth_operation(
-                "listMobileDevices",
-                "List safe paired-device metadata for the current user.",
-            )
-        },
-        f"/api/{API_VERSION}/auth/mobile-devices/{{device_id}}:revoke": {
-            "post": _auth_operation(
-                "revokeMobileDevice",
-                "Revoke one paired mobile device credential.",
-                parameters=(
-                    {
-                        "name": "device_id",
-                        "in": "path",
-                        "required": True,
-                        "schema": {"type": "string"},
-                    },
-                    csrf_parameter,
-                ),
-            )
-        },
-        f"/api/{API_VERSION}/auth/mobile-devices:revoke-all": {
-            "post": _auth_operation(
-                "revokeAllMobileDevices",
-                "Revoke all paired mobile device credentials for the current user.",
-                parameters=(csrf_parameter,),
-            )
-        },
     }
+    auth_paths.update(
+        mobile_pairing_openapi_paths(
+            api_version=API_VERSION,
+            csrf_parameter=csrf_parameter,
+            operation_factory=_auth_operation,
+        )
+    )
     paths.update(auth_paths)
     document["paths"] = paths
     return document
