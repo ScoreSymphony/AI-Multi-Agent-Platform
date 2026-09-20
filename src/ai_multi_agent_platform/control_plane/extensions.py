@@ -633,7 +633,16 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                         segments[1],
                     )
                     return self._response(200, item, request_id, correlation_id)
-                raise APIException(status=404, code="not_found", message="route not found")
+                normalized_path = request.path.rstrip("/") or "/"
+                registered_routes = getattr(
+                    self._extended_control_plane,
+                    "registered_routes",
+                    (),
+                )
+                if not any(
+                    route_path == normalized_path for _, route_path in registered_routes
+                ):
+                    raise APIException(status=404, code="not_found", message="route not found")
 
             if (
                 segments
