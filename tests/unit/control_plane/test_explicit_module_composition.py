@@ -281,9 +281,7 @@ def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
         assert "/api/v1/module-status" in paths
         assert set(paths["/api/v1/module-status"]) == {"get"}
 
-        wrong_method = await http.handle(
-            HTTPRequest(method="POST", path="/api/v1/module-status")
-        )
+        wrong_method = await http.handle(HTTPRequest(method="POST", path="/api/v1/module-status"))
         assert wrong_method.status == 405
         assert isinstance(wrong_method.body, dict)
         assert wrong_method.body["code"] == "method_not_allowed"
