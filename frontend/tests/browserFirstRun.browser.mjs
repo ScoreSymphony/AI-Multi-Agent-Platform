@@ -961,7 +961,13 @@ try {
   await readinessMetric.waitFor();
   const readinessText = (await readinessMetric.innerText()).toLowerCase();
   if (!readinessText.includes("ready") || readinessText.includes("degraded")) {
-    throw new Error(`Platform overview did not report normal ready status: ${readinessText}`);
+    throw new Error(`Platform overview did not report ready status: ${readinessText}`);
+  }
+  const publicHealth = await readPublicApiResource(page, "/health");
+  if (publicHealth.ready !== true || publicHealth.readiness_state !== "ready") {
+    throw new Error(
+      `Public Control Plane health was not normally ready: ${JSON.stringify(publicHealth)}`,
+    );
   }
 } catch (error) {
   await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
