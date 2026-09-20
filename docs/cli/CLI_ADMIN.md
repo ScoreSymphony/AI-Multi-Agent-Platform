@@ -1,4 +1,4 @@
-# Progressive administrative CLI
+# Administrative CLI
 
 This document supplements [`CLI.md`](CLI.md) with selected administrative workflows exposed by the composed `platform` command.
 
