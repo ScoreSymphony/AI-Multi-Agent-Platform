@@ -21,6 +21,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -89,7 +90,7 @@ class MCPStatelessHTTPClient(MCPClient):
         *,
         protocol_revision: str = MCP_STATELESS_PROTOCOL_REVISION,
         client_name: str = "ai-multi-agent-platform",
-        client_version: str = "0.0.1",
+        client_version: str = __version__,
     ) -> None:
         if config.endpoint is None:
             raise ValueError("stateless MCP client requires an HTTP endpoint")
