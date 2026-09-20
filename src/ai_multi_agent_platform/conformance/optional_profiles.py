@@ -35,7 +35,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
     "B": _external("B"),
     "E": _pytest(
         "tests/integration/distributed/test_distributed_runtime.py::"
-        "test_two_node_selection_filters_resources_capabilities_and_model",
+        "test_registry_facts_feed_scheduler_candidate_selection",
         "tests/integration/security/test_security_result_recovery.py::"
         "test_dispatch_authorization_denial_releases_reservation_before_worker_execution",
         "tests/integration/artifacts/test_worker_artifact_integration.py::"
@@ -59,7 +59,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "tests/unit/notifications/test_notification_service.py::"
         "test_approval_required_projection_uses_exact_approval_reference_without_payload",
         "tests/regression/notifications/test_followup_integrations.py::"
-        "test_verification_required_and_changes_requested_use_opaque_issue86_attention_contract",
+        "test_verification_attention_uses_opaque_contract",
         "tests/unit/notifications/test_event_projection.py::"
         "test_event_provider_projects_task_event_and_replay_aggregates_safely",
     ),

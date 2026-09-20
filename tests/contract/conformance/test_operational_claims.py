@@ -37,7 +37,7 @@ def test_notification_claim_binds_task_approval_verification_scope_and_dedupe_ev
         "test_duplicate_task_event_aggregates_without_notification_storm",
         "test_authorization_gate_required_and_resolved_events_project_into_notifications",
         "test_approval_required_projection_uses_exact_approval_reference_without_payload",
-        "test_verification_required_and_changes_requested_use_opaque_issue86_attention_contract",
+        "test_verification_attention_uses_opaque_contract",
         "test_event_provider_projects_task_event_and_replay_aggregates_safely",
     ):
         assert node in command
