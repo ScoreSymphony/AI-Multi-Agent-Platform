@@ -82,6 +82,13 @@ class _ScopedAuthenticationService(Protocol):
 
     def list_mobile_devices(self, user_id: str) -> tuple[StoredCredential, ...]: ...
 
+    def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> int: ...
+
     def rename_mobile_device(
         self,
         user_id: str,
@@ -210,6 +217,28 @@ class AsyncAuthenticationService(Protocol):
     ) -> None: ...
 
     async def list_mobile_devices(self, user_id: str) -> tuple[StoredCredential, ...]: ...
+
+    async def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> int: ...
+
+    async def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> int:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        return await self._run(
+            lambda: scoped.revoke_all_mobile_devices(
+                user_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to revoke all mobile device credentials",
+        )
 
     async def rename_mobile_device(
         self,
