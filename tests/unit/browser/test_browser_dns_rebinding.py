@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import socket
 import ssl
 import threading
@@ -9,7 +10,6 @@ from unittest.mock import Mock
 
 import pytest
 
-import ai_multi_agent_platform.browser.reference_http as browser_http
 from ai_multi_agent_platform.browser.models import (
     BrowserNetworkPolicy,
     BrowserOperation,
@@ -19,6 +19,7 @@ from ai_multi_agent_platform.browser.policy import (
     DefaultBrowserNetworkPolicyHook,
     resolve_browser_target,
 )
+from ai_multi_agent_platform.browser.reference_http import ReferenceBrowserTransport
 from ai_multi_agent_platform.browser.reference_page import SessionState
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext, OperationControl
@@ -70,7 +71,7 @@ def test_http_rebinding_is_blocked_before_socket_connect(monkeypatch: pytest.Mon
         allow_private_networks=False,
     )
     context = _context()
-    transport = browser_http.ReferenceBrowserTransport(
+    transport = ReferenceBrowserTransport(
         network_policy=policy,
         network_hook=DefaultBrowserNetworkPolicyHook(policy),
         request_timeout_seconds=1.0,
@@ -166,7 +167,7 @@ def test_redirect_hop_rebinding_is_blocked_before_second_request(
             allow_private_networks=False,
         )
         context = _context()
-        transport = browser_http.ReferenceBrowserTransport(
+        transport = ReferenceBrowserTransport(
             network_policy=policy,
             network_hook=DefaultBrowserNetworkPolicyHook(policy),
             request_timeout_seconds=1.0,
@@ -218,7 +219,10 @@ def test_https_connection_pins_ip_and_preserves_hostname_for_sni(
         fake_create_connection,
     )
 
-    connection = browser_http._PinnedHTTPSConnection(
+    reference_http: Any = importlib.import_module(
+        "ai_multi_agent_platform.browser.reference_http"
+    )
+    connection = reference_http._PinnedHTTPSConnection(
         "secure.example",
         443,
         context=tls_context,
@@ -229,7 +233,7 @@ def test_https_connection_pins_ip_and_preserves_hostname_for_sni(
     assert destinations == [(PUBLIC_V4, 443)]
     tls_context.wrap_socket.assert_called_once_with(raw_socket, server_hostname="secure.example")
 
-    handler = browser_http._PinnedHTTPSHandler(lambda _url: (PUBLIC_V4,))
+    handler = reference_http._PinnedHTTPSHandler(lambda _url: (PUBLIC_V4,))
     assert handler._context.check_hostname is True
     assert handler._context.verify_mode == ssl.CERT_REQUIRED
 
