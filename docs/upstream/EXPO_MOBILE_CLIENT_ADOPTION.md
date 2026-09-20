@@ -16,7 +16,7 @@ Review date: 2026-09-19
 
 Expo/React Native supplies one Android/iOS application runtime while preserving native platform
 APIs. `expo-secure-store` supplies encrypted small-value storage backed by Android Keystore and
-iOS Keychain, which fits the mobile bearer-credential requirement.
+iOS Keychain, which fits the paired mobile bearer-credential requirement.
 
 No Expo type becomes a canonical platform API/domain type.
 
@@ -32,7 +32,7 @@ The mobile app is not required for single-node or distributed server operation.
 
 The Control Plane remains the contract. Expo/React Native can be replaced by native Swift/Kotlin,
 Flutter or another client implementation without Task/Run data migration. The only device-local
-state requiring migration is the optional stored bearer credential and non-authoritative read
+state requiring migration is the optional paired bearer credential and non-authoritative read
 cache.
 
 ## License and provenance
@@ -48,11 +48,13 @@ cache.
 - Review Expo/React Native security and release notes during explicit dependency updates.
 - Run typecheck, unit tests, Expo config validation and Android/iOS export smoke checks.
 - Remote Control Plane endpoints require TLS.
-- Bearer credentials live only behind the `SecretStorage` boundary backed by
-  `expo-secure-store`.
+- Device bearer credentials are obtained through short-lived single-use canonical pairing and
+  live only behind the `SecretStorage` boundary backed by `expo-secure-store`.
 - A revoked/expired credential receives canonical 401 handling and is removed from device
   storage.
-- Deep links cannot carry executable commands.
+- Canonical resource deep links cannot carry executable commands. The dedicated versioned
+  pairing deep link carries only one-time origin/request/proof material and requires explicit
+  server review before credential activation.
 
 ## Resource/deployment footprint
 
