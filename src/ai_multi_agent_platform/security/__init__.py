@@ -45,6 +45,7 @@ from .authentication_hardening import (
     CredentialRotation,
     CredentialScope,
     InMemoryRequestRateLimiter,
+    IssuedMobilePairingChallenge,
     LocalAuthenticationService,
     safe_credential_with_scope,
 )
@@ -210,6 +211,7 @@ __all__ = [
     "InMemoryReplayProtector",
     "InMemoryRequestRateLimiter",
     "IssuedCredential",
+    "IssuedMobilePairingChallenge",
     "JsonAuthorizationPolicyProfileRepository",
     "JsonEgressProfileRepository",
     "LocalAuthenticationService",
