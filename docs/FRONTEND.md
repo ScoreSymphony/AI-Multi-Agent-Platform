@@ -216,3 +216,13 @@ An owning issue may still contain backend/distributed follow-up work while a sta
 #1234 re-audited this progressive model against current `main`. #87 is closed and the maintained Organizations surface consumes its canonical Control Plane resources. #79 already exposes the complete browser-safe portability workflow, so Import/Export is now activated over those exact resources and commands instead of remaining an obsolete reserved route. The same audit corrected Files & Artifacts to consume the already-available canonical `files` metadata projection from #13. #1221 is now closed and integrated as well: the unified Marketplace consumes the server-advertised semantic kind registry for Agents, Agent Teams, Orchestrators, Executors, Model Providers and selected provider kinds alongside the existing #1174 families. Marketplace item inspection is addressable through source-qualified `/marketplace/items/:resourceId` deep links and reloads canonical `registry-items` state; runtime configuration/activation remains on the owner surface advertised by each kind.
 
 Owning backend implementation remains insufficient by itself: a browser surface is activated only after the versioned canonical API exists on current `main`, and optional resources remain manifest-gated with no private fallback. Final #1234 closure still consumes #1164's maintained browser first-run evidence; #1221 is already integrated and no longer blocks Marketplace Web closure. Neither dependency justifies inventing competing frontend lifecycle state.
+
+
+### Mobile pairing controls
+
+Settings exposes the #1320 device-pairing management projection through the canonical
+Authentication boundary. The browser session creates a short-lived pairing challenge, presents
+the versioned `aiagentplatform://pair` payload plus fallback code, can cancel an unused challenge,
+and lists/revokes paired devices. The durable device credential is never returned to or stored by
+the browser. Pair/revoke mutations inherit the same HttpOnly-cookie and CSRF boundary as other
+Settings mutations.
