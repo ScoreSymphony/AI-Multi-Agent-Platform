@@ -134,6 +134,45 @@ describe("BrowserSessionClient", () => {
     });
   });
 
+  it("uses the browser CSRF boundary for mobile pairing and revocation management", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("ai-agent-platform.csrf-token", "csrf_pairing");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init: init ?? {} });
+      if (String(input).endsWith("/auth/mobile-pairings")) {
+        return jsonResponse({
+          id: "mobile_pairing_1",
+          pairing_code: "ABCDEFGH-JKLMNPQRSTUVWX234567",
+          server_origin: "https://platform.example",
+          protocol_version: 1,
+          created_at: "2026-09-20T20:00:00Z",
+          expires_at: "2026-09-20T20:05:00Z",
+          qr_payload: "aiagentplatform://pair?...",
+          secret_display: "one_time",
+        }, 201);
+      }
+      if (String(input).endsWith("/auth/mobile-devices")) {
+        return jsonResponse({ items: [] });
+      }
+      return jsonResponse({ id: "mobile_device_1", revoked: true });
+    });
+    const session = new BrowserSessionClient({
+      baseUrl: "https://platform.example/api/v1".replace("/api/v1", ""),
+      fetchImpl,
+      storage,
+    });
+
+    await session.createMobilePairing("https://platform.example");
+    await session.listMobileDevices();
+    await session.revokeMobileDevice("mobile_device_1");
+
+    expect(calls[0]?.url).toContain("/api/v1/auth/mobile-pairings");
+    expect(new Headers(calls[0]?.init.headers).get("x-csrf-token")).toBe("csrf_pairing");
+    expect((calls[1]?.init.method ?? "GET").toUpperCase()).toBe("GET");
+    expect(new Headers(calls[2]?.init.headers).get("x-csrf-token")).toBe("csrf_pairing");
+  });
+
   it("clears the stored CSRF token after successful logout", async () => {
     const storage = new MemoryStorage();
     storage.setItem("ai-agent-platform.csrf-token", "csrf_stored");
