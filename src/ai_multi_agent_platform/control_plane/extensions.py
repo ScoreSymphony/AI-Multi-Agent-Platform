@@ -649,14 +649,13 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     return self._response(200, item, request_id, correlation_id)
                 raise APIException(status=404, code="not_found", message="route not found")
 
-            if segments and segments[0] == "commands" and len(segments) == 2:
+            if (
+                segments
+                and segments[0] == "commands"
+                and len(segments) == 2
+                and registered_commands
+            ):
                 if request.method != "POST":
-                    if segments[1] not in registered_commands:
-                        raise APIException(
-                            status=404,
-                            code="not_found",
-                            message="route not found",
-                        )
                     raise APIException(
                         status=405,
                         code="method_not_allowed",
