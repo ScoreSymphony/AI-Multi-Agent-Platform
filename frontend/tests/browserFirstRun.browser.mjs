@@ -1201,10 +1201,10 @@ try {
   );
   await assertNoDocumentHorizontalOverflow(page, "Narrow Observability");
 
-  // A canonical draft Task gives the sanity pass a real destructive action without altering the
-  // retained first-run result. Reach Cancel through sequential Tab presses, invoke the native
-  // confirmation with Enter, dismiss it with the keyboard-capable browser dialog path and prove
-  // that no mutation occurred.
+  // A canonical draft Task gives the sanity pass a real primary action plus a destructive action
+  // without altering the retained first-run result. Reach Queue and then Cancel through sequential
+  // Tab presses, invoke the native confirmation with Enter, dismiss it with the keyboard-capable
+  // browser dialog path and prove that no mutation occurred.
   const keyboardSanityTask = await publicApiCommand(page, "/tasks", {
     title: "Keyboard destructive confirmation sanity",
     objective: "Retain #1297 keyboard and narrow-viewport acceptance evidence.",
@@ -1224,10 +1224,13 @@ try {
   await page.goto(`${frontendUrl}/tasks/${encodeURIComponent(keyboardSanityTask.id)}`);
   await page.getByRole("heading", { name: "Keyboard destructive confirmation sanity", exact: true }).waitFor();
   await assertNoDocumentHorizontalOverflow(page, "Narrow Task detail");
-  const cancelTaskButton = page
-    .locator('[aria-label="Task lifecycle commands"]')
-    .getByRole("button", { name: "Cancel", exact: true });
-  await tabTo(page, cancelTaskButton, "Narrow Task Cancel action", { maxPresses: 80 });
+  const taskLifecycleCommands = page.locator('[aria-label="Task lifecycle commands"]');
+  const queueTaskButton = taskLifecycleCommands.getByRole("button", { name: "Queue", exact: true });
+  const cancelTaskButton = taskLifecycleCommands.getByRole("button", { name: "Cancel", exact: true });
+  await tabTo(page, queueTaskButton, "Narrow Task Queue action", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, queueTaskButton, "Narrow Task Queue action");
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(cancelTaskButton, "Narrow Task Cancel action");
   await assertHorizontallyReachable(page, cancelTaskButton, "Narrow Task Cancel action");
 
   const confirmationDialogPromise = new Promise((resolve, reject) => {
