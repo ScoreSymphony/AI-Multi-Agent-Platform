@@ -17,22 +17,29 @@ def _load_module():
     return module
 
 
-def test_supply_chain_evidence_binds_source_dependencies_and_artifacts(tmp_path: Path) -> None:
+def test_supply_chain_evidence_contains_python_and_frontend_dependencies(
+    tmp_path: Path,
+) -> None:
     module = _load_module()
     pyproject = tmp_path / "pyproject.toml"
-    wheel = tmp_path / "platform.whl"
     declared = tmp_path / "python-declared.txt"
     resolved = tmp_path / "python-resolved.txt"
     frontend = tmp_path / "package-lock.json"
     sbom = tmp_path / "sbom.spdx.json"
-    provenance = tmp_path / "release-provenance.json"
 
     pyproject.write_text(
-        '[project]\nname = "ai-multi-agent-platform"\nversion = "1.0.0"\n',
+        (
+            '[project]\n'
+            'name = "ai-multi-agent-platform"\n'
+            'version = "1.0.0"\n'
+            'license = { text = "MIT" }\n'
+        ),
         encoding="utf-8",
     )
-    wheel.write_bytes(b"wheel")
-    declared.write_text("jsonschema==4.26.0\n", encoding="utf-8")
+    declared.write_text(
+        "jsonschema==4.26.0\ntzdata==2026.4; platform_system == 'Windows'\n",
+        encoding="utf-8",
+    )
     resolved.write_text(
         "ai-multi-agent-platform @ file:///checkout\njsonschema==4.26.0\n",
         encoding="utf-8",
@@ -50,60 +57,46 @@ def test_supply_chain_evidence_binds_source_dependencies_and_artifacts(tmp_path:
         encoding="utf-8",
     )
 
-    module.generate_release_supply_chain_evidence(
+    module.generate_release_sbom(
         source_commit="a" * 40,
         created_at="2026-09-20T16:00:00Z",
         pyproject=pyproject,
-        platform_wheel=wheel,
         python_declared=declared,
         python_resolved=resolved,
         frontend_lock=frontend,
         sbom_output=sbom,
-        provenance_output=provenance,
     )
 
-    sbom_document = json.loads(sbom.read_text(encoding="utf-8"))
-    assert sbom_document["spdxVersion"] == "SPDX-2.3"
-    assert sbom_document["documentNamespace"].endswith("/" + "a" * 40)
-    packages = {(item["name"], item["versionInfo"]) for item in sbom_document["packages"]}
+    document = json.loads(sbom.read_text(encoding="utf-8"))
+    assert document["spdxVersion"] == "SPDX-2.3"
+    assert document["documentNamespace"].endswith("/" + "a" * 40)
+    packages = {(item["name"], item["versionInfo"]) for item in document["packages"]}
     assert ("ai-multi-agent-platform", "1.0.0") in packages
     assert ("jsonschema", "4.26.0") in packages
+    assert ("tzdata", "2026.4") in packages
     assert ("react", "19.1.0") in packages
     assert ("@scope/tool", "2.3.4") in packages
+    assert sum(name == "ai-multi-agent-platform" for name, _ in packages) == 1
 
-    provenance_document = json.loads(provenance.read_text(encoding="utf-8"))
-    assert provenance_document["_type"] == "https://in-toto.io/Statement/v1"
-    assert provenance_document["predicate"]["source"]["commit"] == "a" * 40
-    assert provenance_document["predicate"]["release"]["version"] == "1.0.0"
-    subjects = {item["name"]: item["digest"]["sha256"] for item in provenance_document["subject"]}
-    assert set(subjects) == {"platform.whl", "sbom.spdx.json"}
-    assert all(len(value) == 64 for value in subjects.values())
-    materials = {
-        item["uri"]: item["digest"]["sha256"]
-        for item in provenance_document["predicate"]["materials"]
-    }
-    assert set(materials) == {
-        "pyproject.toml",
-        "python-declared.txt",
-        "python-resolved.txt",
-        "frontend/package-lock.json",
-    }
+    root = next(item for item in document["packages"] if item["name"] == "ai-multi-agent-platform")
+    assert root["licenseDeclared"] == "MIT"
+    relationships = document["relationships"]
+    assert any(item["relationshipType"] == "DESCRIBES" for item in relationships)
+    assert sum(item["relationshipType"] == "DEPENDS_ON" for item in relationships) == 4
 
 
 def test_supply_chain_evidence_rejects_short_source_commit(tmp_path: Path) -> None:
     module = _load_module()
 
     try:
-        module.generate_release_supply_chain_evidence(
+        module.generate_release_sbom(
             source_commit="abc123",
             created_at="2026-09-20T16:00:00Z",
             pyproject=tmp_path / "pyproject.toml",
-            platform_wheel=tmp_path / "platform.whl",
             python_declared=tmp_path / "python-declared.txt",
             python_resolved=tmp_path / "python-resolved.txt",
             frontend_lock=tmp_path / "package-lock.json",
             sbom_output=tmp_path / "sbom.spdx.json",
-            provenance_output=tmp_path / "release-provenance.json",
         )
     except ValueError as exc:
         assert "full lowercase Git SHA" in str(exc)
