@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlsplit
@@ -41,14 +41,6 @@ _MOBILE_ACTION_SCOPE = {
     AuthorizationAction.APPROVE,
     AuthorizationAction.RESULT_READ,
 }
-
-
-class UserLookup(Callable[[str], LocalUserAccount]):
-    pass
-
-
-class AccountActiveCheck(Callable[[LocalUserAccount], None]):
-    pass
 
 
 class AuthenticationMobilePairingService:
