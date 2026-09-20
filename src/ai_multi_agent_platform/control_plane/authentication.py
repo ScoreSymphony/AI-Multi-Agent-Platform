@@ -213,6 +213,17 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             return response
 
         if request.method == "POST" and relative == "/auth/mobile-pairings:consume":
+            _require_only_fields(
+                request.body,
+                {
+                    "pairing_code",
+                    "pairing_id",
+                    "server_origin",
+                    "device_name",
+                    "device_platform",
+                    "protocol_version",
+                },
+            )
             pairing_code = _required_string(request.body, "pairing_code")
             server_origin = _required_string(request.body, "server_origin")
             device_name = _required_string(request.body, "device_name")
@@ -349,6 +360,7 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             return response
 
         if request.method == "POST" and relative == "/auth/mobile-pairings":
+            _require_only_fields(request.body, {"server_origin"})
             await self._authorize_credential_operation(
                 request,
                 actor,
@@ -771,6 +783,13 @@ def _cookies(header: str) -> dict[str, str]:
     return values
 
 
+def _require_only_fields(payload: dict[str, JsonValue], allowed: set[str]) -> None:
+    unexpected = set(payload).difference(allowed)
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ValueError(f"unexpected request field(s): {names}")
+
+
 def _required_string(payload: dict[str, JsonValue], name: str) -> str:
     value = payload.get(name)
     if not isinstance(value, str) or not value.strip():
@@ -830,7 +849,9 @@ def _augment_authentication_openapi(
             "bearerAuth": {
                 "type": "http",
                 "scheme": "bearer",
-                "description": "Opaque personal, service, worker, automation or integration token.",
+                "description": (
+                    "Opaque personal, service, worker, automation, integration or mobile token."
+                ),
             },
             "sessionCookie": {
                 "type": "apiKey",
