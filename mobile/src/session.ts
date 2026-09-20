@@ -63,21 +63,7 @@ export class MobileSessionStore {
     const candidate = token.trim();
     if (!candidate) throw new Error("Bearer credential is required");
 
-    const response = await fetchImpl(`${normalizedBaseUrl}/api/v1/auth/me`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${candidate}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`Credential validation failed with HTTP ${response.status}`);
-    }
-    const actor = (await response.json()) as AuthenticatedActor;
-    if (!actor.actor_id || !actor.actor_type) {
-      throw new Error("Credential validation returned an invalid actor projection");
-    }
-
+    const actor = await validateCredential(normalizedBaseUrl, candidate, fetchImpl);
     await this.storage.setItem(TOKEN_KEY, candidate);
     await this.storage.setItem(SERVER_KEY, normalizedBaseUrl);
     return actor;
@@ -116,7 +102,20 @@ export class MobileSessionStore {
     ) {
       throw new Error("Pairing returned an invalid device credential");
     }
-    return this.activate(normalizedBaseUrl, result.credential.secret, fetchImpl);
+
+    // The pairing proof is single-use. Persist the newly issued secret immediately so a
+    // transient network failure during /auth/me verification cannot strand the device with
+    // a consumed pairing challenge and no recoverable credential.
+    await this.storage.setItem(TOKEN_KEY, result.credential.secret);
+    await this.storage.setItem(SERVER_KEY, normalizedBaseUrl);
+    try {
+      return await validateCredential(normalizedBaseUrl, result.credential.secret, fetchImpl);
+    } catch (error) {
+      if (error instanceof CredentialValidationError && error.status === 401) {
+        await this.clear();
+      }
+      throw error;
+    }
   }
 
   async clear(): Promise<void> {
@@ -125,6 +124,35 @@ export class MobileSessionStore {
       this.storage.deleteItem(SERVER_KEY),
     ]);
   }
+}
+
+class CredentialValidationError extends Error {
+  constructor(readonly status: number) {
+    super(`Credential validation failed with HTTP ${status}`);
+    this.name = "CredentialValidationError";
+  }
+}
+
+async function validateCredential(
+  baseUrl: string,
+  token: string,
+  fetchImpl: typeof fetch,
+): Promise<AuthenticatedActor> {
+  const response = await fetchImpl(`${baseUrl}/api/v1/auth/me`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    throw new CredentialValidationError(response.status);
+  }
+  const actor = (await response.json()) as AuthenticatedActor;
+  if (!actor.actor_id || !actor.actor_type) {
+    throw new Error("Credential validation returned an invalid actor projection");
+  }
+  return actor;
 }
 
 export function normalizeServerUrl(value: string): string {
