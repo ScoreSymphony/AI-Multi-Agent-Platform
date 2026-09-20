@@ -1047,15 +1047,14 @@ try {
   await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
   const observabilityLink = page.getByRole("link", { name: "Observability", exact: true });
   await observabilityLink.waitFor();
-  await observabilityLink.click();
-  await page.waitForURL(`${frontendUrl}/observability`);
-  await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
 
   const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
   if (!firstRunRunId) {
     throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
   }
 
+  // Register before route navigation: Observability may auto-select the same recent Task and
+  // start the canonical timeline request during initial render, before the explicit filter submit.
   const timelineResponsePromise = page.waitForResponse(
     (response) =>
       response.url().includes(
@@ -1063,6 +1062,10 @@ try {
       )
       && response.request().method() === "GET",
   );
+  await observabilityLink.click();
+  await page.waitForURL(`${frontendUrl}/observability`);
+  await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
+
   await page.getByLabel("Exact Task ID", { exact: true }).fill(firstRunResult.task_id);
   await (await waitForButton(page, "Open telemetry")).click();
   const timelineResponse = await timelineResponsePromise;
