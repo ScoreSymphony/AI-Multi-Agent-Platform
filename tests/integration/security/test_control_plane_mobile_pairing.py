@@ -155,6 +155,45 @@ def test_public_pairing_exchange_and_server_side_device_revocation() -> None:
     assert rejected.status == 401
 
 
+def test_public_pairing_rejects_authority_and_unknown_fields() -> None:
+    auth = _auth()
+    admin = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    operator = auth.create_personal_access_token(admin.user_id, purpose="pairing-test", now=NOW)
+    http = AuthenticatedControlPlaneHTTP(_PairingControlPlane(), auth, secure_cookie=False)
+
+    created = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/mobile-pairings",
+                headers={"authorization": f"Bearer {operator.secret}"},
+                body={"server_origin": "https://platform.example"},
+            )
+        )
+    )
+
+    response = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/mobile-pairings:consume",
+                headers={},
+                body={
+                    "pairing_code": created.body["pairing_code"],
+                    "pairing_id": created.body["id"],
+                    "server_origin": "https://platform.example",
+                    "device_name": "Pixel",
+                    "device_platform": "android",
+                    "user_id": "user_attacker",
+                },
+            )
+        )
+    )
+    assert response.status == 400
+    assert response.body["code"] == "invalid_request"
+    assert auth.list_mobile_devices(admin.user_id) == ()
+
+
 def test_mobile_pairing_openapi_marks_only_exchange_public() -> None:
     auth = _auth()
     http = AuthenticatedControlPlaneHTTP(_PairingControlPlane(), auth, secure_cookie=False)
