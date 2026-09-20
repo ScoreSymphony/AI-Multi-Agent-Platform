@@ -29,7 +29,10 @@ from .authentication import (
     InMemoryFailureRateLimiter,
     InMemoryReplayProtector,
     IssuedCredential,
+    IssuedMobilePairing,
     LocalUserAccount,
+    MobileDevice,
+    MobileDeviceGrant,
     LoginResult,
     ReplayProtector,
     ScryptPasswordHasher,
@@ -38,6 +41,7 @@ from .authentication import (
     VerifiedExternalIdentity,
     safe_actor,
     safe_credential,
+    safe_mobile_device,
     safe_session,
 )
 from .authentication_hardening import (
@@ -210,6 +214,7 @@ __all__ = [
     "InMemoryReplayProtector",
     "InMemoryRequestRateLimiter",
     "IssuedCredential",
+    "IssuedMobilePairing",
     "JsonAuthorizationPolicyProfileRepository",
     "JsonEgressProfileRepository",
     "LocalAuthenticationService",
@@ -217,6 +222,8 @@ __all__ = [
     "LocalPrincipalPolicy",
     "LocalUserAccount",
     "LoginResult",
+    "MobileDevice",
+    "MobileDeviceGrant",
     "NullEgressAuditSink",
     "PathSecurityError",
     "ProposedAction",
@@ -254,6 +261,7 @@ __all__ = [
     "safe_actor",
     "safe_credential",
     "safe_credential_with_scope",
+    "safe_mobile_device",
     "safe_session",
     "validate_untrusted_json",
 ]
