@@ -332,6 +332,70 @@ def test_exact_route_does_not_shadow_registered_resource_method() -> None:
     asyncio.run(scenario())
 
 
+def test_nested_exact_route_under_registered_resource_retains_method_semantics() -> None:
+    async def refresh_widget(request: HTTPRequest) -> HTTPResponse:
+        del request
+        return HTTPResponse(status=202, body={"status": "accepted"})
+
+    def contribute(specification: dict[str, Any]) -> None:
+        paths = specification["paths"]
+        assert isinstance(paths, dict)
+        paths["/api/v1/widgets/widget-1/refresh"] = {
+            "post": {
+                "operationId": "refreshWidget",
+                "responses": {"202": {"description": "accepted"}},
+            }
+        }
+
+    module = ControlPlaneModule(
+        name="domain.widgets",
+        resource_services={
+            "widgets": InMemoryResourceService(
+                ({"id": "widget-1", "type": "widget", "name": "One"},)
+            )
+        },
+        routes=(
+            ControlPlaneRoute(
+                "POST",
+                "/api/v1/widgets/widget-1/refresh",
+                refresh_widget,
+            ),
+        ),
+        openapi_contributors=(contribute,),
+    )
+    http = ControlPlaneHTTP(_control_plane(module))
+
+    async def scenario() -> None:
+        accepted = await http.handle(
+            HTTPRequest(method="POST", path="/api/v1/widgets/widget-1/refresh")
+        )
+        assert accepted.status == 202
+
+        wrong_method = await http.handle(
+            HTTPRequest(method="GET", path="/api/v1/widgets/widget-1/refresh")
+        )
+        assert wrong_method.status == 405
+        assert isinstance(wrong_method.body, dict)
+        assert wrong_method.body["code"] == "method_not_allowed"
+        assert wrong_method.body["category"] == "transport"
+
+        unknown_sibling = await http.handle(
+            HTTPRequest(method="GET", path="/api/v1/widgets/widget-1/does-not-exist")
+        )
+        assert unknown_sibling.status == 404
+        assert isinstance(unknown_sibling.body, dict)
+        assert unknown_sibling.body["code"] == "not_found"
+
+        openapi = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
+        assert openapi.status == 200
+        assert isinstance(openapi.body, dict)
+        paths = openapi.body["paths"]
+        assert isinstance(paths, dict)
+        assert set(paths["/api/v1/widgets/widget-1/refresh"]) == {"post"}
+
+    asyncio.run(scenario())
+
+
 def test_openapi_contributors_run_in_deterministic_module_order() -> None:
     def contribute(name: str):
         def apply(specification: dict[str, Any]) -> None:
