@@ -300,6 +300,7 @@ class LocalAuthenticationService:
         expires_at: datetime | None = None,
         now: datetime | None = None,
         scope: Mapping[str, JsonValue] | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> IssuedCredential:
         return self._credentials.create_credential(
             owner_id,
@@ -309,6 +310,7 @@ class LocalAuthenticationService:
             expires_at=expires_at,
             now=now,
             scope=scope,
+            metadata=metadata,
         )
 
     def create_personal_access_token(
@@ -318,6 +320,7 @@ class LocalAuthenticationService:
         purpose: str,
         expires_at: datetime | None = None,
         now: datetime | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> IssuedCredential:
         return self.create_credential(
             user_id,
@@ -326,6 +329,7 @@ class LocalAuthenticationService:
             purpose=purpose,
             expires_at=expires_at,
             now=now,
+            metadata=metadata,
         )
 
     def create_service_credential(
