@@ -1,4 +1,4 @@
-# Reference systemd unit for the #39 single-server profile.
+# Reference systemd unit for the supported single-server profile.
 # systemd is a deployment implementation choice, not a canonical platform dependency.
 
 [Unit]
@@ -17,7 +17,7 @@ RestartSec=5
 TimeoutStopSec=30
 UMask=0077
 
-# Least-privilege baseline from docs/SECURE_DEPLOYMENT.md.
+# Least-privilege baseline from docs/security/SECURE_DEPLOYMENT.md.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

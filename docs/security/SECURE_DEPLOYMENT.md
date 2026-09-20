@@ -4,7 +4,7 @@ This checklist defines minimum deployment expectations. It is intentionally tech
 
 ## Identity and access
 
-- Enable the platform's canonical authentication/authorization controls when available; do not expose administrative or privileged APIs anonymously.
+- Keep the platform's canonical authentication and authorization controls enabled for northbound operation; do not expose administrative or privileged APIs anonymously.
 - Use separate user, service and worker identities rather than shared credentials.
 - Apply least privilege to filesystem, database, network and operating-system accounts.
 - Ensure revocation removes practical access to sessions, workers and credentials.
@@ -32,7 +32,7 @@ This checklist defines minimum deployment expectations. It is intentionally tech
 ## Secrets
 
 - Do not commit production credentials to the repository or deployment manifests.
-- Use scoped secret references/storage when #34 is available; until then, minimize environment-based secret distribution.
+- Use the platform's scoped `SecretReference`/`SecretProvider` boundary for credentials and minimize direct environment-based secret distribution to the deployment seams that explicitly require it.
 - Avoid injecting unrelated host/service credentials into Agent, model, tool or executor processes.
 - Redact logs, traces, diagnostics and exports before they leave the trust boundary.
 - Rotate credentials after suspected exposure and after worker/node compromise.
@@ -72,7 +72,7 @@ Single-node mode must follow the same authority model even when transport authen
 
 - Install dependencies and platform releases from intended sources.
 - Prefer pinned/reproducible versions and integrity verification where available.
-- Follow `LICENSE_POLICY.md`, `docs/UPSTREAMS.md` and `docs/UPSTREAM_UPDATE_WORKFLOW.md` for architecture-significant upstreams.
+- Follow [LICENSE_POLICY.md](../../LICENSE_POLICY.md), [UPSTREAMS.md](../UPSTREAMS.md) and [UPSTREAM_UPDATE_WORKFLOW.md](../UPSTREAM_UPDATE_WORKFLOW.md) for architecture-significant upstreams.
 - Review permission/config/schema changes before upgrading.
 - Keep a rollback path for platform and data migrations.
 - Do not auto-install unreviewed plugins, model tooling or upstream packages into privileged environments.
