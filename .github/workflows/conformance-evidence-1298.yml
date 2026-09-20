@@ -1,0 +1,85 @@
+name: "#1298 exact release-conformance evidence"
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/conformance-evidence-1298.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-candidate-extended-conformance:
+    name: exact-candidate-extended-conformance
+    runs-on: ubuntu-24.04
+    env:
+      CANDIDATE_SHA: 7c0d8f86f08ed8a58d7f2c94ebc4dae8254481cd
+    steps:
+      - name: Checkout exact release candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify exact checkout
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "candidate_sha=${CANDIDATE_SHA}"
+          echo "checkout_sha=${actual}"
+          test "${actual}" = "${CANDIDATE_SHA}"
+          printf '%s\n' "${actual}" > exact-candidate-sha.txt
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+
+      - name: Install conformance environment
+        run: python -m pip install -e '.[dev]'
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install --no-audit --no-fund
+
+      - name: Run exact extended reference release conformance
+        run: >-
+          platform-conformance
+          --profile release
+          --deployment-profile reference-single-node-extended
+          --enable-optional E,N,Q,R,S,T,V,X,Y
+          --json-report conformance-extended-reference.json
+
+      - name: Verify report is bound to exact candidate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path("conformance-extended-reference.json").read_text(encoding="utf-8"))
+          expected = os.environ["CANDIDATE_SHA"]
+          actual = report.get("platform_commit")
+          if actual != expected:
+              raise SystemExit(
+                  f"platform_commit mismatch: expected {expected}, got {actual!r}"
+              )
+          print(f"verified platform_commit={actual}")
+          PY
+
+      - name: Upload exact-candidate conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-1298-exact-extended-conformance-7c0d8f86f08e
+          path: |
+            conformance-extended-reference.json
+            exact-candidate-sha.txt
+          if-no-files-found: error
