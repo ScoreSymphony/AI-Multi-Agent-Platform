@@ -10,6 +10,9 @@ test_registered_command_receives_actor_correlation_and_idempotency_context = (
 test_registered_extension_resource_updates_manifest_openapi_and_routes = (
     cases.test_registered_extension_resource_updates_manifest_openapi_and_routes
 )
+test_registered_resource_routes_distinguish_unknown_uri_from_wrong_method = (
+    cases.test_registered_resource_routes_distinguish_unknown_uri_from_wrong_method
+)
 test_unregistered_future_domains_are_not_predeclared = (
     cases.test_unregistered_future_domains_are_not_predeclared
 )
