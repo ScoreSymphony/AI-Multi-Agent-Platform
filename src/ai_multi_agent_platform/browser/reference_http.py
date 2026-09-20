@@ -3,18 +3,33 @@
 from __future__ import annotations
 
 import asyncio
+import http.client
+import socket
+import ssl
+from collections.abc import Callable
 from dataclasses import dataclass
 from email.message import Message
+from functools import partial
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
-from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
+from urllib.request import (
+    HTTPCookieProcessor,
+    HTTPHandler,
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
 
 from .models import BrowserNetworkPolicy, BrowserOperation
-from .policy import BrowserNetworkPolicyHook
+from .policy import BrowserNetworkPolicyHook, resolve_browser_target
 from .reference_page import SessionState
+
+_DEFAULT_TIMEOUT: Any = socket._GLOBAL_DEFAULT_TIMEOUT  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +39,103 @@ class FetchedResource:
     content_type: str | None
     charset: str
     data: bytes
+
+
+def _connect_to_pinned_address(
+    pinned_addresses: tuple[str, ...],
+    destination: tuple[str, int],
+    timeout: Any = _DEFAULT_TIMEOUT,
+    source_address: tuple[str, int] | None = None,
+) -> socket.socket:
+    _host, port = destination
+    last_error: OSError | None = None
+    for pinned_address in pinned_addresses:
+        try:
+            return socket.create_connection(
+                (pinned_address, port),
+                timeout,
+                source_address,
+            )
+        except OSError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise OSError("pinned browser connection has no validated destination")
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(
+        self,
+        host: str,
+        port: int | None = None,
+        *,
+        timeout: Any = _DEFAULT_TIMEOUT,
+        source_address: tuple[str, int] | None = None,
+        blocksize: int = 8192,
+        pinned_addresses: tuple[str, ...],
+    ) -> None:
+        if not pinned_addresses:
+            raise ValueError("pinned browser connection requires at least one address")
+        super().__init__(
+            host,
+            port,
+            timeout=timeout,
+            source_address=source_address,
+            blocksize=blocksize,
+        )
+        self._create_connection = partial(_connect_to_pinned_address, pinned_addresses)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(
+        self,
+        host: str,
+        port: int | None = None,
+        *,
+        timeout: Any = _DEFAULT_TIMEOUT,
+        source_address: tuple[str, int] | None = None,
+        context: Any = None,
+        blocksize: int = 8192,
+        pinned_addresses: tuple[str, ...],
+    ) -> None:
+        if not pinned_addresses:
+            raise ValueError("pinned browser connection requires at least one address")
+        super().__init__(
+            host,
+            port,
+            timeout=timeout,
+            source_address=source_address,
+            context=context,
+            blocksize=blocksize,
+        )
+        self._create_connection = partial(_connect_to_pinned_address, pinned_addresses)
+
+
+class _PinnedHTTPHandler(HTTPHandler):
+    def __init__(self, resolver: Callable[[str], tuple[str, ...]]) -> None:
+        super().__init__()
+        self._resolver = resolver
+
+    def http_open(self, req: Request) -> Any:
+        connection = partial(
+            _PinnedHTTPConnection,
+            pinned_addresses=self._resolver(req.full_url),
+        )
+        return self.do_open(connection, req)
+
+
+class _PinnedHTTPSHandler(HTTPSHandler):
+    def __init__(self, resolver: Callable[[str], tuple[str, ...]]) -> None:
+        self._tls_context = ssl.create_default_context()
+        super().__init__(context=self._tls_context)
+        self._resolver = resolver
+
+    def https_open(self, req: Request) -> Any:
+        connection = partial(
+            _PinnedHTTPSConnection,
+            pinned_addresses=self._resolver(req.full_url),
+        )
+        return self.do_open(connection, req, context=self._tls_context)
 
 
 class _PolicyRedirectHandler(HTTPRedirectHandler):
@@ -103,8 +215,15 @@ class ReferenceBrowserTransport:
         timeout: float,
     ) -> FetchedResource:
         self._network_hook.check(url, operation, context)
+
+        def resolve_for_connection(request_url: str) -> tuple[str, ...]:
+            return resolve_browser_target(request_url, self._network_policy)
+
         opener = build_opener(
+            ProxyHandler({}),
             HTTPCookieProcessor(state.cookies),
+            _PinnedHTTPHandler(resolve_for_connection),
+            _PinnedHTTPSHandler(resolve_for_connection),
             _PolicyRedirectHandler(self._network_hook, operation, context),
         )
         request = Request(url=url, data=data, headers=headers, method=method)
@@ -124,7 +243,6 @@ class ReferenceBrowserTransport:
 
         try:
             final_url = str(response.geturl())
-            self._network_hook.check(final_url, operation, context)
             data_bytes = response.read(self._network_policy.max_response_bytes + 1)
             if len(data_bytes) > self._network_policy.max_response_bytes:
                 raise ContractError(
