@@ -135,7 +135,8 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                     scope_json TEXT NOT NULL,
                     expires_at TEXT,
                     revoked_at TEXT,
-                    last_used_at TEXT
+                    last_used_at TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}'
                 );
                 CREATE TABLE IF NOT EXISTS auth_external_mappings (
                     provider_id TEXT NOT NULL,
@@ -148,6 +149,15 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                 );
                 """
             )
+            credential_columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(auth_credentials)").fetchall()
+            }
+            if "metadata_json" not in credential_columns:
+                connection.execute(
+                    "ALTER TABLE auth_credentials "
+                    "ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'"
+                )
 
     def _load_users(self) -> dict[str, LocalUserAccount]:
         with self._connect() as connection:
@@ -193,13 +203,17 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT credential_id, owner_id, actor_type, kind, purpose, secret_verifier, "
-                "created_at, scope_json, expires_at, revoked_at, last_used_at FROM auth_credentials"
+                "created_at, scope_json, expires_at, revoked_at, last_used_at, metadata_json "
+                "FROM auth_credentials"
             ).fetchall()
         credentials: dict[str, StoredCredential] = {}
         for row in rows:
             scope = json.loads(str(row[7]))
             if not isinstance(scope, dict):
                 raise ValueError(f"credential scope is not an object: {row[0]}")
+            metadata = json.loads(str(row[11]))
+            if not isinstance(metadata, dict):
+                raise ValueError(f"credential metadata is not an object: {row[0]}")
             credentials[str(row[0])] = StoredCredential(
                 credential_id=str(row[0]),
                 owner_id=str(row[1]),
@@ -212,6 +226,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                 expires_at=_optional_datetime(row[8]),
                 revoked_at=_optional_datetime(row[9]),
                 last_used_at=_optional_datetime(row[10]),
+                metadata=_json_mapping(metadata),
             )
         return credentials
 
@@ -280,16 +295,22 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             separators=(",", ":"),
             ensure_ascii=False,
         )
+        metadata_json = json.dumps(
+            dict(credential.metadata),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO auth_credentials (credential_id, owner_id, actor_type, kind, purpose, "
-                "secret_verifier, created_at, scope_json, expires_at, revoked_at, last_used_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "secret_verifier, created_at, scope_json, expires_at, revoked_at, last_used_at, "
+                "metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(credential_id) DO UPDATE SET owner_id=excluded.owner_id, "
                 "actor_type=excluded.actor_type, kind=excluded.kind, purpose=excluded.purpose, "
                 "secret_verifier=excluded.secret_verifier, scope_json=excluded.scope_json, "
                 "expires_at=excluded.expires_at, revoked_at=excluded.revoked_at, "
-                "last_used_at=excluded.last_used_at",
+                "last_used_at=excluded.last_used_at, metadata_json=excluded.metadata_json",
                 (
                     credential.credential_id,
                     credential.owner_id,
@@ -302,6 +323,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                     _iso(credential.expires_at),
                     _iso(credential.revoked_at),
                     _iso(credential.last_used_at),
+                    metadata_json,
                 ),
             )
 
