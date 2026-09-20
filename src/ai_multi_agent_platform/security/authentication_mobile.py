@@ -41,6 +41,19 @@ _MOBILE_ACTION_SCOPE = {
     AuthorizationAction.EXECUTE,
     AuthorizationAction.APPROVE,
     AuthorizationAction.RESULT_READ,
+    AuthorizationAction.VERIFICATION_POLICY_LIST,
+    AuthorizationAction.VERIFICATION_POLICY_READ,
+    AuthorizationAction.VERIFICATION_LIST,
+    AuthorizationAction.VERIFICATION_READ,
+    AuthorizationAction.VERIFICATION_RESULT_LIST,
+    AuthorizationAction.VERIFICATION_RESULT_READ,
+    AuthorizationAction.VERIFICATION_REVIEW_LIST,
+    AuthorizationAction.VERIFICATION_REVIEW_READ,
+    AuthorizationAction.VERIFICATION_REQUIREMENT_LIST,
+    AuthorizationAction.VERIFICATION_REQUIREMENT_READ,
+    AuthorizationAction.VERIFICATION_ACCEPT,
+    AuthorizationAction.VERIFICATION_REJECT,
+    AuthorizationAction.VERIFICATION_REQUEST_CHANGES,
 }
 
 
