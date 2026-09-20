@@ -607,7 +607,6 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
             segments = [segment for segment in relative.split("/") if segment]
             if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
-                query = _page_query(request.query)
                 if len(segments) == 1:
                     if request.method != "GET":
                         raise APIException(
@@ -618,7 +617,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     page = await self._extended_control_plane.list_extension_resources(
                         context,
                         segments[0],
-                        query,
+                        _page_query(request.query),
                     )
                     return self._response(200, page, request_id, correlation_id)
                 if len(segments) == 2:
