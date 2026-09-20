@@ -44,6 +44,8 @@ platform version
 platform doctor
 ```
 
+`platform --help` is the authoritative root discovery surface for the complete supported product CLI. It is generated from the same composed command tree used by shell completion.
+
 The CLI client version is also available without contacting a Control Plane:
 
 ```bash
@@ -221,7 +223,9 @@ Both mutations call `/api/v1/commands/evaluation.*`; reads use `/api/v1/evaluati
 
 ## Shell completion
 
-The package also installs a dependency-free `platform-completion` helper. It introspects the same `argparse` command tree as `platform`; it does not read CLI profiles, contact the Control Plane, or resolve secrets.
+The package also installs a dependency-free `platform-completion` helper. Root help and completion use the same composed `argparse` product tree as the installed `platform` entry point. The composed tree reuses the parser-registration functions owned by each CLI layer rather than maintaining a second command registry, so wrapper-owned domains such as `auth`, `approval`, `repository`, `registry`, `learning`, and `trace` remain discoverable alongside the core commands. Nested help continues to resolve through the parser owned by the selected domain.
+
+The completion helper only introspects that parser tree; it does not read CLI profiles, contact the Control Plane, or resolve secrets.
 
 Enable completion for the current shell session with one of:
 

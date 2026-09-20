@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from .auth import add_auth_parsers
 from .client import (
     APIClientError,
     ClientOptions,
@@ -21,16 +22,32 @@ from .client import (
 )
 from .credentials import AuthenticatedTransport, CredentialStore
 from .learning import add_learning_parser, execute_learning
+from .main import _build_parser as build_core_parser
 from .marketplace import add_marketplace_parser, execute_marketplace
 from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_path
 from .registry import add_registry_parser, execute_registry
 from .render import Renderer
+from .repositories import add_repository_parser
 from .repositories import run_cli as repository_run_cli
 from .trace import add_trace_parser, execute_trace
 
 
 def main() -> int:
     return run_cli()
+
+
+def build_composed_parser() -> argparse.ArgumentParser:
+    """Build the complete command tree exposed by the installed platform entry point."""
+
+    return build_core_parser(
+        extra_parsers=(
+            add_auth_parsers,
+            add_repository_parser,
+            add_registry_parser,
+            add_learning_parser,
+            add_trace_parser,
+        )
+    )
 
 
 def run_cli(
@@ -43,6 +60,9 @@ def run_cli(
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
     requested_area = _requested_area(arguments)
+    if requested_area is None:
+        build_composed_parser().parse_args(arguments)
+        return 0
     if _is_learning_extension_execution(arguments):
         renderer = Renderer(
             json_mode="--json" in arguments,
