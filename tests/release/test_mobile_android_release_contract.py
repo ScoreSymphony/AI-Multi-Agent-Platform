@@ -49,6 +49,7 @@ def test_release_workflow_fails_closed_around_identity_and_integrity() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     for required in (
+        "npm ci --no-audit --no-fund",
         "npm run typecheck",
         "npm test",
         "npm run check:expo",
@@ -66,6 +67,8 @@ def test_release_workflow_fails_closed_around_identity_and_integrity() -> None:
         "AI-Multi-Agent-Mobile-v",
     ):
         assert required in workflow
+
+    assert "npm install --no-audit --no-fund --package-lock=false" not in workflow
 
 
 def test_release_configuration_evidence_is_valid_json_without_npm_banner() -> None:
