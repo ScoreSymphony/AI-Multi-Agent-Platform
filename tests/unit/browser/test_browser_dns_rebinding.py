@@ -259,6 +259,48 @@ def test_private_and_link_local_ipv4_ipv6_require_explicit_opt_in(
     ) == (expected,)
 
 
+def test_scoped_ipv6_literal_preserves_decoded_zone_for_pinned_connect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connect_calls: list[tuple[str, int]] = []
+
+    def fake_create_connection(address: tuple[str, int], *args: Any, **kwargs: Any) -> Any:
+        del args, kwargs
+        connect_calls.append(address)
+        raise OSError("stop after observing pinned destination")
+
+    monkeypatch.setattr(
+        "ai_multi_agent_platform.browser.reference_http.socket.create_connection",
+        fake_create_connection,
+    )
+
+    policy = BrowserNetworkPolicy(
+        allow_private_networks=True,
+    )
+    context = _context()
+    transport = ReferenceBrowserTransport(
+        network_policy=policy,
+        network_hook=DefaultBrowserNetworkPolicyHook(policy),
+        request_timeout_seconds=1.0,
+        provider_id="browser.test",
+    )
+
+    with pytest.raises(ContractError) as caught:
+        transport._fetch_sync(
+            _session(context),
+            "http://[fe80::1%25Eth0]:8080/",
+            BrowserOperation.NAVIGATE,
+            context,
+            "GET",
+            None,
+            {},
+            1.0,
+        )
+
+    assert caught.value.code is ErrorCode.UNAVAILABLE
+    assert connect_calls == [("fe80::1%Eth0", 8080)]
+
+
 def test_mixed_public_and_private_dns_answer_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
