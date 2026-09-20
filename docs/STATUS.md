@@ -18,10 +18,11 @@ Repository documentation/operations owns this status document. Update it at mean
 > against `main@bc8b0374cf41a51275809d57ceb25dcf53f92b13`.
 
 The repository is in final Operational V1 product-readiness, release-candidate hardening and
-publication preparation. Full platform conformance is complete, the supported reference baseline is
-the self-hosted single-node product path, and the first formal publication targets `1.0.0` only
-after the exact release candidate satisfies the repository release process and all release-blocking
-findings are resolved. No GitHub release or semantic-version tag has been published yet.
+publication preparation. The platform-conformance framework and prior acceptance baseline are
+complete, while publication still requires release conformance on the exact candidate. The supported
+reference baseline is the self-hosted single-node product path, and the first formal publication
+targets `1.0.0` only after the exact release candidate satisfies the repository release process and
+all release-blocking findings are resolved. No GitHub release or semantic-version tag has been published yet.
 
 The current product architecture remains provider-neutral: canonical Task/Plan/Step/Run state and
 Result/Artifact/Verification lineage are platform-owned; Web and CLI are Control Plane clients;
