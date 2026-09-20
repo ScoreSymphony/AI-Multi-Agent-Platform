@@ -338,6 +338,13 @@ export class BrowserSessionClient {
     );
   }
 
+  revokeAllMobileDevices(): Promise<{ revoked: boolean; revoked_count: number }> {
+    return this.request<{ revoked: boolean; revoked_count: number }>(
+      "/auth/mobile-devices:revoke-all",
+      { method: "POST" },
+    );
+  }
+
   renameMobileDevice(
     credentialId: string,
     deviceName: string,
