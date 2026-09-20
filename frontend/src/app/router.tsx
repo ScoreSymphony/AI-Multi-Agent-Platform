@@ -70,6 +70,13 @@ export function AppLink({
 }: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const { navigate } = useRouter();
   const safeHref = normalizeAppLinkHref(href);
+  const renderedHref = (
+    safeHref?.startsWith("/")
+    || safeHref?.startsWith("https://")
+    || safeHref?.startsWith("http://")
+  )
+    ? safeHref
+    : undefined;
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (
@@ -79,14 +86,14 @@ export function AppLink({
       || event.ctrlKey
       || event.shiftKey
       || event.altKey
-      || !safeHref
+      || !renderedHref
       || (target !== undefined && target !== "_self")
     ) {
       return;
     }
 
     const resolved = new URL(
-      safeHref,
+      renderedHref,
       typeof window === "undefined" ? "https://router.invalid/" : window.location.href,
     );
     if (
@@ -99,7 +106,7 @@ export function AppLink({
     event.preventDefault();
     navigate(`${resolved.pathname}${resolved.search}${resolved.hash}`);
   };
-  return <a href={safeHref} target={target} onClick={handleClick} {...rest}>{children}</a>;
+  return <a href={renderedHref} target={target} onClick={handleClick} {...rest}>{children}</a>;
 }
 
 export function normalizeAppLinkHref(href: string | undefined): string | undefined {
