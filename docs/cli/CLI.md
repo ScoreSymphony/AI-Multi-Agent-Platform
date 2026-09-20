@@ -1,7 +1,5 @@
 # Canonical CLI
 
-Issue: #38
-
 The `platform` command is a northbound client of the versioned Control Plane. It must never use kernel repositories, databases, Hermes, Forge, MCP servers, model-provider SDKs, workers, or other backend-private interfaces directly.
 
 ```text
@@ -14,9 +12,9 @@ platform CLI
 canonical application services
 ```
 
-## Foundation scope
+## Supported command surface
 
-This first #38 slice provides the CLI foundation that can be implemented solely on top of #32:
+The CLI foundation provides the shared API-first behavior used by the complete composed command tree:
 
 - installable `platform` entry point;
 - local and remote non-secret target profiles;
@@ -141,7 +139,7 @@ platform task create \
   --objective "Produce a canonical inspection result" \
   --owner-type user \
   --owner-id operator
-platform task list --filter status=created
+platform task list --filter status=draft
 platform task show task_...
 platform task queue task_...
 platform task start task_...
@@ -157,7 +155,7 @@ platform run cancel run_... --task-id task_...
 
 List commands support the Control Plane conventions `--limit`, `--cursor`, `--sort`, `--direction`, `--q`, repeatable `--filter FIELD=VALUE`, and `--fields`.
 
-## Evaluation and regression commands (#19)
+## Evaluation and regression commands
 
 Evaluation commands are a thin northbound adapter over the canonical Evaluation Control Plane resources and commands. The CLI never constructs an `EvaluationRunner`, reads the evaluation repository directly, aggregates repetition samples locally, or introduces a second evaluation lifecycle.
 
@@ -237,22 +235,22 @@ platform-completion fish | source
 
 The helper completes the current command hierarchy, command options, and finite option choices such as `--direction` and `--owner-type`. Dynamic resource IDs are intentionally not fetched during tab completion, so completion cannot cause network access or administrative side effects.
 
-## Initial doctor contract
+## Doctor contract
 
-`platform doctor` currently validates the foundation that exists today:
+`platform doctor` validates the current composed deployment through public Control Plane surfaces:
 
 - CLI configuration parsed successfully;
-- `/api/v1` is reachable;
-- API major is compatible (`v1`);
-- canonical health endpoint responds;
-- canonical readiness endpoint responds.
+- the `/api/v1` manifest is reachable and reports a compatible `v1` API;
+- canonical health and readiness respond with valid schemas;
+- provider health and provider dependency state are classified without exposing provider-private objects;
+- compute/Worker diagnostics are evaluated through their canonical northbound resources when the deployment advertises them.
 
-The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Provider/worker/auth/secret/permission checks are added only after the corresponding canonical platform domains exist.
+The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Required unavailable dependencies and non-ready canonical state block the check; optional degraded dependencies remain distinguishable from a platform-wide failure.
 
 ## Verification
 
 CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). Integration/contract tests exercise HTTP-style transports so the CLI remains on the real versioned Control Plane boundary rather than direct kernel or repository access.
 
-## Progressive #38 work still open
+## Progressive command registration
 
-This document does not close #38. Later work should continue extending the same client when owning canonical APIs require additional CLI surfaces. Evaluation is now integrated through #19 and must remain API-first.
+Additional domains extend the same composed parser only after their canonical Control Plane contracts are available. Root help and shell completion consume that composed parser, so a new supported CLI domain must not create a separate undiscoverable command tree. Domain-specific maturity and availability remain governed by the server manifest and the repository-wide feature-classification policy.
