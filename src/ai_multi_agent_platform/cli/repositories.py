@@ -125,9 +125,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     areas = parser.add_subparsers(dest="area", required=True)
+    add_repository_parser(areas)
+    return parser
+
+
+def add_repository_parser(
+    areas: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     repository = areas.add_parser("repository", help="manage canonical repositories and Git state")
     commands = repository.add_subparsers(dest="command", required=True)
+    _add_repository_read_parsers(commands)
+    _add_repository_git_parsers(commands)
+    _add_repository_collaboration_parsers(commands)
 
+
+def _add_repository_read_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     list_parser = commands.add_parser("list", help="list authorized canonical repositories")
     list_parser.add_argument("--limit", type=int, default=50)
     list_parser.add_argument("--cursor")
@@ -153,6 +167,10 @@ def _build_parser() -> argparse.ArgumentParser:
     diff.add_argument("--base-revision")
     diff.add_argument("--approval-id")
 
+
+def _add_repository_git_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     fetch = commands.add_parser("fetch", help="fetch repository refs through the provider")
     fetch.add_argument("repository_id")
     _add_mutation_arguments(fetch)
@@ -209,6 +227,10 @@ def _build_parser() -> argparse.ArgumentParser:
     detach.add_argument("repository_id")
     _add_mutation_arguments(detach)
 
+
+def _add_repository_collaboration_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     issue = commands.add_parser(
         "issue",
         help="inspect and mutate provider-neutral repository issues",
@@ -260,8 +282,6 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("open", "draft", "closed", "merged", "unknown"),
     )
     _add_mutation_arguments(change_update)
-
-    return parser
 
 
 def _add_mutation_arguments(parser: argparse.ArgumentParser) -> None:
