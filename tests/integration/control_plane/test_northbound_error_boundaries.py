@@ -290,9 +290,7 @@ def test_asgi_route_semantics_precede_malformed_json_validation() -> None:
         )
 
         start = next(message for message in sent if message["type"] == "http.response.start")
-        body_message = next(
-            message for message in sent if message["type"] == "http.response.body"
-        )
+        body_message = next(message for message in sent if message["type"] == "http.response.body")
         payload = json.loads(body_message["body"])
         assert isinstance(payload, dict)
         return int(start["status"]), payload
@@ -357,6 +355,30 @@ def test_asgi_route_semantics_precede_malformed_json_validation() -> None:
         )
         assert run_cancel_wrong_method_status == 405
         assert run_cancel_wrong_method["code"] == "method_not_allowed"
+
+        unknown_model_command_status, unknown_model_command = await invoke(
+            "POST",
+            "/api/v1/models/model_1:does-not-exist",
+            b"{",
+        )
+        assert unknown_model_command_status == 404
+        assert unknown_model_command["code"] == "not_found"
+
+        unknown_provider_command_status, unknown_provider_command = await invoke(
+            "POST",
+            "/api/v1/model-providers/provider_1:does-not-exist",
+            b"{",
+        )
+        assert unknown_provider_command_status == 404
+        assert unknown_provider_command["code"] == "not_found"
+
+        colon_model_identifier_status, colon_model_identifier = await invoke(
+            "GET",
+            "/api/v1/models/provider:model",
+            b"{",
+        )
+        assert colon_model_identifier_status == 400
+        assert colon_model_identifier["code"] == "invalid_json"
 
     asyncio.run(scenario())
 
