@@ -10,6 +10,7 @@ import {
 import { ControlPlaneError } from "../api/client";
 import { OnboardingClient } from "../api/onboarding";
 import { SetupClient } from "../api/setup";
+import { QrCode } from "../components/QrCode";
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
 import { ComponentSetupPanel } from "./onboarding/ComponentSetupPanel";
 import { SetupLifecyclePanel } from "./onboarding/SetupLifecyclePanel";
@@ -385,12 +386,17 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
                   <div><dt>Expires</dt><dd>{formatDate(mobilePairing.expires_at)}</dd></div>
                 </dl>
                 <p>
-                  Scan the QR payload with the companion or enter this one-time fallback code:
+                  Scan this QR code with the companion or enter the one-time fallback code.
                 </p>
-                <p><code>{mobilePairing.pairing_code}</code></p>
-                <p className="muted">
-                  Pairing link: <a href={mobilePairing.qr_payload}>{mobilePairing.qr_payload}</a>
+                <QrCode value={mobilePairing.qr_payload} />
+                <p><strong>Fallback code:</strong> <code>{mobilePairing.pairing_code}</code></p>
+                <p>
+                  Expires in <PairingCountdown expiresAt={mobilePairing.expires_at} />.
                 </p>
+                <details>
+                  <summary>Pairing link</summary>
+                  <code>{mobilePairing.qr_payload}</code>
+                </details>
                 <div className="actions">
                   <button disabled={mutating} onClick={() => void cancelMobilePairing()}>
                     Cancel pairing
@@ -483,6 +489,21 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       )}
     </div>
   );
+}
+
+function PairingCountdown({ expiresAt }: { expiresAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const expiry = new Date(expiresAt).getTime();
+  const seconds = Number.isNaN(expiry) ? 0 : Math.max(0, Math.ceil((expiry - now) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return <strong>{minutes}:{String(remainder).padStart(2, "0")}</strong>;
 }
 
 function formatDate(value: string | null): string {
