@@ -432,6 +432,36 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             if credential.metadata.get("client") == "mobile"
         )
 
+    def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        now: datetime | None = None,
+        correlation_id: str | None = None,
+    ) -> int:
+        current = _current(now)
+        active = tuple(
+            credential
+            for credential in self.list_mobile_devices(user_id)
+            if credential.revoked_at is None
+        )
+        for credential in active:
+            self.revoke_mobile_device(
+                user_id,
+                credential.credential_id,
+                now=current,
+                correlation_id=correlation_id,
+            )
+        self._audit(
+            "auth.mobile_devices_revoked_all",
+            now=current,
+            success=True,
+            actor_id=user_id,
+            correlation_id=correlation_id,
+            metadata={"revoked_count": len(active)},
+        )
+        return len(active)
+
     def rename_mobile_device(
         self,
         user_id: str,
