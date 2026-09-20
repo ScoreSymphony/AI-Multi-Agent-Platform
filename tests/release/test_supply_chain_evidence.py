@@ -112,6 +112,12 @@ def test_release_manifest_workflow_binds_signed_sbom_and_provenance() -> None:
     release_input = json.loads(RELEASE_INPUT_PATH.read_text(encoding="utf-8"))
     artifacts = {item["name"]: item["path"] for item in release_input["artifacts"]}
 
+    assert release_input["release_kind"] == "major"
+    assert release_input["created_at"] == "REPLACE_WITH_RELEASE_CREATED_AT"
+    assert (
+        release_input["release_notes_ref"]
+        == "git:${SOURCE_COMMIT}:release/1.0.0-release-notes.md"
+    )
     assert release_input["sbom_ref"] == "REPLACE_WITH_SIGNED_SBOM_ATTESTATION_URL"
     assert release_input["provenance_ref"] == "REPLACE_WITH_SIGNED_PROVENANCE_ATTESTATION_URL"
     assert artifacts["platform-wheel"] == "../.release-evidence/platform.whl"
@@ -128,5 +134,7 @@ def test_release_manifest_workflow_binds_signed_sbom_and_provenance() -> None:
     assert "sbom-path: .release-evidence/sbom.spdx.json" in workflow
     assert "PROVENANCE_ATTESTATION_URL" in workflow
     assert "SBOM_ATTESTATION_URL" in workflow
+    assert "release_created_at:" in workflow
+    assert 'document["created_at"] = os.environ["RELEASE_CREATED_AT"]' in workflow
     assert ".release-evidence/generation-input.resolved.json" in workflow
     assert ".release-evidence/SHA256SUMS" in workflow
