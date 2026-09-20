@@ -125,6 +125,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     areas = parser.add_subparsers(dest="area", required=True)
+    add_repository_parser(areas)
+    return parser
+
+
+def add_repository_parser(
+    areas: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     repository = areas.add_parser("repository", help="manage canonical repositories and Git state")
     commands = repository.add_subparsers(dest="command", required=True)
 
@@ -261,7 +268,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_mutation_arguments(change_update)
 
-    return parser
 
 
 def _add_mutation_arguments(parser: argparse.ArgumentParser) -> None:
