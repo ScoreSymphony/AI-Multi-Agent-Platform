@@ -43,8 +43,9 @@ The publish job creates:
 
 - `AI-Multi-Agent-Mobile-vX.Y.Z.apk`
 - `SHA256SUMS.txt`
-- `mobile-release.json` with source commit, package/version/versionCode, APK digest, signer
-  fingerprint and workflow provenance.
+- `npm-dependency-tree.json`, the exact npm dependency resolution used for the APK build;
+- `mobile-release.json` with source commit, package/version/versionCode, APK digest, the
+  resolved dependency-set digest, signer fingerprint and workflow provenance.
 
 It verifies the APK with `apksigner` before `gh release create` publishes any asset.
 
@@ -118,7 +119,8 @@ On Android:
 
 1. Open the repository's GitHub Releases page.
 2. Open the desired `mobile-vX.Y.Z` release.
-3. Download `AI-Multi-Agent-Mobile-vX.Y.Z.apk` and `SHA256SUMS.txt`.
+3. Download `AI-Multi-Agent-Mobile-vX.Y.Z.apk`, `npm-dependency-tree.json` and
+   `SHA256SUMS.txt`.
 4. Allow installation from the browser/file-manager source when Android asks.
 5. Open the APK and confirm the install.
 
@@ -139,8 +141,9 @@ apksigner verify --verbose --print-certs AI-Multi-Agent-Mobile-vX.Y.Z.apk
 ```
 
 Compare the reported certificate SHA-256 with `mobile-release.json` and, for N+1 releases, with
-the prior official mobile release. A checksum or certificate mismatch means the APK must not be
-installed.
+the prior official mobile release. The manifest also binds the SHA-256 of the published
+`npm-dependency-tree.json` as the immutable resolved dependency set used by that build. A
+checksum, dependency-set or certificate mismatch means the APK must not be installed.
 
 ## In-place update behavior
 
