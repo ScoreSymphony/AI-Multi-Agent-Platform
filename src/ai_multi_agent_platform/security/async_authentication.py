@@ -24,7 +24,8 @@ from .authentication import (
     SessionGrant,
     StoredCredential,
 )
-from .authentication_hardening import CredentialScope, IssuedMobilePairingChallenge
+from .authentication_hardening import CredentialScope
+from .mobile_pairing import IssuedMobilePairingChallenge
 
 _BUSY_MARKERS = (
     "database is locked",
