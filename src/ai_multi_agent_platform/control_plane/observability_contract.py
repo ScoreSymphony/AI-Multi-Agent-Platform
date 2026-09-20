@@ -22,7 +22,7 @@ from ai_multi_agent_platform.observability.trace import (
 )
 
 from .http import HTTPRequest, HTTPResponse
-from .models import API_VERSION, PageQuery, RequestContext, paginate, validation_error
+from .models import API_VERSION, APIException, PageQuery, RequestContext, paginate, validation_error
 from .run_contract import ControlPlane as _RunControlPlane
 from .run_contract import ControlPlaneHTTP as _RunControlPlaneHTTP
 from .run_contract import build_openapi as _build_run_openapi
@@ -178,8 +178,6 @@ class ControlPlaneHTTP(_RunControlPlaneHTTP):
         control_plane = cast(ControlPlane, self._control_plane)
         if len(segments) in {3, 4} and segments[2] == "trace":
             if request.method != "GET":
-                from .models import APIException
-
                 raise APIException(
                     status=405,
                     code="method_not_allowed",
