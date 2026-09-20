@@ -22,7 +22,7 @@ compatibility_constraints:
 security_constraints:
   - "Remote Control Plane URLs require HTTPS"
   - "Bearer credential persisted only through expo-secure-store"
-  - "Deep links are allowlisted resource references and never commands"
+  - "Resource deep links never execute commands; aiagentplatform://pair is a versioned confirmation-gated authentication bootstrap envelope"
 deployment_constraints:
   - "Optional mobile build only; no server runtime dependency"
 resource_constraints:
