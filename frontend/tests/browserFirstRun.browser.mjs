@@ -431,6 +431,9 @@ try {
   const confirmationInput = page.getByLabel("Confirm password", { exact: true });
   const createAdministratorButton = await waitForButton(page, "Create administrator");
 
+  // React intentionally autofocuses this field for ordinary users. Blur once so the retained
+  // acceptance evidence proves that the field is also reachable by an actual sequential Tab.
+  await usernameInput.evaluate((element) => element.blur());
   await tabTo(page, usernameInput, "First-user Username field", { maxPresses: 4 });
   await usernameInput.fill(username);
   await page.keyboard.press("Tab");
@@ -1162,7 +1165,9 @@ try {
   const mobileNavigationPromise = page.waitForURL(`${frontendUrl}${mobileDestination.pathname}${mobileDestination.search}`);
   await page.keyboard.press("Enter");
   await mobileNavigationPromise;
-  await menuButton.waitFor();
+  await page.waitForFunction(() => (
+    document.querySelector('[aria-label="Toggle navigation"]')?.getAttribute("aria-expanded") === "false"
+  ));
   if ((await menuButton.getAttribute("aria-expanded")) !== "false") {
     throw new Error("Mobile navigation did not close after keyboard navigation");
   }
@@ -1217,7 +1222,7 @@ try {
   await page.getByRole("heading", { name: "Keyboard destructive confirmation sanity", exact: true }).waitFor();
   await assertNoDocumentHorizontalOverflow(page, "Narrow Task detail");
   const cancelTaskButton = page
-    .getByRole("group", { name: "Task lifecycle commands" })
+    .locator('[aria-label="Task lifecycle commands"]')
     .getByRole("button", { name: "Cancel", exact: true });
   await tabTo(page, cancelTaskButton, "Narrow Task Cancel action", { maxPresses: 80 });
   await assertHorizontallyReachable(page, cancelTaskButton, "Narrow Task Cancel action");
