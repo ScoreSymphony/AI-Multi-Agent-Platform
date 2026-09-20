@@ -285,6 +285,11 @@ jobs:
           )"
           test -n "$SIGNER_FINGERPRINT"
 
+          DEPENDENCY_TREE_ASSET="npm-dependency-tree.json"
+          cp .artifacts/mobile/npm-dependency-tree.json "$RELEASE_DIR/$DEPENDENCY_TREE_ASSET"
+          DEPENDENCY_TREE_SHA256="$(sha256sum "$RELEASE_DIR/$DEPENDENCY_TREE_ASSET" | cut -d' ' -f1)"
+          test -n "$DEPENDENCY_TREE_SHA256"
+
           RELEASE_HISTORY="$RUNNER_TEMP/github-releases.json"
           gh api --paginate \
             -H "Accept: application/vnd.github+json" \
@@ -329,11 +334,11 @@ jobs:
 
           (
             cd "$RELEASE_DIR"
-            sha256sum "$ASSET" > SHA256SUMS.txt
+            sha256sum "$ASSET" "$DEPENDENCY_TREE_ASSET" > SHA256SUMS.txt
           )
-          APK_SHA256="$(cut -d' ' -f1 "$RELEASE_DIR/SHA256SUMS.txt")"
+          APK_SHA256="$(head -n 1 "$RELEASE_DIR/SHA256SUMS.txt" | cut -d' ' -f1)"
 
-          VERSION="$VERSION"           VERSION_CODE="$VERSION_CODE"           PACKAGE="$PACKAGE"           TAG="$TAG"           ASSET="$ASSET"           APK_SHA256="$APK_SHA256"           SIGNER_FINGERPRINT="$SIGNER_FINGERPRINT"           PREVIOUS_TAG="$PREVIOUS_TAG"           python - <<'PY'
+          VERSION="$VERSION"           VERSION_CODE="$VERSION_CODE"           PACKAGE="$PACKAGE"           TAG="$TAG"           ASSET="$ASSET"           APK_SHA256="$APK_SHA256"           DEPENDENCY_TREE_ASSET="$DEPENDENCY_TREE_ASSET"           DEPENDENCY_TREE_SHA256="$DEPENDENCY_TREE_SHA256"           SIGNER_FINGERPRINT="$SIGNER_FINGERPRINT"           PREVIOUS_TAG="$PREVIOUS_TAG"           python - <<'PY'
           import json
           import os
           from datetime import datetime, timezone
@@ -351,6 +356,11 @@ jobs:
               "minimum_android_api": 24,
               "apk_asset": os.environ["ASSET"],
               "apk_sha256": os.environ["APK_SHA256"],
+              "dependency_set": {
+                  "kind": "resolved_set",
+                  "asset": os.environ["DEPENDENCY_TREE_ASSET"],
+                  "sha256": os.environ["DEPENDENCY_TREE_SHA256"],
+              },
               "signing_certificate_sha256": os.environ["SIGNER_FINGERPRINT"].lower(),
               "previous_mobile_release_tag": os.environ["PREVIOUS_TAG"] or None,
               "workflow_run": (
@@ -371,8 +381,9 @@ jobs:
             printf -- '- Android versionCode: %s\n' "$VERSION_CODE"
             printf -- '- Source commit: %s\n' "$GITHUB_SHA"
             printf -- '- Signing certificate SHA-256: %s\n' "$SIGNER_FINGERPRINT"
+            printf -- '- Dependency resolution SHA-256: %s\n' "$DEPENDENCY_TREE_SHA256"
             printf -- '- Minimum supported Android: Android 7\n\n'
-            printf 'Download %s and verify it against SHA256SUMS.txt.\n' "$ASSET"
+            printf 'Download %s, %s and SHA256SUMS.txt, then verify both checksums.\n' "$ASSET" "$DEPENDENCY_TREE_ASSET"
             printf 'Installation is direct Android sideloading; no app-store account or paid build service is required.\n'
           } > "$RELEASE_DIR/release-notes.md"
 
@@ -389,6 +400,7 @@ jobs:
             .release-mobile/AI-Multi-Agent-Mobile-*.apk
             .release-mobile/SHA256SUMS.txt
             .release-mobile/mobile-release.json
+            .release-mobile/npm-dependency-tree.json
             .release-mobile/apk-signature-verification.txt
             .release-mobile/release-notes.md
             .artifacts/mobile/release-config.json
@@ -400,4 +412,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "${{ steps.prepare.outputs.tag }}"             ".release-mobile/${{ steps.prepare.outputs.asset }}"             ".release-mobile/SHA256SUMS.txt"             ".release-mobile/mobile-release.json"             --target "$GITHUB_SHA"             --title "AI Multi-Agent Mobile ${{ inputs.version }}"             --notes-file ".release-mobile/release-notes.md"
+          gh release create "${{ steps.prepare.outputs.tag }}"             ".release-mobile/${{ steps.prepare.outputs.asset }}"             ".release-mobile/SHA256SUMS.txt"             ".release-mobile/mobile-release.json"             ".release-mobile/npm-dependency-tree.json"             --target "$GITHUB_SHA"             --title "AI Multi-Agent Mobile ${{ inputs.version }}"             --notes-file ".release-mobile/release-notes.md"
