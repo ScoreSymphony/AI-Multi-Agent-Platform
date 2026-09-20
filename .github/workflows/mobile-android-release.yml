@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .artifacts/mobile
-          npm run validate:release | tee .artifacts/mobile/release-config.json
+          node scripts/validate-release-config.mjs | tee .artifacts/mobile/release-config.json
           npm ls --all --json > .artifacts/mobile/npm-dependency-tree.json
 
       - name: Typecheck and test mobile client
@@ -254,9 +254,24 @@ jobs:
           ASSET="AI-Multi-Agent-Mobile-v$VERSION.apk"
           RELEASE_DIR=".release-mobile"
           mkdir -p "$RELEASE_DIR"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::Release $TAG already exists"
-            exit 1
+
+          RELEASE_MODE="create"
+          EXISTING_RELEASE="$RUNNER_TEMP/mobile-existing-release.json"
+          if gh release view "$TAG" --json isDraft,tagName,targetCommitish > "$EXISTING_RELEASE" 2>/dev/null
+          then
+            if [ "$(jq -r '.isDraft' "$EXISTING_RELEASE")" != "true" ]; then
+              echo "::error::Published release $TAG already exists"
+              exit 1
+            fi
+            if [ "$(jq -r '.tagName' "$EXISTING_RELEASE")" != "$TAG" ]; then
+              echo "::error::Existing draft release tag does not match $TAG"
+              exit 1
+            fi
+            if [ "$(jq -r '.targetCommitish' "$EXISTING_RELEASE")" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing draft release $TAG targets a different source commit"
+              exit 1
+            fi
+            RELEASE_MODE="resume"
           fi
 
           TAG_REFS="$RUNNER_TEMP/mobile-tag-refs.json"
@@ -265,10 +280,17 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "/repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG?per_page=100" \
             > "$TAG_REFS"
-          if jq -se --arg ref "refs/tags/$TAG" \
-            'any(.[][]; .ref == $ref)' "$TAG_REFS" >/dev/null
-          then
-            echo "::error::Git tag $TAG already exists; refusing to publish assets against a pre-existing tag"
+          TAG_SHA="$(
+            jq -sr --arg ref "refs/tags/$TAG" \
+              '[.[][] | select(.ref == $ref)][0].object.sha // ""' "$TAG_REFS"
+          )"
+          if [ "$RELEASE_MODE" = "resume" ]; then
+            if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing draft tag $TAG points to a different source commit"
+              exit 1
+            fi
+          elif [ -n "$TAG_SHA" ]; then
+            echo "::error::Git tag $TAG already exists without a matching resumable draft"
             exit 1
           fi
 
@@ -389,6 +411,7 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
 
       - name: Retain production release evidence before publication
         uses: actions/upload-artifact@v7
@@ -412,4 +435,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "${{ steps.prepare.outputs.tag }}"             ".release-mobile/${{ steps.prepare.outputs.asset }}"             ".release-mobile/SHA256SUMS.txt"             ".release-mobile/mobile-release.json"             ".release-mobile/npm-dependency-tree.json"             --target "$GITHUB_SHA"             --title "AI Multi-Agent Mobile ${{ inputs.version }}"             --notes-file ".release-mobile/release-notes.md"
+          TAG="${{ steps.prepare.outputs.tag }}"
+          if [ "${{ steps.prepare.outputs.release_mode }}" = "resume" ]; then
+            gh release upload "$TAG" \
+              ".release-mobile/${{ steps.prepare.outputs.asset }}" \
+              ".release-mobile/SHA256SUMS.txt" \
+              ".release-mobile/mobile-release.json" \
+              ".release-mobile/npm-dependency-tree.json" \
+              --clobber
+            gh release edit "$TAG" \
+              --draft=false \
+              --title "AI Multi-Agent Mobile ${{ inputs.version }}" \
+              --notes-file ".release-mobile/release-notes.md"
+          else
+            gh release create "$TAG" \
+              ".release-mobile/${{ steps.prepare.outputs.asset }}" \
+              ".release-mobile/SHA256SUMS.txt" \
+              ".release-mobile/mobile-release.json" \
+              ".release-mobile/npm-dependency-tree.json" \
+              --target "$GITHUB_SHA" \
+              --draft \
+              --title "AI Multi-Agent Mobile ${{ inputs.version }}" \
+              --notes-file ".release-mobile/release-notes.md"
+            gh release edit "$TAG" --draft=false
+          fi
