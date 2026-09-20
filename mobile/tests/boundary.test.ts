@@ -32,6 +32,14 @@ describe("mobile architecture boundary", () => {
     expect(session).not.toContain("localStorage");
   });
 
+  it("declares and configures the native QR camera dependency", () => {
+    const packageJson = readFileSync(resolve(ROOT, "package.json"), "utf8");
+    const appJson = readFileSync(resolve(ROOT, "app.json"), "utf8");
+    expect(packageJson).toContain('"expo-camera"');
+    expect(appJson).toContain('"expo-camera"');
+    expect(appJson).toContain('"barcodeScannerEnabled": true');
+  });
+
   it("scans pairing QR codes inside the companion before confirmation", () => {
     const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
     expect(app).toContain('from "expo-camera"');
