@@ -26,6 +26,7 @@ from .generator import (
 from .persistence import JsonDiscoveryReportStore, StoredDiscoveryReport
 from .providers import discover_git_heads, write_git_discovery_result
 from .service import evaluate_release, release_metadata
+from .version_projection import ReleaseVersionProjectionError, project_release_version
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +45,15 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--inventory")
     generate.add_argument("--output", required=True)
     generate.add_argument("--json", action="store_true")
+
+    version_project = subcommands.add_parser(
+        "version-project",
+        help="Dry-run or write one release version across canonical repository version surfaces",
+    )
+    version_project.add_argument("--root", default=".")
+    version_project.add_argument("--version", required=True)
+    version_project.add_argument("--write", action="store_true")
+    version_project.add_argument("--json", action="store_true")
 
     validate = subcommands.add_parser("validate", help="Validate a release manifest and gates")
     validate.add_argument("--manifest", required=True)
@@ -94,6 +104,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "generate":
         return _generate(args)
+    if args.command == "version-project":
+        return _version_project(args)
     if args.command == "upstream-discover-git":
         return _upstream_discover_git(args)
     if args.command == "upstream-check":
@@ -138,6 +150,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     raise AssertionError(f"unhandled release command: {args.command}")
+
+
+def _version_project(args: argparse.Namespace) -> int:
+    try:
+        report = project_release_version(
+            str(args.root),
+            target_version=str(args.version),
+            write=bool(args.write),
+        )
+    except ReleaseVersionProjectionError as exc:
+        print(f"release version projection failed: {exc}", file=sys.stderr)
+        return 2
+
+    if bool(args.json):
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        mode = "written" if report.written else "dry-run"
+        print(
+            f"release version projection: {report.current_version} -> "
+            f"{report.target_version} ({mode})"
+        )
+        if report.changed_files:
+            for path in report.changed_files:
+                print(f"version surface: {path}")
+        else:
+            print("version surfaces already match the requested release version")
+    return 0
 
 
 def _generate(args: argparse.Namespace) -> int:
