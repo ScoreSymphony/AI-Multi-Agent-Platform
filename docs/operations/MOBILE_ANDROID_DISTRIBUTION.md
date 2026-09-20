@@ -14,7 +14,7 @@ The maintained application identity is:
 - Android package: `org.scoresymphony.aimultiagentplatform`
 - semantic app version: `mobile/package.json.version == mobile/app.json.expo.version`
 - Android build identity: `mobile/app.json.expo.android.versionCode`
-- minimum supported Android: Android 7
+- minimum supported Android: Android 7 (API 24); the release workflow verifies the built APK's `sdkVersion` before publication
 
 Every release must increment `versionCode` even when the human-facing semantic version changes in
 a way that is not numerically comparable. Never reuse a published `versionCode`.
@@ -109,7 +109,8 @@ planned compatibility migration with separate acceptance evidence.
    signature verification, checksum generation and previous-release lineage checks all pass.
 
 Missing signing secrets, a version mismatch, signature verification failure, package drift,
-non-monotonic `versionCode`, or changed signing identity prevents publication.
+non-monotonic `versionCode`, a changed signing identity, an APK minimum SDK other than API 24,
+or a pre-existing release/tag for the requested mobile version prevents publication.
 
 ## Direct install from GitHub Releases
 
