@@ -114,7 +114,7 @@ Supported lifecycle operations include:
 Renewal revokes the previous server-side session before issuing a replacement. A revoked
 or expired session stops authenticating immediately.
 
-## API, service, worker, automation and integration credentials
+## API, service, worker, automation, integration and mobile credentials
 
 Opaque credentials contain a public credential identifier plus at least 256 bits of random
 secret material. Only a SHA-256 verifier of that high-entropy random material is retained.
