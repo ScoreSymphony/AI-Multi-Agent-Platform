@@ -27,6 +27,51 @@ export interface BrowserSessionSummary {
   active: boolean;
 }
 
+export interface MobilePairingChallenge {
+  request_id: string;
+  server_origin: string;
+  protocol_version: string;
+  qr_payload: string;
+  fallback_code: string;
+  created_at: string;
+  expires_at: string;
+  scope: {
+    actions: string[];
+    resource_types: string[];
+    resource_ids: string[];
+  };
+  secret_display: "one_time";
+}
+
+export interface MobileDeviceCredential {
+  id: string;
+  owner_id: string;
+  actor_type: string;
+  kind: string;
+  purpose: string;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  metadata: {
+    client: "mobile";
+    device_name: string;
+    server_origin: string;
+    pairing_request_id: string;
+    protocol_version: string;
+    platform?: string;
+    device_model?: string;
+    os_name?: string;
+    os_version?: string;
+    app_version?: string;
+  };
+  scope: {
+    actions: string[];
+    resource_types: string[];
+    resource_ids: string[];
+  };
+}
+
 export interface FirstUserBootstrapStatus {
   state: "uninitialized" | "incomplete" | "initialized";
   bootstrap_available: boolean;
@@ -270,6 +315,43 @@ export class BrowserSessionClient {
   listSessions(): Promise<BrowserSessionSummary[]> {
     return this.request<{ items: BrowserSessionSummary[] }>("/auth/sessions").then(
       (result) => result.items,
+    );
+  }
+
+  createMobilePairing(serverOrigin: string): Promise<MobilePairingChallenge> {
+    return this.request<MobilePairingChallenge>("/auth/mobile-pairing", {
+      method: "POST",
+      body: { server_origin: serverOrigin },
+    });
+  }
+
+  cancelMobilePairing(requestId: string): Promise<{ request_id: string; cancelled: boolean }> {
+    return this.request<{ request_id: string; cancelled: boolean }>(
+      `/auth/mobile-pairing/${encodeURIComponent(requestId)}:cancel`,
+      { method: "POST" },
+    );
+  }
+
+  listMobileDevices(): Promise<MobileDeviceCredential[]> {
+    return this.request<{ items: MobileDeviceCredential[] }>("/auth/mobile-devices").then(
+      (result) => result.items,
+    );
+  }
+
+  renameMobileDevice(
+    credentialId: string,
+    deviceName: string,
+  ): Promise<MobileDeviceCredential> {
+    return this.request<MobileDeviceCredential>(
+      `/auth/mobile-devices/${encodeURIComponent(credentialId)}:rename`,
+      { method: "POST", body: { device_name: deviceName } },
+    );
+  }
+
+  revokeMobileDevice(credentialId: string): Promise<{ id: string; revoked: boolean }> {
+    return this.request<{ id: string; revoked: boolean }>(
+      `/auth/mobile-devices/${encodeURIComponent(credentialId)}:revoke`,
+      { method: "POST" },
     );
   }
 
