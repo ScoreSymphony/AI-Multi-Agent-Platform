@@ -9,6 +9,7 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -398,3 +399,217 @@ def test_scoped_credential_openapi_matches_current_composed_http_contract() -> N
     assert scope_schema["properties"]["actions"]["type"] == "array"
     assert scope_schema["properties"]["resource_types"]["type"] == "array"
     assert scope_schema["properties"]["resource_ids"]["type"] == "array"
+
+
+def test_mobile_pairing_http_qr_completion_listing_and_revocation() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    bootstrap = auth.create_personal_access_token(user.user_id, purpose="pairing-admin", now=NOW)
+    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
+
+    created = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/mobile-pairing",
+                headers={"authorization": f"Bearer {bootstrap.secret}"},
+                body={"server_origin": "https://platform.example"},
+            )
+        )
+    )
+    assert created.status == 201
+    assert created.body["server_origin"] == "https://platform.example"
+    assert created.body["secret_display"] == "one_time"
+    assert isinstance(created.body["fallback_code"], str)
+    parsed_qr = urlsplit(created.body["qr_payload"])
+    assert parsed_qr.scheme == "aiagentplatform"
+    assert parsed_qr.netloc == "pair"
+    query = parse_qs(parsed_qr.query)
+    assert query["v"] == ["1"]
+    assert query["origin"] == ["https://platform.example"]
+    pairing_id = created.body["request_id"]
+    pairing_secret = query["secret"][0]
+
+    wrong = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-pairing/{pairing_id}:complete",
+                body={"proof": "wrong", "device_name": "Android"},
+            )
+        )
+    )
+    assert wrong.status == 401
+
+    completed = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-pairing/{pairing_id}:complete",
+                body={
+                    "proof": pairing_secret,
+                    "device_name": "Android",
+                    "device_metadata": {
+                        "platform": "android",
+                        "device_model": "test-device",
+                        "app_version": "0.1.0",
+                    },
+                },
+            )
+        )
+    )
+    assert completed.status == 201
+    device_secret = completed.body["secret"]
+    credential_id = completed.body["credential_id"]
+
+    me = _run(
+        http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/auth/me",
+                headers={"authorization": f"Bearer {device_secret}"},
+            )
+        )
+    )
+    assert me.status == 200
+    assert me.body["actor_id"] == user.user_id
+
+    replay = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-pairing/{pairing_id}:complete",
+                body={"proof": pairing_secret, "device_name": "Replay"},
+            )
+        )
+    )
+    assert replay.status == 409
+    assert replay.body["code"] == "pairing_already_used"
+
+    listed = _run(
+        http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/auth/mobile-devices",
+                headers={"authorization": f"Bearer {bootstrap.secret}"},
+            )
+        )
+    )
+    assert listed.status == 200
+    assert len(listed.body["items"]) == 1
+    device = listed.body["items"][0]
+    assert device["id"] == credential_id
+    assert device["metadata"]["client"] == "mobile"
+    assert device["metadata"]["device_name"] == "Android"
+    assert "secret" not in repr(device)
+    assert pairing_secret not in repr(listed.body)
+    assert created.body["fallback_code"] not in repr(listed.body)
+
+    revoked = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-devices/{credential_id}:revoke",
+                headers={"authorization": f"Bearer {bootstrap.secret}"},
+            )
+        )
+    )
+    assert revoked.status == 200
+
+    rejected = _run(
+        http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/auth/me",
+                headers={"authorization": f"Bearer {device_secret}"},
+            )
+        )
+    )
+    assert rejected.status == 401
+
+
+def test_mobile_pairing_http_rejects_remote_http_and_cross_user_management() -> None:
+    auth = _service()
+    alice = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    bob = auth.create_local_user("bob", PASSWORD, now=NOW)
+    alice_token = auth.create_personal_access_token(alice.user_id, purpose="alice", now=NOW)
+    bob_token = auth.create_personal_access_token(bob.user_id, purpose="bob", now=NOW)
+    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
+
+    insecure = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/mobile-pairing",
+                headers={"authorization": f"Bearer {alice_token.secret}"},
+                body={"server_origin": "http://platform.example"},
+            )
+        )
+    )
+    assert insecure.status == 400
+    assert insecure.body["code"] == "invalid_request"
+
+    created = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/mobile-pairing",
+                headers={"authorization": f"Bearer {alice_token.secret}"},
+                body={"server_origin": "https://platform.example"},
+            )
+        )
+    )
+    assert created.status == 201
+    pairing_id = created.body["request_id"]
+
+    cross_user_cancel = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-pairing/{pairing_id}:cancel",
+                headers={"authorization": f"Bearer {bob_token.secret}"},
+            )
+        )
+    )
+    assert cross_user_cancel.status == 404
+
+    cancelled = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-pairing/{pairing_id}:cancel",
+                headers={"authorization": f"Bearer {alice_token.secret}"},
+            )
+        )
+    )
+    assert cancelled.status == 200
+
+    after_cancel = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/auth/mobile-pairing/{pairing_id}:complete",
+                body={
+                    "proof": created.body["fallback_code"],
+                    "device_name": "Cancelled",
+                },
+            )
+        )
+    )
+    assert after_cancel.status == 410
+    assert after_cancel.body["code"] == "pairing_cancelled"
+
+
+def test_mobile_pairing_openapi_documents_public_completion_and_device_management() -> None:
+    auth = _service()
+    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
+
+    response = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
+
+    assert response.status == 200
+    paths = response.body["paths"]
+    assert "/api/v1/auth/mobile-pairing" in paths
+    completion = paths["/api/v1/auth/mobile-pairing/{request_id}:complete"]["post"]
+    assert completion["security"] == []
+    assert "/api/v1/auth/mobile-devices" in paths
+    assert "/api/v1/auth/mobile-devices/{credential_id}:revoke" in paths
