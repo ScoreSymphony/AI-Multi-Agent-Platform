@@ -604,27 +604,59 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     headers=headers,
                 )
 
+            registered_routes = getattr(
+                self._extended_control_plane,
+                "registered_routes",
+                (),
+            )
+            normalized_path = request.path.rstrip("/") or "/"
+            if any(route_path == normalized_path for _, route_path in registered_routes):
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
+
             segments = [segment for segment in relative.split("/") if segment]
             if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
                 query = _page_query(request.query)
-                if len(segments) == 1 and request.method == "GET":
+                if len(segments) == 1:
+                    if request.method != "GET":
+                        raise APIException(
+                            status=405,
+                            code="method_not_allowed",
+                            message="method not allowed",
+                        )
                     page = await self._extended_control_plane.list_extension_resources(
                         context,
                         segments[0],
                         query,
                     )
                     return self._response(200, page, request_id, correlation_id)
-                if len(segments) == 2 and request.method == "GET":
+                if len(segments) == 2:
+                    if request.method != "GET":
+                        raise APIException(
+                            status=405,
+                            code="method_not_allowed",
+                            message="method not allowed",
+                        )
                     item = await self._extended_control_plane.get_extension_resource(
                         context,
                         segments[0],
                         segments[1],
                     )
                     return self._response(200, item, request_id, correlation_id)
+                raise APIException(status=404, code="not_found", message="route not found")
 
             if segments and segments[0] == "commands" and len(segments) == 2:
                 if request.method != "POST":
+                    if segments[1] not in registered_commands:
+                        raise APIException(
+                            status=404,
+                            code="not_found",
+                            message="route not found",
+                        )
                     raise APIException(
                         status=405,
                         code="method_not_allowed",
