@@ -58,6 +58,16 @@ class ControlPlaneHTTP:
             version, relative = _split_version(request.path)
             _require_supported_version(version)
 
+            if (
+                relative in {"", "/", "/openapi.json", "/health", "/readiness"}
+                and request.method != "GET"
+            ):
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
+
             if request.method == "GET" and relative == "/openapi.json":
                 return self._response(200, build_openapi(), request_id, correlation_id)
             if request.method == "GET" and relative in {"/health", "/readiness"}:
@@ -90,7 +100,7 @@ class ControlPlaneHTTP:
                 )
 
             context = _request_context(request, request_id, correlation_id)
-            query = _page_query(request.query)
+            query = PageQuery()
             segments = [segment for segment in relative.split("/") if segment]
             if not segments:
                 raise APIException(status=404, code="not_found", message="route not found")
@@ -175,12 +185,14 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "POST":
             _require_json(request)
             item = await self._control_plane.create_project(context, request.body)
             return self._response(201, item, request_id, correlation_id)
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_projects(context, query)
+            page = await self._control_plane.list_projects(context, _page_query(request.query))
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_project(context, segments[1])
@@ -196,12 +208,14 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "POST":
             _require_json(request)
             item = await self._control_plane.create_workspace(context, request.body)
             return self._response(201, item, request_id, correlation_id)
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_workspaces(context, query)
+            page = await self._control_plane.list_workspaces(context, _page_query(request.query))
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_workspace(context, segments[1])
@@ -217,12 +231,47 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) == 2 and ":" in segments[1]:
+            _, command = segments[1].split(":", 1)
+            if command not in {"queue", "start", "cancel", "retry"}:
+                raise APIException(status=404, code="not_found", message="unknown task command")
+            if request.method != "POST":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
+        elif len(segments) == 3:
+            if segments[2] not in {"runs", "timeline"}:
+                raise APIException(status=404, code="not_found", message="route not found")
+        elif len(segments) == 4:
+            if segments[2] == "runs" and segments[3].endswith(":cancel"):
+                if request.method != "POST":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+            elif segments[2] == "runs":
+                pass
+            elif segments[2:] == ["events", "stream"]:
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+            else:
+                raise APIException(status=404, code="not_found", message="route not found")
+        elif len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
+
         if len(segments) == 1 and request.method == "POST":
             _require_json(request)
             item = await self._control_plane.create_task(context, request.body)
             return self._response(201, item, request_id, correlation_id)
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_tasks(context, query)
+            page = await self._control_plane.list_tasks(context, _page_query(request.query))
             return self._response(200, page, request_id, correlation_id)
 
         if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
@@ -243,14 +292,15 @@ class ControlPlaneHTTP:
             item = await self._control_plane.get_task(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 3 and segments[2] == "runs" and request.method == "GET":
-            page = await self._control_plane.list_runs(context, query, task_id=segments[1])
+            page = await self._control_plane.list_runs(
+                context, _page_query(request.query), task_id=segments[1]
+            )
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 3 and segments[2] == "timeline" and request.method == "GET":
-            page = await self._control_plane.timeline(context, segments[1], query)
+            page = await self._control_plane.timeline(
+                context, segments[1], _page_query(request.query)
+            )
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 4 and segments[2] == "runs" and request.method == "GET":
-            item = await self._control_plane.get_run(context, segments[3], task_id=segments[1])
-            return self._response(200, item, request_id, correlation_id)
         if (
             len(segments) == 4
             and segments[2] == "runs"
@@ -259,6 +309,9 @@ class ControlPlaneHTTP:
         ):
             run_id = segments[3].removesuffix(":cancel")
             item = await self._control_plane.cancel_run(context, segments[1], run_id)
+            return self._response(200, item, request_id, correlation_id)
+        if len(segments) == 4 and segments[2] == "runs" and request.method == "GET":
+            item = await self._control_plane.get_run(context, segments[3], task_id=segments[1])
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 4 and segments[2:] == ["events", "stream"]:
             raise APIException(
@@ -277,8 +330,10 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_runs(context, query)
+            page = await self._control_plane.list_runs(context, _page_query(request.query))
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_run(context, segments[1])
@@ -294,8 +349,12 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_model_providers(context, query)
+            page = await self._control_plane.list_model_providers(
+                context, _page_query(request.query)
+            )
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
             provider_id, command = segments[1].rsplit(":", 1)
@@ -330,8 +389,10 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_models(context, query)
+            page = await self._control_plane.list_models(context, _page_query(request.query))
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
             model_id, command = segments[1].rsplit(":", 1)
@@ -361,8 +422,12 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if len(segments) not in {1, 2}:
+            raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_references(context, collection, query)
+            page = await self._control_plane.list_references(
+                context, collection, _page_query(request.query)
+            )
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_reference(context, collection, segments[1])

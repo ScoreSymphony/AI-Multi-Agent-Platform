@@ -607,23 +607,47 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
             segments = [segment for segment in relative.split("/") if segment]
             if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
-                query = _page_query(request.query)
-                if len(segments) == 1 and request.method == "GET":
+                if len(segments) == 1:
+                    if request.method != "GET":
+                        raise APIException(
+                            status=405,
+                            code="method_not_allowed",
+                            message="method not allowed",
+                        )
                     page = await self._extended_control_plane.list_extension_resources(
                         context,
                         segments[0],
-                        query,
+                        _page_query(request.query),
                     )
                     return self._response(200, page, request_id, correlation_id)
-                if len(segments) == 2 and request.method == "GET":
+                if len(segments) == 2:
+                    if request.method != "GET":
+                        raise APIException(
+                            status=405,
+                            code="method_not_allowed",
+                            message="method not allowed",
+                        )
                     item = await self._extended_control_plane.get_extension_resource(
                         context,
                         segments[0],
                         segments[1],
                     )
                     return self._response(200, item, request_id, correlation_id)
+                normalized_path = request.path.rstrip("/") or "/"
+                registered_routes = getattr(
+                    self._extended_control_plane,
+                    "registered_routes",
+                    (),
+                )
+                if not any(route_path == normalized_path for _, route_path in registered_routes):
+                    raise APIException(status=404, code="not_found", message="route not found")
 
-            if segments and segments[0] == "commands" and len(segments) == 2:
+            if (
+                segments
+                and segments[0] == "commands"
+                and len(segments) == 2
+                and registered_commands
+            ):
                 if request.method != "POST":
                     raise APIException(
                         status=405,
@@ -664,7 +688,31 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                 correlation_id,
             )
 
-        return await super().handle(request)
+        base_response = await super().handle(request)
+        is_route_not_found = (
+            base_response.status == 404
+            and isinstance(base_response.body, dict)
+            and base_response.body.get("code") == "not_found"
+            and base_response.body.get("message") == "route not found"
+        )
+        if is_route_not_found:
+            normalized_path = request.path.rstrip("/") or "/"
+            registered_routes = getattr(
+                self._extended_control_plane,
+                "registered_routes",
+                (),
+            )
+            if any(route_path == normalized_path for _, route_path in registered_routes):
+                return self._error_response(
+                    APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    ),
+                    request_id,
+                    correlation_id,
+                )
+        return base_response
 
 
 def build_openapi(

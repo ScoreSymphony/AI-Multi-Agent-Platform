@@ -386,6 +386,84 @@ def test_malformed_request_and_content_type_validation() -> None:
     asyncio.run(scenario())
 
 
+def test_route_semantics_distinguish_unknown_uri_from_wrong_method() -> None:
+    async def scenario() -> None:
+        control_plane, _, _, _ = _stack()
+        http = ControlPlaneHTTP(control_plane)
+        headers = api_headers(
+            request_id="request-route-semantics",
+            correlation_id="correlation-route-semantics",
+        )
+
+        for path in (
+            "/api/v1/projects/project_missing/does-not-exist",
+            "/api/v1/workspaces/workspace_missing/does-not-exist",
+            "/api/v1/tasks/task_missing/does-not-exist",
+            "/api/v1/runs/run_missing/does-not-exist",
+        ):
+            response = await http.handle(HTTPRequest(method="GET", path=path, headers=headers))
+            assert_error_envelope(response, code="not_found", status=404)
+            assert isinstance(response.body, dict)
+            assert response.body["category"] == "resource"
+            assert response.body["request_id"] == "request-route-semantics"
+            assert response.body["correlation_id"] == "correlation-route-semantics"
+            assert response.body.get("details", {}) == {}
+
+        for method, path in (
+            ("POST", "/api/v1/openapi.json"),
+            ("DELETE", "/api/v1/projects/project_missing"),
+            ("GET", "/api/v1/tasks/task_missing:queue"),
+            ("GET", "/api/v1/tasks/task_missing/runs/run_missing:cancel"),
+        ):
+            response = await http.handle(HTTPRequest(method=method, path=path, headers=headers))
+            assert_error_envelope(response, code="method_not_allowed", status=405)
+            assert isinstance(response.body, dict)
+            assert response.body["category"] == "transport"
+            assert response.body["request_id"] == "request-route-semantics"
+            assert response.body["correlation_id"] == "correlation-route-semantics"
+            assert response.body.get("details", {}) == {}
+
+        unknown_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/projects/project_missing/does-not-exist",
+                headers=headers,
+                query={"limit": "bad"},
+            )
+        )
+        assert_error_envelope(unknown_with_bad_pagination, code="not_found", status=404)
+
+        wrong_method_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="DELETE",
+                path="/api/v1/projects/project_missing",
+                headers=headers,
+                query={"limit": "bad"},
+            )
+        )
+        assert_error_envelope(
+            wrong_method_with_bad_pagination,
+            code="method_not_allowed",
+            status=405,
+        )
+
+        selected_list_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/projects",
+                headers=headers,
+                query={"limit": "bad"},
+            )
+        )
+        assert_error_envelope(
+            selected_list_with_bad_pagination,
+            code="invalid_request",
+            status=400,
+        )
+
+    asyncio.run(scenario())
+
+
 def test_unsupported_api_version_is_explicit() -> None:
     async def scenario() -> None:
         control_plane, _, _, _ = _stack()
@@ -630,4 +708,7 @@ def test_openapi_documents_current_scope_without_speculative_future_domains() ->
     assert "/api/v1/tasks/{task_id}/timeline" in paths
     assert "/api/v1/tasks/{task_id}/events/stream" in paths
     assert "/api/v1/search" in paths
+    assert set(paths["/api/v1/projects/{project_id}"]) == {"get"}
+    assert set(paths["/api/v1/tasks/{task_id}:queue"]) == {"post"}
+    assert "/api/v1/projects/{project_id}/does-not-exist" not in paths
     assert spec["x-evolution-policy"]["breaking_changes"] == "require a new major path namespace"

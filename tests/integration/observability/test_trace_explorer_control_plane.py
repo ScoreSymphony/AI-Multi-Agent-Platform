@@ -192,6 +192,29 @@ def test_http_and_openapi_publish_the_same_trace_projection() -> None:
         assert isinstance(detail.body, dict)
         assert detail.body["id"] == "span_agent"
 
+        wrong_trace_method = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/tasks/{task.task_id}/trace",
+                trusted_actor=_context().actor,
+            )
+        )
+        assert wrong_trace_method.status == 405
+        assert isinstance(wrong_trace_method.body, dict)
+        assert wrong_trace_method.body["code"] == "method_not_allowed"
+        assert wrong_trace_method.body["category"] == "transport"
+
+        wrong_node_method = await http.handle(
+            HTTPRequest(
+                method="DELETE",
+                path=f"/api/v1/tasks/{task.task_id}/trace/span_agent",
+                trusted_actor=_context().actor,
+            )
+        )
+        assert wrong_node_method.status == 405
+        assert isinstance(wrong_node_method.body, dict)
+        assert wrong_node_method.body["code"] == "method_not_allowed"
+
     asyncio.run(scenario())
 
     paths = build_openapi()["paths"]

@@ -229,6 +229,9 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
         assert isinstance(paths, dict)
         assert "/api/v1/widgets" in paths
         assert "/api/v1/widgets/{resource_id}" in paths
+        assert set(paths["/api/v1/widgets"]) == {"get"}
+        assert set(paths["/api/v1/widgets/{resource_id}"]) == {"get"}
+        assert "/api/v1/widgets/{resource_id}/does-not-exist" not in paths
         assert f"/api/v1/{NOTIFICATION_COLLECTION}" in paths
         assert "/api/v1/search" in paths
         assert openapi_response.body["x-registered-extension-collections"] == ["widgets"]
@@ -251,6 +254,139 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
         assert loaded.status == 200
         assert isinstance(loaded.body, dict)
         assert loaded.body["name"] == "Beta"
+
+    asyncio.run(scenario())
+
+
+def test_registered_resource_routes_distinguish_unknown_uri_from_wrong_method() -> None:
+    async def scenario() -> None:
+        widget_id = new_id("widget")
+        service = InMemoryResourceService(
+            ({"id": widget_id, "type": "widget", "name": "Route semantics"},)
+        )
+
+        async def refresh_widget(
+            context: RequestContext,
+            resource_ref: str,
+            payload: dict[str, JsonValue],
+        ) -> dict[str, JsonValue]:
+            del context, payload
+            return {"id": resource_ref, "type": "widget", "refreshed": True}
+
+        _, http = _stack(
+            resource_services={"widgets": service},
+            command_handlers={"widget.refresh": refresh_widget},
+        )
+
+        missing_nested = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/widgets/{widget_id}/does-not-exist",
+                headers=_headers(),
+            )
+        )
+        assert missing_nested.status == 404
+        assert isinstance(missing_nested.body, dict)
+        assert missing_nested.body["code"] == "not_found"
+        assert missing_nested.body["category"] == "resource"
+        assert missing_nested.body["request_id"] == "request-extension"
+        assert missing_nested.body["correlation_id"] == "correlation-extension"
+        assert missing_nested.body["retryable"] is False
+        assert missing_nested.body.get("details", {}) == {}
+
+        wrong_collection_method = await http.handle(
+            HTTPRequest(method="POST", path="/api/v1/widgets", headers=_headers())
+        )
+        assert wrong_collection_method.status == 405
+        assert isinstance(wrong_collection_method.body, dict)
+        assert wrong_collection_method.body["code"] == "method_not_allowed"
+        assert wrong_collection_method.body["category"] == "transport"
+        assert wrong_collection_method.body["request_id"] == "request-extension"
+        assert wrong_collection_method.body["correlation_id"] == "correlation-extension"
+        assert wrong_collection_method.body["retryable"] is False
+        assert wrong_collection_method.body.get("details", {}) == {}
+
+        wrong_item_method = await http.handle(
+            HTTPRequest(
+                method="DELETE",
+                path=f"/api/v1/widgets/{widget_id}",
+                headers=_headers(),
+            )
+        )
+        assert wrong_item_method.status == 405
+        assert isinstance(wrong_item_method.body, dict)
+        assert wrong_item_method.body["code"] == "method_not_allowed"
+
+        wrong_command_method = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/commands/widget.refresh",
+                headers=_headers(),
+            )
+        )
+        assert wrong_command_method.status == 405
+        assert isinstance(wrong_command_method.body, dict)
+        assert wrong_command_method.body["code"] == "method_not_allowed"
+
+        unknown_command_wrong_method = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/commands/widget.does-not-exist",
+                headers=_headers(),
+            )
+        )
+        assert unknown_command_wrong_method.status == 405
+        assert isinstance(unknown_command_wrong_method.body, dict)
+        assert unknown_command_wrong_method.body["code"] == "method_not_allowed"
+
+        unknown_command = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/widget.does-not-exist",
+                headers=_headers(key="missing-command"),
+                body={"resource_ref": widget_id},
+            )
+        )
+        assert unknown_command.status == 404
+        assert isinstance(unknown_command.body, dict)
+        assert unknown_command.body["code"] == "not_found"
+        assert unknown_command.body["details"] == {"command": "widget.does-not-exist"}
+
+        missing_nested_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/widgets/{widget_id}/does-not-exist",
+                headers=_headers(),
+                query={"limit": "bad"},
+            )
+        )
+        assert missing_nested_with_bad_pagination.status == 404
+        assert isinstance(missing_nested_with_bad_pagination.body, dict)
+        assert missing_nested_with_bad_pagination.body["code"] == "not_found"
+
+        wrong_method_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/widgets",
+                headers=_headers(),
+                query={"limit": "bad"},
+            )
+        )
+        assert wrong_method_with_bad_pagination.status == 405
+        assert isinstance(wrong_method_with_bad_pagination.body, dict)
+        assert wrong_method_with_bad_pagination.body["code"] == "method_not_allowed"
+
+        selected_list_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/widgets",
+                headers=_headers(),
+                query={"limit": "bad"},
+            )
+        )
+        assert selected_list_with_bad_pagination.status == 400
+        assert isinstance(selected_list_with_bad_pagination.body, dict)
+        assert selected_list_with_bad_pagination.body["code"] == "invalid_request"
 
     asyncio.run(scenario())
 

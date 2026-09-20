@@ -19,6 +19,9 @@ test_provider_error_mapping_does_not_leak_private_exception_types = (
 )
 test_request_and_correlation_id_propagation = cases.test_request_and_correlation_id_propagation
 test_run_list_read_and_status_filter = cases.test_run_list_read_and_status_filter
+test_route_semantics_distinguish_unknown_uri_from_wrong_method = (
+    cases.test_route_semantics_distinguish_unknown_uri_from_wrong_method
+)
 test_task_cancel_and_retry_commands_delegate_to_kernel = (
     cases.test_task_cancel_and_retry_commands_delegate_to_kernel
 )
