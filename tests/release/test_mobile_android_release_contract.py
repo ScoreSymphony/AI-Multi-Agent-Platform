@@ -118,7 +118,7 @@ def test_distribution_document_covers_operator_contract() -> None:
         "Android 7",
         "SHA256SUMS.txt",
         "npm-dependency-tree.json",
-        "resolved_set",
+        "resolved dependency",
         "apksigner",
         "mobile-production",
         "MOBILE_ANDROID_KEYSTORE_B64",
