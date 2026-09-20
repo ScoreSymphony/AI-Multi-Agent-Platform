@@ -730,6 +730,18 @@ def _augment_authentication_openapi(
         "description": "Required for browser-session writes; not used by bearer clients.",
         "schema": {"type": "string"},
     }
+    pairing_request_id_parameter = {
+        "name": "request_id",
+        "in": "path",
+        "required": True,
+        "schema": {"type": "string"},
+    }
+    mobile_credential_id_parameter = {
+        "name": "credential_id",
+        "in": "path",
+        "required": True,
+        "schema": {"type": "string"},
+    }
     auth_paths: dict[str, Any] = {
         f"/api/{API_VERSION}/auth/bootstrap-admin": {
             "post": _auth_operation(
@@ -811,13 +823,14 @@ def _augment_authentication_openapi(
                 public=True,
                 request_fields=("proof", "device_name"),
                 status="201",
+                parameters=(pairing_request_id_parameter,),
             )
         },
         f"/api/{API_VERSION}/auth/mobile-pairing/{{request_id}}:cancel": {
             "post": _auth_operation(
                 "cancelMobilePairing",
                 "Cancel an owned pending mobile pairing challenge.",
-                parameters=(csrf_parameter,),
+                parameters=(pairing_request_id_parameter, csrf_parameter),
             )
         },
         f"/api/{API_VERSION}/auth/mobile-devices": {
@@ -838,14 +851,14 @@ def _augment_authentication_openapi(
                 "renameMobileDevice",
                 "Rename one owned mobile device credential.",
                 request_fields=("device_name",),
-                parameters=(csrf_parameter,),
+                parameters=(mobile_credential_id_parameter, csrf_parameter),
             )
         },
         f"/api/{API_VERSION}/auth/mobile-devices/{{credential_id}}:revoke": {
             "post": _auth_operation(
                 "revokeMobileDevice",
                 "Revoke one owned mobile device credential.",
-                parameters=(csrf_parameter,),
+                parameters=(mobile_credential_id_parameter, csrf_parameter),
             )
         },
         f"/api/{API_VERSION}/auth/credentials": {
