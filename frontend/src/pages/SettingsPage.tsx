@@ -3,6 +3,8 @@ import {
   BrowserSessionClient,
   type AuthenticatedActor,
   type BrowserSessionSummary,
+  type MobileDeviceSummary,
+  type MobilePairingChallenge,
   type ReleaseOperatorStatus,
 } from "../api/browserSession";
 import { ControlPlaneError } from "../api/client";
@@ -20,6 +22,8 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
   const setupClient = useMemo(() => new SetupClient({ transport: session.transport }), [session]);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [sessions, setSessions] = useState<BrowserSessionSummary[] | null>(null);
+  const [mobileDevices, setMobileDevices] = useState<MobileDeviceSummary[] | null>(null);
+  const [mobilePairing, setMobilePairing] = useState<MobilePairingChallenge | null>(null);
   const [releaseStatus, setReleaseStatus] = useState<ReleaseOperatorStatus | null>(null);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -44,12 +48,15 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       const currentActor = await session.me();
       setActor(currentActor);
       setSessions(await session.listSessions());
+      setMobileDevices(await session.listMobileDevices());
       setError(null);
       await loadReleaseStatus();
     } catch (nextError) {
       if (nextError instanceof ControlPlaneError && nextError.status === 401) {
         setActor(null);
         setSessions(null);
+        setMobileDevices(null);
+        setMobilePairing(null);
         setReleaseStatus(null);
         setReleaseError(null);
         session.clearLocalSession();
@@ -74,6 +81,7 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       setActor(result.actor);
       setPassword("");
       setSessions(await session.listSessions());
+      setMobileDevices(await session.listMobileDevices());
       await loadReleaseStatus();
       setError(null);
     } catch (nextError) {
@@ -89,8 +97,66 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       await session.logout();
       setActor(null);
       setSessions(null);
+      setMobileDevices(null);
+      setMobilePairing(null);
       setReleaseStatus(null);
       setReleaseError(null);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function createMobilePairing() {
+    setMutating(true);
+    try {
+      const origin = window.location.origin;
+      const pairing = await session.createMobilePairing(origin);
+      setMobilePairing(pairing);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function cancelMobilePairing() {
+    if (!mobilePairing) return;
+    setMutating(true);
+    try {
+      await session.cancelMobilePairing(mobilePairing.id);
+      setMobilePairing(null);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function revokeMobileDevice(deviceId: string) {
+    if (!window.confirm(`Revoke paired mobile device ${deviceId}?`)) return;
+    setMutating(true);
+    try {
+      await session.revokeMobileDevice(deviceId);
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function revokeAllMobileDevices() {
+    if (!window.confirm("Revoke all paired mobile devices?")) return;
+    setMutating(true);
+    try {
+      await session.revokeAllMobileDevices();
+      setMobileDevices(await session.listMobileDevices());
       setError(null);
     } catch (nextError) {
       setError(nextError);
@@ -297,6 +363,84 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
                     Discovery never changes production pins from this page.
                   </p>
                 )}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Mobile device pairing">
+            <p>
+              Pair the Android/iOS companion without copying a durable bearer credential.
+              Pairing material expires quickly and can be used only once.
+            </p>
+            {mobilePairing === null ? (
+              <div className="actions">
+                <button disabled={mutating} onClick={() => void createMobilePairing()}>
+                  Pair mobile device
+                </button>
+              </div>
+            ) : (
+              <div className="stack">
+                <dl className="definition-list">
+                  <div><dt>Server</dt><dd><code>{mobilePairing.server_origin}</code></dd></div>
+                  <div><dt>Expires</dt><dd>{formatDate(mobilePairing.expires_at)}</dd></div>
+                </dl>
+                <p>
+                  Scan the QR payload with the companion or enter this one-time fallback code:
+                </p>
+                <p><code>{mobilePairing.pairing_code}</code></p>
+                <p className="muted">
+                  Pairing link: <a href={mobilePairing.qr_payload}>{mobilePairing.qr_payload}</a>
+                </p>
+                <div className="actions">
+                  <button disabled={mutating} onClick={() => void cancelMobilePairing()}>
+                    Cancel pairing
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card title="Paired mobile devices">
+            {mobileDevices === null ? (
+              <LoadingState />
+            ) : mobileDevices.length === 0 ? (
+              <EmptyState title="No paired mobile devices" />
+            ) : (
+              <div className="stack">
+                <div className="actions">
+                  <button
+                    disabled={mutating || mobileDevices.every((item) => !item.active)}
+                    onClick={() => void revokeAllMobileDevices()}
+                  >
+                    Revoke all mobile devices
+                  </button>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Device</th><th>Platform</th><th>Status</th><th>Created</th><th>Last used</th><th>Action</th></tr>
+                    </thead>
+                    <tbody>
+                      {mobileDevices.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.display_name}<br /><code>{item.id}</code></td>
+                          <td>{item.platform}</td>
+                          <td><StatusBadge value={item.active ? "active" : "revoked"} /></td>
+                          <td>{formatDate(item.created_at)}</td>
+                          <td>{formatDate(item.last_used_at)}</td>
+                          <td>
+                            <button
+                              disabled={mutating || !item.active}
+                              onClick={() => void revokeMobileDevice(item.id)}
+                            >
+                              Revoke
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </Card>
