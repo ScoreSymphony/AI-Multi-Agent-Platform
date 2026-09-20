@@ -100,6 +100,55 @@ def test_version_state_requires_explicit_baseline_adoption(tmp_path: Path) -> No
         store.initialize()
 
 
+def test_release_only_upgrade_0_0_1_to_1_0_0_preserves_schema_and_revision(
+    tmp_path: Path,
+) -> None:
+    data_dir = _data_dir(tmp_path)
+    source = _versions(platform="0.0.1", schema="1.0", revision="baseline")
+    target = _versions(platform="1.0.0", schema="1.0", revision="baseline")
+    registry = MigrationRegistry()
+    migration_history = JsonMigrationHistoryStore.for_data_dir(data_dir)
+    state = JsonVersionStateStore.for_data_dir(data_dir)
+    state.initialize(source)
+    maintenance = MaintenanceStateStore.for_data_dir(data_dir)
+    upgrade_history = JsonUpgradeHistoryStore.for_data_dir(data_dir)
+    preflight = _preflight(data_dir, registry)
+    service = UpgradeService(
+        migrations=registry,
+        runner=MigrationRunner(migration_history),
+        preflight=preflight,
+        version_state=state,
+        maintenance=maintenance,
+        history=upgrade_history,
+    )
+    request = PreflightRequest(data_dir=data_dir, current=source, target=target)
+
+    report = preflight.run(request)
+
+    assert report.ok
+    assert report.planned_revisions == ()
+    assert report.maintenance_required
+    assert not report.backup_required
+    assert source.domain_schema == target.domain_schema == "1.0"
+    assert source.migration_revision == target.migration_revision == "baseline"
+
+    with pytest.raises(UpgradeError, match="quiesced"):
+        service.apply(request, quiesced=False)
+
+    assert state.read() == source
+    assert not maintenance.active()
+
+    result = service.apply(request, quiesced=True)
+
+    assert result.previous == source
+    assert result.current == target
+    assert result.applied_revisions == ()
+    assert result.rollback_mode is RollbackMode.CODE_ONLY_BEFORE_MIGRATION
+    assert state.read() == target
+    assert migration_history.records() == ()
+    assert not maintenance.active()
+
+
 def test_upgrade_from_previous_schema_fixture_records_history(tmp_path: Path) -> None:
     data_dir = _data_dir(tmp_path)
     old = _versions(platform="0.0.0", schema="0.9", revision="baseline")
