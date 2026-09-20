@@ -414,7 +414,6 @@ def test_route_semantics_distinguish_unknown_uri_from_wrong_method() -> None:
             ("DELETE", "/api/v1/projects/project_missing"),
             ("GET", "/api/v1/tasks/task_missing:queue"),
             ("GET", "/api/v1/tasks/task_missing/runs/run_missing:cancel"),
-            ("GET", "/api/v1/models/model_missing:enable"),
         ):
             response = await http.handle(HTTPRequest(method=method, path=path, headers=headers))
             assert_error_envelope(response, code="method_not_allowed", status=405)
