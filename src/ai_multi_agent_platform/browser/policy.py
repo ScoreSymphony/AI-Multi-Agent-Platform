@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 import socket
 from typing import Protocol
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
@@ -37,36 +37,63 @@ class DefaultBrowserNetworkPolicyHook:
         context: OperationContext,
     ) -> None:
         del operation, context
-        parsed = urlsplit(url)
-        scheme = parsed.scheme.lower()
-        if scheme not in {"http", "https"}:
-            raise _blocked("browser network policy allows only http/https URLs")
-        if scheme == "http" and not self.policy.allow_http:
-            raise _blocked("HTTP is disabled by browser network policy")
-        if scheme == "https" and not self.policy.allow_https:
-            raise _blocked("HTTPS is disabled by browser network policy")
-        if parsed.username is not None or parsed.password is not None:
-            raise _blocked("credentials embedded in browser URLs are forbidden")
+        resolve_browser_target(url, self.policy)
 
-        host = (parsed.hostname or "").rstrip(".").lower()
-        if not host:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "browser URL requires a hostname")
-        if any(_matches_domain(host, denied) for denied in self.policy.denied_domains):
-            raise _blocked(f"browser domain is denied by network policy: {host}")
-        if self.policy.allowed_domains and not any(
-            _matches_domain(host, allowed) for allowed in self.policy.allowed_domains
-        ):
-            raise _blocked(f"browser domain is outside the configured allowlist: {host}")
 
-        if self.policy.allow_private_networks:
-            return
-        if host == "localhost" or host.endswith(".localhost"):
-            raise _blocked("browser access to localhost is blocked by network policy")
-        for address in _resolve_addresses(host):
-            if _is_non_public(address):
-                raise _blocked(
-                    f"browser target resolves to a non-public network address: {address}"
-                )
+def resolve_browser_target(url: str, policy: BrowserNetworkPolicy) -> tuple[str, ...]:
+    """Validate one request target and return only addresses safe to connect to."""
+
+    parsed = urlsplit(url)
+    _validate_scheme(parsed.scheme.lower(), policy)
+    if parsed.username is not None or parsed.password is not None:
+        raise _blocked("credentials embedded in browser URLs are forbidden")
+
+    raw_host = (parsed.hostname or "").rstrip(".")
+    host = raw_host.lower()
+    _validate_host(host, policy)
+    addresses = _resolve_addresses(raw_host)
+    _validate_addresses(host, addresses, policy)
+    return addresses
+
+
+def _validate_scheme(scheme: str, policy: BrowserNetworkPolicy) -> None:
+    if scheme not in {"http", "https"}:
+        raise _blocked("browser network policy allows only http/https URLs")
+    if scheme == "http" and not policy.allow_http:
+        raise _blocked("HTTP is disabled by browser network policy")
+    if scheme == "https" and not policy.allow_https:
+        raise _blocked("HTTPS is disabled by browser network policy")
+
+
+def _validate_host(host: str, policy: BrowserNetworkPolicy) -> None:
+    if not host:
+        raise ContractError(ErrorCode.INVALID_REQUEST, "browser URL requires a hostname")
+    if any(_matches_domain(host, denied) for denied in policy.denied_domains):
+        raise _blocked(f"browser domain is denied by network policy: {host}")
+    if policy.allowed_domains and not any(
+        _matches_domain(host, allowed) for allowed in policy.allowed_domains
+    ):
+        raise _blocked(f"browser domain is outside the configured allowlist: {host}")
+    if not policy.allow_private_networks and (host == "localhost" or host.endswith(".localhost")):
+        raise _blocked("browser access to localhost is blocked by network policy")
+
+
+def _validate_addresses(
+    host: str,
+    addresses: tuple[str, ...],
+    policy: BrowserNetworkPolicy,
+) -> None:
+    if not addresses:
+        raise ContractError(
+            ErrorCode.UNAVAILABLE,
+            f"browser target hostname resolved without usable addresses: {host}",
+            retryable=True,
+        )
+    if policy.allow_private_networks:
+        return
+    for address in addresses:
+        if _is_non_public(address):
+            raise _blocked(f"browser target resolves to a non-public network address: {address}")
 
 
 def _matches_domain(host: str, configured: str) -> bool:
@@ -75,8 +102,9 @@ def _matches_domain(host: str, configured: str) -> bool:
 
 
 def _resolve_addresses(host: str) -> tuple[str, ...]:
+    literal_host = unquote(host) if ":" in host else host
     try:
-        address = ipaddress.ip_address(host)
+        address = ipaddress.ip_address(literal_host)
     except ValueError:
         try:
             results = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
