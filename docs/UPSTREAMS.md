@@ -289,17 +289,17 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #1240.
 - **Integration category/categories:** library dependency; optional client build/runtime.
 - **Canonical upstream repository:** `https://github.com/expo/expo` and `https://github.com/facebook/react-native`.
-- **Pinned version/tag/commit or deployed revision:** Expo `57.0.17`; React Native `0.86.3`; `expo-secure-store` `57.0.4`.
+- **Pinned version/tag/commit or deployed revision:** Expo `57.0.17`; React Native `0.86.3`; `expo-secure-store` `57.0.4`; `expo-camera` `~57.0.5`.
 - **Verified license:** MIT.
 - **License verification date:** 2026-09-19.
-- **Last review date:** 2026-09-19.
+- **Last review date:** 2026-09-20.
 - **Platform adapter/boundary:** optional `mobile/` application consuming only public `/api/v1` Control Plane resources/commands.
 - **Local source path:** none for upstream source; `mobile/` contains project-owned client code only.
 - **Source origin/path:** no upstream source copied, vendored, forked or selectively ported.
 - **Modified locally:** no upstream source modifications.
 - **Required notices / attribution:** installed packages retain their own package/license metadata; no vendored upstream notice bundle is required.
 - **Known compatibility constraints:** Expo SDK 57 stable line; React Native 0.86 stable line; Android 7+; iOS 16.4+.
-- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; no server port/database/GPU/paid service is introduced.
+- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; `expo-camera` is limited to in-app QR pairing scans and does not persist/upload camera media; no server port/database/GPU/paid service is introduced.
 - **Required for baseline:** no.
 - **Recurring paid service required:** no.
 - **Update/review method:** explicit dependency update PR; review Expo/React Native release/security notes and run mobile typecheck/tests/config plus Android/iOS export smoke.
