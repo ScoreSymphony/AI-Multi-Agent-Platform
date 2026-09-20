@@ -80,7 +80,7 @@ def test_release_publication_rejects_preexisting_version_tags() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "git/matching-refs/tags/$TAG?per_page=100" in workflow
-    assert 'any(.[][]; .ref == $ref)' in workflow
+    assert "any(.[][]; .ref == $ref)" in workflow
     assert "Git tag $TAG already exists" in workflow
 
 
