@@ -29,8 +29,7 @@ from .models import BrowserNetworkPolicy, BrowserOperation
 from .policy import BrowserNetworkPolicyHook, resolve_browser_target
 from .reference_page import SessionState
 
-
-_DEFAULT_TIMEOUT: Any = getattr(socket, "_GLOBAL_DEFAULT_TIMEOUT")
+_DEFAULT_TIMEOUT: Any = socket._GLOBAL_DEFAULT_TIMEOUT  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True, slots=True)
