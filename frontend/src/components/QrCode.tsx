@@ -25,6 +25,9 @@ const CONFIGS: QrVersionConfig[] = [
   { version: 8, dataCodewords: 194, eccPerBlock: 24, blockDataSizes: [97, 97], alignment: [6, 24, 42] },
   { version: 9, dataCodewords: 232, eccPerBlock: 30, blockDataSizes: [116, 116], alignment: [6, 26, 46] },
   { version: 10, dataCodewords: 274, eccPerBlock: 18, blockDataSizes: [68, 68, 69, 69], alignment: [6, 28, 50] },
+  { version: 11, dataCodewords: 324, eccPerBlock: 20, blockDataSizes: [81, 81, 81, 81], alignment: [6, 30, 54] },
+  { version: 12, dataCodewords: 370, eccPerBlock: 24, blockDataSizes: [92, 92, 93, 93], alignment: [6, 32, 58] },
+  { version: 13, dataCodewords: 428, eccPerBlock: 26, blockDataSizes: [107, 107, 107, 107], alignment: [6, 34, 62] },
 ];
 
 const QUIET_ZONE = 4;
