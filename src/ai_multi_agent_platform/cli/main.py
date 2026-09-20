@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, cast
@@ -112,7 +112,12 @@ def run_cli(
             sys.stdin = previous_stdin
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(
+    *,
+    extra_parsers: Sequence[
+        Callable[[argparse._SubParsersAction[argparse.ArgumentParser]], None]
+    ] = (),
+) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="platform",
         description="Canonical API-first CLI for AI Multi-Agent Platform",
@@ -350,6 +355,9 @@ def _build_parser() -> argparse.ArgumentParser:
     extension_execute.add_argument("resource_ref")
     extension_execute.add_argument("--payload", default="{}", help="JSON object command payload")
     extension_execute.add_argument("--idempotency-key", required=True)
+
+    for add_parser in extra_parsers:
+        add_parser(areas)
 
     return parser
 
