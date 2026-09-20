@@ -6,7 +6,12 @@ from datetime import datetime
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .authentication_models import AuthenticatedActor, BrowserSession, StoredCredential
+from .authentication_models import (
+    AuthenticatedActor,
+    BrowserSession,
+    MobileDevice,
+    StoredCredential,
+)
 from .authentication_tokens import authentication_now
 
 
@@ -42,6 +47,36 @@ def safe_credential(credential: StoredCredential) -> dict[str, JsonValue]:
     }
 
 
+
+def safe_mobile_device(
+    device: MobileDevice,
+    credential: StoredCredential | None,
+    *,
+    now: datetime | None = None,
+) -> dict[str, JsonValue]:
+    current = authentication_now(now)
+    active = credential is not None and credential.active(now=current)
+    return {
+        "id": device.device_id,
+        "user_id": device.user_id,
+        "credential_id": device.credential_id,
+        "display_name": device.display_name,
+        "platform": device.platform,
+        "created_at": device.created_at.isoformat(),
+        "last_used_at": (
+            credential.last_used_at.isoformat()
+            if credential is not None and credential.last_used_at is not None
+            else None
+        ),
+        "revoked_at": (
+            credential.revoked_at.isoformat()
+            if credential is not None and credential.revoked_at is not None
+            else None
+        ),
+        "active": active,
+    }
+
+
 def safe_actor(actor: AuthenticatedActor) -> dict[str, JsonValue]:
     metadata: dict[str, JsonValue] = {
         namespace: value for namespace, value in actor.provider_metadata.items()
@@ -61,4 +96,4 @@ def safe_actor(actor: AuthenticatedActor) -> dict[str, JsonValue]:
     }
 
 
-__all__ = ["safe_actor", "safe_credential", "safe_session"]
+__all__ = ["safe_actor", "safe_credential", "safe_mobile_device", "safe_session"]
