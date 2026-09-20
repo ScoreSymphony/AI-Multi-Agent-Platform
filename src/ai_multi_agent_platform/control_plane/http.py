@@ -609,9 +609,7 @@ class ControlPlaneASGI:
                 continue
             matched = True
             allowed_methods.update(
-                operation.upper()
-                for operation in operations
-                if operation.lower() in _HTTP_METHODS
+                operation.upper() for operation in operations if operation.lower() in _HTTP_METHODS
             )
 
         if not matched:
@@ -737,10 +735,10 @@ class ControlPlaneASGI:
         )
 
 
-_HTTP_METHODS = frozenset(
-    {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
-)
+_HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "trace"})
 _TASK_COMMANDS = frozenset({"queue", "start", "cancel", "retry"})
+_MODEL_COMMANDS = frozenset({"enable", "disable"})
+_MODEL_PROVIDER_COMMANDS = frozenset({"enable", "disable", "refresh-health"})
 
 
 def _foundation_route_error_before_body_validation(
@@ -780,6 +778,32 @@ def _foundation_route_error_before_body_validation(
             code="method_not_allowed",
             message="method not allowed",
         )
+
+    if method.upper() == "POST":
+        for prefix, commands, message in (
+            (
+                f"/api/{API_VERSION}/models/",
+                _MODEL_COMMANDS,
+                "unknown model command",
+            ),
+            (
+                f"/api/{API_VERSION}/model-providers/",
+                _MODEL_PROVIDER_COMMANDS,
+                "unknown model-provider command",
+            ),
+        ):
+            if not path.startswith(prefix):
+                continue
+            relative = path[len(prefix) :]
+            if "/" in relative or ":" not in relative:
+                continue
+            _, command = relative.rsplit(":", 1)
+            if command not in commands:
+                return APIException(
+                    status=404,
+                    code="not_found",
+                    message=message,
+                )
     return None
 
 
