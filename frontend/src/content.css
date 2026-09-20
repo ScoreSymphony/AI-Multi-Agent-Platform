@@ -187,6 +187,16 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+.task-project-actions {
+  min-width: 0;
+}
+
+.task-project-actions select {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .actions button,
 .actions-cell button,
 .button-row button {
