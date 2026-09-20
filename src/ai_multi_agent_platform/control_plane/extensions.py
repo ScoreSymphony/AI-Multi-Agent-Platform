@@ -639,9 +639,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                     "registered_routes",
                     (),
                 )
-                if not any(
-                    route_path == normalized_path for _, route_path in registered_routes
-                ):
+                if not any(route_path == normalized_path for _, route_path in registered_routes):
                     raise APIException(status=404, code="not_found", message="route not found")
 
             if (
