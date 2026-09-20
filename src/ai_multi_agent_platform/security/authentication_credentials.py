@@ -73,6 +73,7 @@ class AuthenticationCredentialService:
         expires_at: datetime | None = None,
         now: datetime | None = None,
         scope: Mapping[str, JsonValue] | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> IssuedCredential:
         current = authentication_now(now)
         if not owner_id.strip() or not purpose.strip():
@@ -96,6 +97,7 @@ class AuthenticationCredentialService:
             created_at=current,
             scope=stored_scope,
             expires_at=expires_at,
+            metadata=dict(metadata or {}),
         )
         self.audit(
             "auth.credential_created",
@@ -118,6 +120,7 @@ class AuthenticationCredentialService:
         purpose: str,
         expires_at: datetime | None = None,
         now: datetime | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> IssuedCredential:
         return self.create_credential(
             user_id,
@@ -126,6 +129,7 @@ class AuthenticationCredentialService:
             purpose=purpose,
             expires_at=expires_at,
             now=now,
+            metadata=metadata,
         )
 
     def create_service_credential(
