@@ -45,6 +45,9 @@ class AuthenticationFailure(StrEnum):
     RATE_LIMITED = "rate_limited"
     CSRF_FAILED = "csrf_failed"
     REPLAY_REJECTED = "replay_rejected"
+    PAIRING_EXPIRED = "pairing_expired"
+    PAIRING_CANCELLED = "pairing_cancelled"
+    PAIRING_ALREADY_USED = "pairing_already_used"
     EXTERNAL_IDENTITY_UNMAPPED = "external_identity_unmapped"
 
 
@@ -121,9 +124,11 @@ class StoredCredential:
     expires_at: datetime | None = None
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "scope", MappingProxyType(dict(self.scope)))
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     def active(self, *, now: datetime) -> bool:
         return self.revoked_at is None and (self.expires_at is None or now < self.expires_at)
