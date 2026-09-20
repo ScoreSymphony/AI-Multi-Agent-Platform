@@ -10,6 +10,10 @@ on:
         description: Repository path to reviewed release generation-input JSON
         required: true
         type: string
+      release_created_at:
+        description: RFC3339 timestamp to record in the deterministic release manifest
+        required: true
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -74,6 +78,7 @@ jobs:
           PROVENANCE_BUNDLE_PATH: ${{ steps.provenance_attestation.outputs.bundle-path }}
           SBOM_ATTESTATION_URL: ${{ steps.sbom_attestation.outputs.attestation-url }}
           SBOM_BUNDLE_PATH: ${{ steps.sbom_attestation.outputs.bundle-path }}
+          RELEASE_CREATED_AT: ${{ inputs.release_created_at }}
         run: |
           set -euo pipefail
           cp "$PROVENANCE_BUNDLE_PATH" .release-evidence/build-provenance.attestation.json
@@ -94,6 +99,9 @@ jobs:
               raise SystemExit("SBOM attestation URL is not a GitHub HTTPS reference")
           document["provenance_ref"] = provenance_url
           document["sbom_ref"] = sbom_url
+          if document.get("created_at") != "REPLACE_WITH_RELEASE_CREATED_AT":
+              raise SystemExit("release generation input must use the reviewed created_at placeholder")
+          document["created_at"] = os.environ["RELEASE_CREATED_AT"]
           output = Path(".release-evidence/generation-input.resolved.json")
           output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
           PY
