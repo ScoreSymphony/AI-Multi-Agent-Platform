@@ -12,6 +12,9 @@ on:
         type: string
 permissions:
   contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 jobs:
   generate:
     runs-on: ubuntu-latest
@@ -43,7 +46,66 @@ jobs:
           .release-evidence/runtime-venv/bin/python -m pip install .
           .release-evidence/runtime-venv/bin/python -m pip freeze --all > .release-evidence/python-resolved.txt
           python scripts/release/python_declared_dependencies.py pyproject.toml .release-evidence/python-declared.txt
+          created_at="$(git show -s --format=%cI "${{ inputs.source_commit }}")"
+          python scripts/release/generate_supply_chain_evidence.py \
+            --source-commit "${{ inputs.source_commit }}" \
+            --created-at "$created_at" \
+            --pyproject pyproject.toml \
+            --python-declared .release-evidence/python-declared.txt \
+            --python-resolved .release-evidence/python-resolved.txt \
+            --frontend-lock frontend/package-lock.json \
+            --sbom-output .release-evidence/sbom.spdx.json
           python -m pip install .
+      - name: Attest wheel build provenance
+        id: provenance_attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: .release-evidence/platform.whl
+      - name: Attest wheel SBOM
+        id: sbom_attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: .release-evidence/platform.whl
+          sbom-path: .release-evidence/sbom.spdx.json
+      - name: Resolve signed release evidence
+        shell: bash
+        env:
+          PROVENANCE_ATTESTATION_URL: ${{ steps.provenance_attestation.outputs.attestation-url }}
+          PROVENANCE_BUNDLE_PATH: ${{ steps.provenance_attestation.outputs.bundle-path }}
+          SBOM_ATTESTATION_URL: ${{ steps.sbom_attestation.outputs.attestation-url }}
+          SBOM_BUNDLE_PATH: ${{ steps.sbom_attestation.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$PROVENANCE_BUNDLE_PATH" .release-evidence/build-provenance.attestation.json
+          cp "$SBOM_BUNDLE_PATH" .release-evidence/sbom.attestation.json
+          python - "${{ inputs.generation_input }}" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          source = Path(sys.argv[1])
+          document = json.loads(source.read_text(encoding="utf-8"))
+          provenance_url = os.environ["PROVENANCE_ATTESTATION_URL"]
+          sbom_url = os.environ["SBOM_ATTESTATION_URL"]
+          if not provenance_url.startswith("https://github.com/"):
+              raise SystemExit("provenance attestation URL is not a GitHub HTTPS reference")
+          if not sbom_url.startswith("https://github.com/"):
+              raise SystemExit("SBOM attestation URL is not a GitHub HTTPS reference")
+          document["provenance_ref"] = provenance_url
+          document["sbom_ref"] = sbom_url
+          output = Path(".release-evidence/generation-input.resolved.json")
+          output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+          PY
+          sha256sum \
+            .release-evidence/platform.whl \
+            .release-evidence/sbom.spdx.json \
+            .release-evidence/build-provenance.attestation.json \
+            .release-evidence/sbom.attestation.json \
+            .release-evidence/python-declared.txt \
+            .release-evidence/python-resolved.txt \
+            frontend/package-lock.json \
+            > .release-evidence/SHA256SUMS
       - name: Validate declared dependency evidence binding
         shell: bash
         run: |
@@ -80,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          platform-release generate --source-commit "${{ inputs.source_commit }}" --input "${{ inputs.generation_input }}" --inventory release/compatibility.json --output release-manifest.json --json > release-manifest.generated.json
+          platform-release generate --source-commit "${{ inputs.source_commit }}" --input .release-evidence/generation-input.resolved.json --inventory release/compatibility.json --output release-manifest.json --json > release-manifest.generated.json
           platform-release validate --manifest release-manifest.json --json > release-manifest.validation.json
           sha256sum release-manifest.json > release-manifest.sha256
       - uses: actions/upload-artifact@v7
@@ -93,5 +155,10 @@ jobs:
             release-manifest.generated.json
             release-manifest.validation.json
             .release-evidence/platform.whl
+            .release-evidence/sbom.spdx.json
+            .release-evidence/build-provenance.attestation.json
+            .release-evidence/sbom.attestation.json
+            .release-evidence/generation-input.resolved.json
+            .release-evidence/SHA256SUMS
             .release-evidence/python-declared.txt
             .release-evidence/python-resolved.txt
