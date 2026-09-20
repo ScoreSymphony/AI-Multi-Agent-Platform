@@ -6,6 +6,8 @@ from .authentication_models import (
     BrowserSession,
     ExternalIdentityMapping,
     LocalUserAccount,
+    MobileDevice,
+    MobilePairingChallenge,
     StoredCredential,
 )
 
@@ -19,6 +21,8 @@ class InMemoryAuthenticationStore:
         self.sessions: dict[str, BrowserSession] = {}
         self.credentials: dict[str, StoredCredential] = {}
         self.external_mappings: dict[tuple[str, str, str], ExternalIdentityMapping] = {}
+        self.mobile_pairings: dict[str, MobilePairingChallenge] = {}
+        self.mobile_devices: dict[str, MobileDevice] = {}
 
     def add_user(self, account: LocalUserAccount) -> None:
         normalized = normalize_username(account.username)
