@@ -187,7 +187,7 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             )
 
         if request.method == "POST" and relative == "/auth/mobile-pairings:consume":
-            pairing_id = _required_string(request.body, "pairing_id")
+            pairing_id = _optional_string(request.body.get("pairing_id"), "pairing_id")
             code = _required_string(request.body, "code")
             device_name = _required_string(request.body, "device_name")
             protocol_version = _required_string(request.body, "protocol_version")
@@ -794,6 +794,14 @@ def _required_string(payload: dict[str, JsonValue], name: str) -> str:
     return value
 
 
+def _optional_string(value: JsonValue | None, name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value.strip()
+
+
 def _optional_object(value: JsonValue | None, name: str) -> dict[str, JsonValue]:
     if value is None:
         return {}
@@ -887,7 +895,7 @@ def _augment_authentication_openapi(
                 "consumeMobilePairing",
                 "Consume a short-lived single-use mobile pairing proof and issue one device credential.",
                 public=True,
-                request_fields=("pairing_id", "code", "device_name", "protocol_version"),
+                request_fields=("code", "device_name", "protocol_version"),
                 status="201",
             )
         },
