@@ -104,4 +104,3 @@ def test_nested_help_resolves_to_owning_domain_parser(
         run_cli(arguments)
     assert exc_info.value.code == 0
     assert marker in capsys.readouterr().out
-
