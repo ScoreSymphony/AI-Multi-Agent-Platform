@@ -26,14 +26,16 @@ The mobile client:
 2. pairs through a short-lived, single-use QR/deep-link or fallback-code challenge created by an
    authenticated trusted Web/CLI session;
 3. receives a dedicated revocable mobile bearer credential from the canonical Authentication
-   authority and validates it through `/api/v1/auth/me`;
-4. persists that credential only through `expo-secure-store` (Android Keystore-backed encrypted
-   storage / iOS Keychain);
+   authority;
+4. persists the one-time pairing result only through `expo-secure-store` (Android Keystore-backed
+   encrypted storage / iOS Keychain) before verifying it through `/api/v1/auth/me`; canonical 401
+   clears it, while transient verification outages retain it for restart recovery;
 5. requires HTTPS for non-loopback servers;
 6. treats cached read state as an explicitly stale projection only;
 7. does not queue mutations offline in the first slice;
 8. uses allowlisted resource deep links plus the narrowly versioned `aiagentplatform://pair`
-   bootstrap envelope; opening a pairing link never consumes it without explicit confirmation;
+   bootstrap envelope; `expo-camera` may scan that QR envelope in-app, but scanning/opening it
+   never consumes the challenge without explicit server confirmation;
 9. reads canonical Notifications; OS push delivery is deferred and may never become another
    notification authority;
 10. performs human takeover only through the existing Conversation-input resume route for an
