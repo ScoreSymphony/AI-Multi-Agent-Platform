@@ -17,6 +17,12 @@ import {
   OfflineMutationError,
 } from "./src/client";
 import { parseMobileDeepLink, type MobileRouteKind } from "./src/deepLinks";
+import {
+  completeMobilePairing,
+  pairingRequestFromFallbackCode,
+  parseMobilePairingDeepLink,
+  type MobilePairingRequest,
+} from "./src/pairing";
 import { ExpoSecureSecretStorage } from "./src/secureStore";
 import { MobileSessionStore } from "./src/session";
 import type {
@@ -46,7 +52,10 @@ export default function App() {
   const [stale, setStale] = useState(false);
 
   const [serverUrl, setServerUrl] = useState("https://");
-  const [token, setToken] = useState("");
+  const [pairingRequest, setPairingRequest] = useState<MobilePairingRequest | null>(null);
+  const [pairingRequestId, setPairingRequestId] = useState("");
+  const [pairingCode, setPairingCode] = useState("");
+  const [deviceName, setDeviceName] = useState("Android device");
 
   const [tasks, setTasks] = useState<CanonicalTask[]>([]);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
@@ -113,6 +122,13 @@ export default function App() {
   useEffect(() => {
     const handle = (url: string | null) => {
       if (!url) return;
+      const pairing = parseMobilePairingDeepLink(url);
+      if (pairing) {
+        setPairingRequest(pairing);
+        setServerUrl(pairing.serverOrigin);
+        setNotice("Review the server identity below before pairing this device.");
+        return;
+      }
       const route = parseMobileDeepLink(url);
       if (!route) {
         setNotice("Rejected an invalid or unsupported deep link.");
@@ -132,22 +148,39 @@ export default function App() {
     void refreshCurrentTab(tab);
   }, [client, actor, tab]);
 
-  async function activate(): Promise<void> {
+  async function pairDevice(request: MobilePairingRequest): Promise<void> {
     setBusy(true);
     setNotice(null);
     try {
-      const currentActor = await sessionStore.activate(serverUrl, token);
+      const result = await completeMobilePairing(
+        sessionStore,
+        request,
+        deviceName,
+        { platform: "android" },
+      );
       const session = await sessionStore.current();
-      if (!session) throw new Error("Secure session activation did not persist");
-      setToken("");
-      setActor(currentActor);
+      if (!session) throw new Error("Secure paired session did not persist");
+      setPairingRequest(null);
+      setPairingRequestId("");
+      setPairingCode("");
+      setActor(result.actor);
       setClient(makeClient(session.baseUrl));
       setServerUrl(session.baseUrl);
+      setNotice("Device paired. The credential is stored in the OS secure store.");
     } catch (error) {
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
       setReady(true);
+    }
+  }
+
+  async function pairWithFallbackCode(): Promise<void> {
+    try {
+      const request = pairingRequestFromFallbackCode(serverUrl, pairingRequestId, pairingCode);
+      await pairDevice(request);
+    } catch (error) {
+      setNotice(messageFor(error));
     }
   }
 
@@ -327,9 +360,38 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>AI Multi-Agent Platform</Text>
           <Text style={styles.muted}>
-            Mobile uses an already-issued bearer credential and validates it against
-            /api/v1/auth/me. Remote servers require TLS.
+            Pair this device from the trusted Web UI. Scan its QR code with Android's camera so
+            this app opens the one-time pairing link, or enter the displayed fallback code.
+            Remote servers require TLS.
           </Text>
+          <Text style={styles.label}>Device name</Text>
+          <TextInput
+            value={deviceName}
+            onChangeText={setDeviceName}
+            style={styles.input}
+          />
+          {pairingRequest ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Review server before pairing</Text>
+              <Text selectable>{pairingRequest.serverOrigin}</Text>
+              <Text selectable>Request: {pairingRequest.requestId}</Text>
+              <Text style={styles.muted}>
+                Continue only if this is the Control Plane you intended to trust.
+              </Text>
+              <View style={styles.actions}>
+                <Button
+                  title={busy ? "Pairing…" : "Pair with this server"}
+                  onPress={() => void pairDevice(pairingRequest)}
+                  disabled={busy}
+                />
+                <Button
+                  title="Cancel"
+                  onPress={() => setPairingRequest(null)}
+                  disabled={busy}
+                />
+              </View>
+            </View>
+          ) : null}
           <Text style={styles.label}>Control Plane URL</Text>
           <TextInput
             autoCapitalize="none"
@@ -338,16 +400,27 @@ export default function App() {
             onChangeText={setServerUrl}
             style={styles.input}
           />
-          <Text style={styles.label}>Bearer credential</Text>
+          <Text style={styles.label}>Pairing request ID</Text>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
-            secureTextEntry
-            value={token}
-            onChangeText={setToken}
+            value={pairingRequestId}
+            onChangeText={setPairingRequestId}
             style={styles.input}
           />
-          <Button title={busy ? "Validating…" : "Activate secure session"} onPress={() => void activate()} disabled={busy} />
+          <Text style={styles.label}>Fallback pairing code</Text>
+          <TextInput
+            autoCapitalize="characters"
+            autoCorrect={false}
+            value={pairingCode}
+            onChangeText={setPairingCode}
+            style={styles.input}
+          />
+          <Button
+            title={busy ? "Pairing…" : "Pair with fallback code"}
+            onPress={() => void pairWithFallbackCode()}
+            disabled={busy}
+          />
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </ScrollView>
       </SafeAreaView>
