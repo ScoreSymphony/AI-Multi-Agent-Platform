@@ -68,6 +68,31 @@ def test_release_workflow_fails_closed_around_identity_and_integrity() -> None:
         assert required in workflow
 
 
+def test_release_configuration_evidence_is_valid_json_without_npm_banner() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "node scripts/validate-release-config.mjs | tee" in workflow
+    assert "npm run validate:release | tee" not in workflow
+
+
+def test_partial_release_publication_is_resumable_only_for_matching_draft() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    for required in (
+        "--json isDraft,tagName,targetCommitish",
+        '"Existing draft release $TAG targets a different source commit"',
+        'RELEASE_MODE="resume"',
+        'gh release upload "$TAG"',
+        "--clobber",
+        'gh release create "$TAG"',
+        "--draft",
+        'gh release edit "$TAG"',
+        "--draft=false",
+        '"Git tag $TAG already exists without a matching resumable draft"',
+    ):
+        assert required in workflow
+
+
 def test_release_lineage_scan_paginates_all_github_releases() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -83,8 +108,8 @@ def test_release_publication_rejects_preexisting_version_tags() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "git/matching-refs/tags/$TAG?per_page=100" in workflow
-    assert "any(.[][]; .ref == $ref)" in workflow
-    assert "Git tag $TAG already exists" in workflow
+    assert "TAG_SHA" in workflow
+    assert "Git tag $TAG already exists without a matching resumable draft" in workflow
 
 
 def test_apk_metadata_enforces_android_7_minimum_sdk() -> None:
