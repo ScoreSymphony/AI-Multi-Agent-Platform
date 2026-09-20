@@ -352,6 +352,42 @@ def test_registered_resource_routes_distinguish_unknown_uri_from_wrong_method() 
         assert unknown_command.body["code"] == "not_found"
         assert unknown_command.body["details"] == {"command": "widget.does-not-exist"}
 
+        missing_nested_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/widgets/{widget_id}/does-not-exist",
+                headers=_headers(),
+                query={"limit": "bad"},
+            )
+        )
+        assert missing_nested_with_bad_pagination.status == 404
+        assert isinstance(missing_nested_with_bad_pagination.body, dict)
+        assert missing_nested_with_bad_pagination.body["code"] == "not_found"
+
+        wrong_method_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/widgets",
+                headers=_headers(),
+                query={"limit": "bad"},
+            )
+        )
+        assert wrong_method_with_bad_pagination.status == 405
+        assert isinstance(wrong_method_with_bad_pagination.body, dict)
+        assert wrong_method_with_bad_pagination.body["code"] == "method_not_allowed"
+
+        selected_list_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/widgets",
+                headers=_headers(),
+                query={"limit": "bad"},
+            )
+        )
+        assert selected_list_with_bad_pagination.status == 400
+        assert isinstance(selected_list_with_bad_pagination.body, dict)
+        assert selected_list_with_bad_pagination.body["code"] == "invalid_request"
+
     asyncio.run(scenario())
 
 
