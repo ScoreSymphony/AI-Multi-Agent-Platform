@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 import socket
 from typing import Protocol
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
@@ -48,9 +48,10 @@ def resolve_browser_target(url: str, policy: BrowserNetworkPolicy) -> tuple[str,
     if parsed.username is not None or parsed.password is not None:
         raise _blocked("credentials embedded in browser URLs are forbidden")
 
-    host = (parsed.hostname or "").rstrip(".").lower()
+    raw_host = (parsed.hostname or "").rstrip(".")
+    host = raw_host.lower()
     _validate_host(host, policy)
-    addresses = _resolve_addresses(host)
+    addresses = _resolve_addresses(raw_host)
     _validate_addresses(host, addresses, policy)
     return addresses
 
@@ -101,8 +102,9 @@ def _matches_domain(host: str, configured: str) -> bool:
 
 
 def _resolve_addresses(host: str) -> tuple[str, ...]:
+    literal_host = unquote(host) if ":" in host else host
     try:
-        address = ipaddress.ip_address(host)
+        address = ipaddress.ip_address(literal_host)
     except ValueError:
         try:
             results = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
