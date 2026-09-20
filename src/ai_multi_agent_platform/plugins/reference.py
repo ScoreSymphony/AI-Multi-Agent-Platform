@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.capabilities.types import (
     CapabilityRegistration,
@@ -49,7 +50,7 @@ def reference_manifest() -> PluginManifest:
             source_repository="https://github.com/ScoreSymphony/AI-Multi-Agent-Platform",
             trust_source="platform-source",
         ),
-        supported_platform=VersionRange(minimum="0.0.1", maximum="0.0.1"),
+        supported_platform=VersionRange(minimum="0.0.1", maximum=__version__),
         extensions=(
             PluginExtensionSpec(
                 extension_id=REFERENCE_EXTENSION_ID,
