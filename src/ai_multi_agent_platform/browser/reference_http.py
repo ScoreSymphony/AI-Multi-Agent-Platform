@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import http.client
 import socket
+import ssl
 from collections.abc import Callable
 from dataclasses import dataclass
 from email.message import Message
@@ -29,6 +30,9 @@ from .policy import BrowserNetworkPolicyHook, resolve_browser_target
 from .reference_page import SessionState
 
 
+_DEFAULT_TIMEOUT: Any = getattr(socket, "_GLOBAL_DEFAULT_TIMEOUT")
+
+
 @dataclass(frozen=True, slots=True)
 class FetchedResource:
     final_url: str
@@ -41,7 +45,7 @@ class FetchedResource:
 def _connect_to_pinned_address(
     pinned_addresses: tuple[str, ...],
     destination: tuple[str, int],
-    timeout: Any = socket._GLOBAL_DEFAULT_TIMEOUT,
+    timeout: Any = _DEFAULT_TIMEOUT,
     source_address: tuple[str, int] | None = None,
 ) -> socket.socket:
     _host, port = destination
@@ -66,7 +70,7 @@ class _PinnedHTTPConnection(http.client.HTTPConnection):
         host: str,
         port: int | None = None,
         *,
-        timeout: Any = socket._GLOBAL_DEFAULT_TIMEOUT,
+        timeout: Any = _DEFAULT_TIMEOUT,
         source_address: tuple[str, int] | None = None,
         blocksize: int = 8192,
         pinned_addresses: tuple[str, ...],
@@ -89,7 +93,7 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         host: str,
         port: int | None = None,
         *,
-        timeout: Any = socket._GLOBAL_DEFAULT_TIMEOUT,
+        timeout: Any = _DEFAULT_TIMEOUT,
         source_address: tuple[str, int] | None = None,
         context: Any = None,
         blocksize: int = 8192,
@@ -123,7 +127,8 @@ class _PinnedHTTPHandler(HTTPHandler):
 
 class _PinnedHTTPSHandler(HTTPSHandler):
     def __init__(self, resolver: Callable[[str], tuple[str, ...]]) -> None:
-        super().__init__()
+        self._tls_context = ssl.create_default_context()
+        super().__init__(context=self._tls_context)
         self._resolver = resolver
 
     def https_open(self, req: Request) -> Any:
@@ -131,7 +136,7 @@ class _PinnedHTTPSHandler(HTTPSHandler):
             _PinnedHTTPSConnection,
             pinned_addresses=self._resolver(req.full_url),
         )
-        return self.do_open(connection, req, context=self._context)
+        return self.do_open(connection, req, context=self._tls_context)
 
 
 class _PolicyRedirectHandler(HTTPRedirectHandler):
