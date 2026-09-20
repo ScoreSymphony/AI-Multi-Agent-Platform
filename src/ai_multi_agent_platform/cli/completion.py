@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterable, Sequence
 
-from .main import _build_parser
+from .app import build_composed_parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -40,7 +40,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def candidates(words: Sequence[str]) -> tuple[str, ...]:
     """Return command/option candidates for words after the ``platform`` executable."""
 
-    parser = _build_parser()
+    parser = build_composed_parser()
     current = words[-1] if words else ""
     completed = list(words[:-1]) if words else []
     pending_action: argparse.Action | None = None
