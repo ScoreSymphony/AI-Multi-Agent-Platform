@@ -43,6 +43,23 @@ async def _request(
     )
 
 
+async def _public_request(
+    deployment: SingleNodeDeployment,
+    method: str,
+    path: str,
+    *,
+    body: dict[str, object] | None = None,
+):
+    return await deployment.http.handle(
+        HTTPRequest(
+            method=method,
+            path=path,
+            headers={"content-type": "application/json"},
+            body=body or {},
+        )
+    )
+
+
 def test_mobile_routes_project_real_single_node_control_plane_state(tmp_path: Path) -> None:
     deployment = build_default_single_node_deployment(
         SingleNodeConfig(
@@ -162,5 +179,118 @@ def test_mobile_routes_project_real_single_node_control_plane_state(tmp_path: Pa
             assert command in source
         assert "conversation-messages/" in source
         assert ":resume-task" in source
+
+    asyncio.run(scenario())
+
+
+
+def test_mobile_pairing_uses_public_one_time_exchange_and_server_revocation(tmp_path: Path) -> None:
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "platform",
+            secure_cookie=False,
+        )
+    )
+    admin = deployment.bootstrap_admin("mobile-pairing-admin", secrets.token_urlsafe(32))
+    bootstrap = deployment.authentication.create_personal_access_token(
+        admin.user_id,
+        purpose="mobile-pairing-bootstrap",
+    )
+
+    async def scenario() -> None:
+        created = await _request(
+            deployment,
+            bootstrap.secret,
+            "POST",
+            "/api/v1/auth/mobile-pairings",
+            body={"server_origin": "https://platform.example"},
+        )
+        assert created.status == 201, created.body
+        assert created.body["secret_display"] == "one_time"
+        assert created.body["pairing_uri"].startswith("amp-mobile://pair?")
+        pairing_id = created.body["id"]
+        code = created.body["code"]
+
+        consumed = await _public_request(
+            deployment,
+            "POST",
+            "/api/v1/auth/mobile-pairings:consume",
+            body={
+                "pairing_id": pairing_id,
+                "code": code,
+                "device_name": "Contract Android",
+                "platform": "android",
+                "protocol_version": "1",
+            },
+        )
+        assert consumed.status == 201, consumed.body
+        mobile_token = consumed.body["credential"]["secret"]
+        device_id = consumed.body["device"]["id"]
+        assert mobile_token.startswith("amp1.")
+        assert "secret" not in consumed.body["device"]
+
+        actor = await _request(
+            deployment,
+            mobile_token,
+            "GET",
+            "/api/v1/auth/me",
+        )
+        assert actor.status == 200
+        assert actor.body["actor_id"] == admin.user_id
+        assert actor.body["authentication_method"] == "mobile_device_token"
+
+        listed = await _request(
+            deployment,
+            bootstrap.secret,
+            "GET",
+            "/api/v1/auth/mobile-devices",
+        )
+        assert listed.status == 200, listed.body
+        assert [item["id"] for item in listed.body["items"]] == [device_id]
+        assert mobile_token not in repr(listed.body)
+
+        replay = await _public_request(
+            deployment,
+            "POST",
+            "/api/v1/auth/mobile-pairings:consume",
+            body={
+                "pairing_id": pairing_id,
+                "code": code,
+                "device_name": "Replay Android",
+                "platform": "android",
+                "protocol_version": "1",
+            },
+        )
+        assert replay.status == 401
+
+        revoked = await _request(
+            deployment,
+            bootstrap.secret,
+            "POST",
+            f"/api/v1/auth/mobile-devices/{device_id}:revoke",
+        )
+        assert revoked.status == 200, revoked.body
+
+        after_revoke = await _request(
+            deployment,
+            mobile_token,
+            "GET",
+            "/api/v1/auth/me",
+        )
+        assert after_revoke.status == 401
+
+        openapi = await _public_request(
+            deployment,
+            "GET",
+            "/api/v1/openapi.json",
+        )
+        assert openapi.status == 200
+        for path in (
+            "/api/v1/auth/mobile-pairings",
+            "/api/v1/auth/mobile-pairings:consume",
+            "/api/v1/auth/mobile-devices",
+            "/api/v1/auth/mobile-devices/{device_id}:revoke",
+        ):
+            assert path in openapi.body["paths"]
 
     asyncio.run(scenario())
