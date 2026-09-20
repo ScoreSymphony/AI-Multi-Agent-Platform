@@ -1,3 +1,4 @@
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -54,6 +55,8 @@ export default function App() {
   const [pairingCode, setPairingCode] = useState("");
   const [pairingId, setPairingId] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState("My phone");
+  const [scanningPairingQr, setScanningPairingQr] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const [tasks, setTasks] = useState<CanonicalTask[]>([]);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
@@ -117,19 +120,35 @@ export default function App() {
     };
   }, []);
 
+  function applyPairingLink(url: string): boolean {
+    const pairing = parseMobilePairingLink(url);
+    if (!pairing) return false;
+    setServerUrl(pairing.serverOrigin);
+    setPairingCode(pairing.pairingCode);
+    setPairingId(pairing.pairingId);
+    setScanningPairingQr(false);
+    setNotice(
+      `Pairing request for ${pairing.serverOrigin}. Confirm the server before pairing.`,
+    );
+    return true;
+  }
+
+  async function startPairingScanner(): Promise<void> {
+    const permission = cameraPermission?.granted
+      ? cameraPermission
+      : await requestCameraPermission();
+    if (!permission.granted) {
+      setNotice("Camera permission is required to scan a pairing QR code.");
+      return;
+    }
+    setScanningPairingQr(true);
+    setNotice("Scan the pairing QR shown by your trusted Web session.");
+  }
+
   useEffect(() => {
     const handle = (url: string | null) => {
       if (!url) return;
-      const pairing = parseMobilePairingLink(url);
-      if (pairing) {
-        setServerUrl(pairing.serverOrigin);
-        setPairingCode(pairing.pairingCode);
-        setPairingId(pairing.pairingId);
-        setNotice(
-          `Pairing request for ${pairing.serverOrigin}. Confirm the server before pairing.`,
-        );
-        return;
-      }
+      if (applyPairingLink(url)) return;
       const route = parseMobileDeepLink(url);
       if (!route) {
         setNotice("Rejected an invalid or unsupported deep link.");
@@ -352,9 +371,35 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>AI Multi-Agent Platform</Text>
           <Text style={styles.muted}>
-            Scan the pairing QR with the phone camera or enter the short-lived fallback code.
+            Scan the pairing QR with the companion camera or enter the short-lived fallback code.
             Confirm the Control Plane server below before pairing. Remote servers require TLS.
           </Text>
+          {scanningPairingQr ? (
+            <View style={styles.scanner}>
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={({ data }) => {
+                  if (!applyPairingLink(data)) {
+                    setScanningPairingQr(false);
+                    setNotice("Rejected an invalid or unsupported pairing QR code.");
+                  }
+                }}
+              />
+              <Button
+                title="Cancel QR scanner"
+                onPress={() => setScanningPairingQr(false)}
+                disabled={busy}
+              />
+            </View>
+          ) : (
+            <Button
+              title="Scan pairing QR"
+              onPress={() => void startPairingScanner()}
+              disabled={busy}
+            />
+          )}
           <Text style={styles.label}>Control Plane server</Text>
           <TextInput
             autoCapitalize="none"
@@ -654,4 +699,6 @@ const styles = StyleSheet.create({
   notice: { padding: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
   stale: { padding: 10, borderWidth: 1, borderRadius: 8, fontWeight: "600" },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  scanner: { minHeight: 320, gap: 8, marginVertical: 8 },
+  camera: { minHeight: 280, borderRadius: 10, overflow: "hidden" },
 });
