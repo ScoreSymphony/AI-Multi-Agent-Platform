@@ -131,7 +131,7 @@ class MobilePairingService:
 
     def consume_challenge(
         self,
-        pairing_id: str,
+        pairing_id: str | None,
         code: str,
         *,
         device_name: str,
@@ -152,9 +152,10 @@ class MobilePairingService:
             raise MobilePairingError("pairing code must not be blank")
 
         with self._lock:
-            challenge = self.store.mobile_pairings.get(pairing_id)
+            challenge = self._challenge_for_proof(pairing_id, supplied, current)
             if challenge is None:
                 raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
+            pairing_id = challenge.pairing_id
             if challenge.cancelled_at is not None:
                 raise MobilePairingError("mobile pairing challenge is cancelled")
             if challenge.consumed_at is not None:
@@ -323,6 +324,25 @@ class MobilePairingService:
             ),
             "active": active,
         }
+
+    def _challenge_for_proof(
+        self,
+        pairing_id: str | None,
+        supplied: str,
+        now,
+    ) -> MobilePairingChallenge | None:
+        if pairing_id is not None:
+            return self.store.mobile_pairings.get(pairing_id)
+        supplied_verifier = secret_verifier(supplied)
+        match: MobilePairingChallenge | None = None
+        for candidate in self.store.mobile_pairings.values():
+            # Compare every candidate so the fallback-code lookup does not early-exit on secrets.
+            equal = hmac.compare_digest(supplied_verifier, candidate.secret_verifier)
+            if equal and candidate.active(now=now):
+                if match is not None:
+                    return None
+                match = candidate
+        return match
 
     def _owned_challenge(self, user_id: str, pairing_id: str) -> MobilePairingChallenge:
         challenge = self.store.mobile_pairings.get(pairing_id)
