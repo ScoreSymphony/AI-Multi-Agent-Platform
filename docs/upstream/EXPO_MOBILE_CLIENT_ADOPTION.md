@@ -9,6 +9,7 @@ Review date: 2026-09-19
 - **Canonical upstream:** https://github.com/expo/expo and https://github.com/facebook/react-native
 - **Target:** Expo SDK 57.0.17, React Native 0.86.3
 - **Security storage module:** expo-secure-store 57.0.4
+- **QR scanning module:** expo-camera ~57.0.5
 - **Integration category:** library dependency / client build runtime
 - **Boundary:** optional `mobile/` northbound Control Plane client
 
@@ -16,7 +17,8 @@ Review date: 2026-09-19
 
 Expo/React Native supplies one Android/iOS application runtime while preserving native platform
 APIs. `expo-secure-store` supplies encrypted small-value storage backed by Android Keystore and
-iOS Keychain, which fits the mobile bearer-credential requirement.
+iOS Keychain, while `expo-camera` supplies the in-app QR scanner used only for the short-lived
+pairing envelope.
 
 No Expo type becomes a canonical platform API/domain type.
 
@@ -47,6 +49,7 @@ cache.
 - Stay on stable Expo SDK lines for the maintained client; prerelease SDKs are not the default.
 - Review Expo/React Native security and release notes during explicit dependency updates.
 - Run typecheck, unit tests, Expo config validation and Android/iOS export smoke checks.
+- Keep camera barcode scanning restricted to QR pairing input; no camera media is persisted or uploaded.
 - Remote Control Plane endpoints require TLS.
 - Bearer credentials live only behind the `SecretStorage` boundary backed by
   `expo-secure-store`.
