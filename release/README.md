@@ -36,11 +36,18 @@ environment. The declared set in `.release-evidence/python-declared.txt` is gene
 release manifest. This prevents a Linux release runner from silently omitting platform-conditional
 requirements such as the Windows-only `tzdata` baseline from release evidence.
 
+Before the terminal release-candidate audit, use
+`platform-release version-project --root . --version <version>` as a dry run. Once all other
+source-changing release blockers are resolved, repeat it with `--write` and commit the resulting
+candidate. The projector fails closed if package metadata, runtime `__version__`, or the
+repository/packaged compatibility inventories already disagree; it does not rewrite historical
+migration/adoption markers.
+
 Use `platform-release generate --source-commit <sha> --input <path> --output <path>` to assemble a
-manifest from the exact source commit, canonical `VersionSnapshot`, reviewed compatibility inventory,
-dependency/artifact files and explicit typed gate evidence. Generation hashes the supplied files and
-validates the resulting manifest fail-closed; it does not invent passed gates, approvals, SBOMs or
-provenance.
+manifest from the exact version-projected source commit, canonical `VersionSnapshot`, reviewed
+compatibility inventory, dependency/artifact files and explicit typed gate evidence. Generation
+hashes the supplied files and validates the resulting manifest fail-closed; it does not invent
+passed gates, approvals, SBOMs or provenance.
 
 Use `platform-release upstream-check --observations <path>` to compare an observation snapshot with
 reviewed pins. `--disabled` and `--offline` make those states explicit without claiming that an
