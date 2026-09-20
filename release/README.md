@@ -17,6 +17,9 @@ This directory contains operator-facing, machine-readable release metadata for i
 - `release-generation-input.example.json` documents the reviewed inputs consumed by deterministic
   release-manifest generation. It is a template: placeholder evidence must be replaced before a
   release candidate can pass validation.
+- `1.0.0-release-notes.md` is the maintained pre-publication release-note/evidence draft for #1237.
+  It must not be treated as a published release claim until #747 passes on the exact candidate and
+  all placeholders/blockers are reconciled.
 - Runtime release manifests use release-manifest schema v2 shipped with
   `ai_multi_agent_platform.release`.
 - Manifest v2 binds declared dependency sets, exact dependency lockfiles/resolved dependency sets,

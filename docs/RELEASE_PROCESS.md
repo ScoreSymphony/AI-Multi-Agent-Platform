@@ -17,17 +17,41 @@ The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, 
 
 ## Current status
 
-> Status snapshot: 2026-09-06
+> Status snapshot: 2026-09-20
 
-The #252 usable single-node prototype gate has passed and is maintained by the repository's prototype-acceptance profiles. This satisfies the major functional prerequisite previously assigned to the planned `0.1.0` release.
+The #252 usable single-node prototype gate has passed and is maintained by the repository's
+prototype-acceptance profiles. The planned `0.1.0` prototype milestone was never formally
+published or tagged.
 
-No GitHub release or semantic-version tag has been published yet. Passing #252 therefore does **not** by itself mean that `0.1.0` has been released: publication still requires an exact release commit, the checklist below, current changelog/provenance and verification of the produced artifacts.
+Issue #46, the full platform-conformance gate required by the version policy for the operational
+baseline, is complete. Because the repository has progressed beyond the prototype gate without an
+intervening formal release, the first formal publication tracked by #1237 now targets **`1.0.0`**.
+The project will not create a retroactive `0.1.0` release merely to preserve the old planned
+sequence.
 
-The release/update system itself is no longer only policy documentation. The merged #42 work provides release-manifest validation, compatibility inventory, advisory upstream discovery, fail-closed adoption/release gates, operator-visible release status and the upstream review workflow. PR #492 further hardened this foundation with manifest schema v2, cryptographic dependency/artifact provenance, typed gate evidence, exact source-commit binding and complete canonical `VersionSnapshot` compatibility state.
+Publication is still blocked until the terminal #747 product-readiness audit passes for the exact
+release candidate, all release-blocking V1/M3 findings are resolved or explicitly reclassified as
+non-blocking, and the complete release checklist below is green for that exact source commit.
 
-The remaining #42 operationalization is implemented through deterministic `platform-release generate`, restart-persistent reviewed advisory discovery, explicit schema-v2 browser types and an optional provider-neutral scheduled Git discovery workflow. Discovery remains advisory: it cannot mutate production pins, approve or merge changes, deploy a release or replace #41 as the authority for persisted upgrade/version state.
+Until the exact release candidate is frozen, repository/package metadata intentionally remains on
+the pre-release development version. The final `1.0.0` projection must be performed atomically on
+the accepted candidate across package metadata, runtime `__version__`, canonical
+`VersionSnapshot.platform_release`/compatibility metadata, shipped built-in compatibility ranges,
+release-manifest metadata and the Git tag/release identity. Historical migration/adoption evidence
+that deliberately names `0.0.1` must not be rewritten as part of that projection.
 
-The `1.0.0` operational target remains gated by full platform conformance; issue #46 is retained as the historical tracking record for that gate. Current open implementation work may add capabilities before that point, but compatibility must not be claimed beyond the profiles that have explicit evidence.
+The release/update system itself is no longer only policy documentation. The merged #42 work
+provides release-manifest validation, compatibility inventory, advisory upstream discovery,
+fail-closed adoption/release gates, operator-visible release status and the upstream review
+workflow. PR #492 further hardened this foundation with manifest schema v2, cryptographic
+dependency/artifact provenance, typed gate evidence, exact source-commit binding and complete
+canonical `VersionSnapshot` compatibility state.
+
+The remaining #42 operationalization is implemented through deterministic
+`platform-release generate`, restart-persistent reviewed advisory discovery, explicit schema-v2
+browser types and an optional provider-neutral scheduled Git discovery workflow. Discovery remains
+advisory: it cannot mutate production pins, approve or merge changes, deploy a release or replace
+#41 as the authority for persisted upgrade/version state.
 
 ## Release candidate checklist
 

@@ -4,6 +4,7 @@ import tomllib
 from importlib.resources import files
 from pathlib import Path
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.adapters.hermes import HERMES_PINNED_REVISION
 from ai_multi_agent_platform.upgrade.versioning import current_release_versions
 
@@ -40,6 +41,16 @@ def _governed_pin(path: Path) -> tuple[str, str]:
         _quoted_field(path, "canonical_upstream"),
         _quoted_field(path, "pinned_revision"),
     )
+
+
+def test_release_version_projection_matches_package_runtime_and_inventory() -> None:
+    pyproject = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
+    package_version = pyproject["project"]["version"]
+    document = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
+
+    assert package_version == __version__
+    assert document["platform_release"] == package_version
+    assert document["versions"]["platform_release"] == package_version
 
 
 def test_compatibility_matrix_matches_active_governed_upstream_pins() -> None:
