@@ -10,6 +10,31 @@ export interface MobileSession {
   baseUrl: string;
 }
 
+export interface MobilePairingInput {
+  baseUrl: string;
+  pairingCode: string;
+  pairingId?: string | null;
+  deviceName: string;
+  devicePlatform: "android" | "ios";
+  protocolVersion?: 1;
+}
+
+interface MobilePairingResponse {
+  device: {
+    id: string;
+    credential_id: string;
+    display_name: string;
+    platform: string;
+    active: boolean;
+  };
+  credential: {
+    id: string;
+    secret: string;
+    expires_at: string | null;
+    secret_display: "one_time";
+  };
+}
+
 const TOKEN_KEY = "ai-agent-platform.mobile.bearer-token";
 const SERVER_KEY = "ai-agent-platform.mobile.server-url";
 
@@ -56,6 +81,42 @@ export class MobileSessionStore {
     await this.storage.setItem(TOKEN_KEY, candidate);
     await this.storage.setItem(SERVER_KEY, normalizedBaseUrl);
     return actor;
+  }
+
+  async pair(
+    input: MobilePairingInput,
+    fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+  ): Promise<AuthenticatedActor> {
+    const normalizedBaseUrl = normalizeServerUrl(input.baseUrl);
+    const pairingCode = input.pairingCode.trim().toUpperCase();
+    if (!pairingCode) throw new Error("Pairing code is required");
+    const response = await fetchImpl(`${normalizedBaseUrl}/api/v1/auth/mobile-pairings:consume`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pairing_code: pairingCode,
+        pairing_id: input.pairingId?.trim() || undefined,
+        server_origin: normalizedBaseUrl,
+        device_name: input.deviceName.trim(),
+        device_platform: input.devicePlatform,
+        protocol_version: input.protocolVersion ?? 1,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Pairing failed with HTTP ${response.status}`);
+    }
+    const result = (await response.json()) as MobilePairingResponse;
+    if (
+      !result.credential?.secret ||
+      result.credential.secret_display !== "one_time" ||
+      !result.device?.id
+    ) {
+      throw new Error("Pairing returned an invalid device credential");
+    }
+    return this.activate(normalizedBaseUrl, result.credential.secret, fetchImpl);
   }
 
   async clear(): Promise<void> {
