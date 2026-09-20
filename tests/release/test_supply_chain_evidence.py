@@ -7,6 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "release" / "generate_supply_chain_evidence.py"
+RELEASE_INPUT_PATH = ROOT / "release" / "release-generation-input.example.json"
+WORKFLOW_PATH = ROOT / ".github" / "workflows" / "release-manifest.yml"
 
 
 def _load_module():
@@ -102,3 +104,27 @@ def test_supply_chain_evidence_rejects_short_source_commit(tmp_path: Path) -> No
         assert "full lowercase Git SHA" in str(exc)
     else:
         raise AssertionError("short source commit must fail closed")
+
+
+def test_release_manifest_workflow_binds_signed_sbom_and_provenance() -> None:
+    release_input = json.loads(RELEASE_INPUT_PATH.read_text(encoding="utf-8"))
+    artifacts = {item["name"]: item["path"] for item in release_input["artifacts"]}
+
+    assert release_input["sbom_ref"] == "REPLACE_WITH_SIGNED_SBOM_ATTESTATION_URL"
+    assert release_input["provenance_ref"] == "REPLACE_WITH_SIGNED_PROVENANCE_ATTESTATION_URL"
+    assert artifacts["platform-wheel"] == "../.release-evidence/platform.whl"
+    assert artifacts["sbom.spdx.json"] == "../.release-evidence/sbom.spdx.json"
+    assert artifacts["build-provenance.attestation.json"].endswith(
+        "build-provenance.attestation.json"
+    )
+    assert artifacts["sbom.attestation.json"].endswith("sbom.attestation.json")
+
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "id-token: write" in workflow
+    assert "attestations: write" in workflow
+    assert "uses: actions/attest@v4" in workflow
+    assert "sbom-path: .release-evidence/sbom.spdx.json" in workflow
+    assert "PROVENANCE_ATTESTATION_URL" in workflow
+    assert "SBOM_ATTESTATION_URL" in workflow
+    assert ".release-evidence/generation-input.resolved.json" in workflow
+    assert ".release-evidence/SHA256SUMS" in workflow
