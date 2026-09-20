@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import ai_multi_agent_platform.browser.reference_http as browser_http
 from ai_multi_agent_platform.browser.models import (
     BrowserNetworkPolicy,
     BrowserOperation,
@@ -18,7 +19,6 @@ from ai_multi_agent_platform.browser.policy import (
     DefaultBrowserNetworkPolicyHook,
     resolve_browser_target,
 )
-import ai_multi_agent_platform.browser.reference_http as browser_http
 from ai_multi_agent_platform.browser.reference_page import SessionState
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext, OperationControl
