@@ -40,6 +40,21 @@ def test_mobile_release_dependency_override_patches_xcode_uuid() -> None:
     assert lock["packages"]["node_modules/uuid"]["version"] == "11.1.1"
 
 
+def test_rolldown_optional_platform_bindings_are_locked() -> None:
+    lock = json.loads(LOCK_CONFIG.read_text(encoding="utf-8"))
+    rolldown = lock["packages"]["node_modules/rolldown"]
+
+    for package_name, version in rolldown["optionalDependencies"].items():
+        locked = lock["packages"][f"node_modules/{package_name}"]
+        assert locked["version"] == version
+        assert locked["optional"] is True
+
+    linux_x64 = lock["packages"]["node_modules/@rolldown/binding-linux-x64-gnu"]
+    assert linux_x64["os"] == ["linux"]
+    assert linux_x64["cpu"] == ["x64"]
+    assert linux_x64["libc"] == ["glibc"]
+
+
 def test_production_signing_secrets_are_publish_only() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     build_and_test, publish = workflow.split("\n  publish:", maxsplit=1)
