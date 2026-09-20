@@ -301,7 +301,7 @@ A protocol-level tool call with its own request/invocation handle maps to a cano
 
 ## Required validation scenarios
 
-Tests model all Issue #4 scenarios:
+Tests cover the canonical domain scenarios:
 
 1. one Task with one Run and one Artifact;
 2. one Task retried through two Runs;
@@ -312,6 +312,8 @@ Tests model all Issue #4 scenarios:
 
 Additional regression coverage includes malformed IDs, backend IDs in canonical relationships, immutable IDs, lifecycle-bypass prevention, deep immutability for arbitrary Mapping implementations, capability/policy-scoped Model Assignments, per-invocation Approval targeting, structured Result status data, Event v1 compatibility plus strict Event v2 validation, and the no-vendor-import architecture guard.
 
-## Deferred decisions
+## Current integration status
 
-Persistence, concrete Hermes and future provider-neutral orchestrator/executor mappings, final scheduler implementation, final authorization/policy evaluation semantics, UI and provider-specific runtime integration remain later work. `PolicyScope` is only a canonical targeting primitive for model assignment, and `ToolInvocation` is only the canonical governed-call identity; neither pre-empts those later implementation choices.
+The canonical model is now consumed by durable persistence, provider-neutral orchestration/execution, distributed Node/Worker scheduling, authorization and Approval policy, the versioned Control Plane, Web UI and CLI. Those subsystems extend behavior around the entities defined here without changing platform-owned identity or lifecycle authority.
+
+`PolicyScope` remains the canonical targeting primitive for model assignment, and `ToolInvocation` remains the canonical governed-call identity. Provider-specific runtime/session identifiers stay outside canonical identity and may appear only through explicit external/backend reference fields.
