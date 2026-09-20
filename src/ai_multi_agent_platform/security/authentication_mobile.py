@@ -110,16 +110,13 @@ class AuthenticationMobilePairingService:
                 expires_at=current + self.pairing_ttl,
             )
         code = f"{locator}-{proof}"
-        qr_payload = (
-            f"{PAIRING_URI_SCHEME}://pair?"
-            + urlencode(
-                {
-                    "v": str(PAIRING_PROTOCOL_VERSION),
-                    "origin": origin,
-                    "pairing_id": pairing_id,
-                    "code": code,
-                }
-            )
+        qr_payload = f"{PAIRING_URI_SCHEME}://pair?" + urlencode(
+            {
+                "v": str(PAIRING_PROTOCOL_VERSION),
+                "origin": origin,
+                "pairing_id": pairing_id,
+                "code": code,
+            }
         )
         self.audit(
             "auth.mobile_pairing_created",
