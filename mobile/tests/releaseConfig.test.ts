@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -30,6 +30,51 @@ function releaseConfig(): {
     androidPackage: appDocument.expo.android.package,
     versionCode: appDocument.expo.android.versionCode,
   };
+}
+
+function validateVersionFixture(version: string): string {
+  const directory = mkdtempSync(resolve(tmpdir(), "mobile-semver-"));
+  try {
+    const packageDocument = JSON.parse(
+      readFileSync(resolve(ROOT, "package.json"), "utf8"),
+    ) as Record<string, unknown>;
+    const appDocument = JSON.parse(
+      readFileSync(resolve(ROOT, "app.json"), "utf8"),
+    ) as { expo: { version: string } };
+
+    packageDocument.version = version;
+    appDocument.expo.version = version;
+
+    mkdirSync(resolve(directory, "scripts"));
+    writeFileSync(
+      resolve(directory, "package.json"),
+      JSON.stringify(packageDocument),
+      "utf8",
+    );
+    writeFileSync(
+      resolve(directory, "app.json"),
+      JSON.stringify(appDocument),
+      "utf8",
+    );
+    writeFileSync(
+      resolve(directory, "scripts/validate-release-config.mjs"),
+      readFileSync(resolve(ROOT, "scripts/validate-release-config.mjs"), "utf8"),
+      "utf8",
+    );
+
+    return execFileSync(
+      process.execPath,
+      [resolve(directory, "scripts/validate-release-config.mjs")],
+      {
+        cwd: directory,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: process.env,
+      },
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 describe("Android release configuration", () => {
@@ -70,6 +115,28 @@ describe("Android release configuration", () => {
       android_version_code: config.versionCode,
       version: config.version,
     });
+  });
+
+  it("accepts valid prerelease and build identifiers", () => {
+    for (const version of [
+      "1.2.3-alpha.1",
+      "1.2.3-01a+001",
+      "1.2.3-alpha-beta+build.01",
+    ]) {
+      expect(() => validateVersionFixture(version)).not.toThrow();
+    }
+  });
+
+  it("rejects malformed semantic-version identifiers before release work", () => {
+    for (const version of [
+      "1.2.3-alpha..1",
+      "1.2.3-01",
+      "1.2.3-alpha.",
+      "1.2.3+.",
+      "1.2.3+build..1",
+    ]) {
+      expect(() => validateVersionFixture(version)).toThrow();
+    }
   });
 
   it("fails closed when a requested release version disagrees with app config", () => {
