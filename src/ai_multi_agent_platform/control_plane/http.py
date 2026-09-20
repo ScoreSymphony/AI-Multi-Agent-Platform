@@ -292,10 +292,14 @@ class ControlPlaneHTTP:
             item = await self._control_plane.get_task(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 3 and segments[2] == "runs" and request.method == "GET":
-            page = await self._control_plane.list_runs(context, _page_query(request.query), task_id=segments[1])
+            page = await self._control_plane.list_runs(
+                context, _page_query(request.query), task_id=segments[1]
+            )
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 3 and segments[2] == "timeline" and request.method == "GET":
-            page = await self._control_plane.timeline(context, segments[1], _page_query(request.query))
+            page = await self._control_plane.timeline(
+                context, segments[1], _page_query(request.query)
+            )
             return self._response(200, page, request_id, correlation_id)
         if (
             len(segments) == 4
