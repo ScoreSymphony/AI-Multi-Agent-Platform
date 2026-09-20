@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from .auth import add_auth_parsers
 from .client import (
     APIClientError,
     ClientOptions,
@@ -19,7 +20,6 @@ from .client import (
     TransportError,
     UrllibTransport,
 )
-from .auth import add_auth_parsers
 from .credentials import AuthenticatedTransport, CredentialStore
 from .learning import add_learning_parser, execute_learning
 from .main import _build_parser as build_core_parser
