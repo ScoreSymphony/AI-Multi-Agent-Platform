@@ -100,42 +100,45 @@ class ControlPlaneHTTP:
                 )
 
             context = _request_context(request, request_id, correlation_id)
+            query = PageQuery()
             segments = [segment for segment in relative.split("/") if segment]
             if not segments:
                 raise APIException(status=404, code="not_found", message="route not found")
 
             if segments[0] == "projects":
                 return await self._projects(
-                    request, context, segments, request_id, correlation_id
+                    request, context, query, segments, request_id, correlation_id
                 )
             if segments[0] == "workspaces":
                 return await self._workspaces(
                     request,
                     context,
+                    query,
                     segments,
                     request_id,
                     correlation_id,
                 )
             if segments[0] == "tasks":
                 return await self._tasks(
-                    request, context, segments, request_id, correlation_id
+                    request, context, query, segments, request_id, correlation_id
                 )
             if segments[0] == "runs":
                 return await self._runs(
-                    request, context, segments, request_id, correlation_id
+                    request, context, query, segments, request_id, correlation_id
                 )
             if segments[0] == "model-providers":
                 return await self._model_providers(
-                    request, context, segments, request_id, correlation_id
+                    request, context, query, segments, request_id, correlation_id
                 )
             if segments[0] == "models":
                 return await self._models(
-                    request, context, segments, request_id, correlation_id
+                    request, context, query, segments, request_id, correlation_id
                 )
             if segments[0] in {"plans", "steps", "artifacts", "results"}:
                 return await self._references(
                     request,
                     context,
+                    query,
                     cast(Literal["plans", "steps", "artifacts", "results"], segments[0]),
                     segments,
                     request_id,
@@ -177,6 +180,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         segments: list[str],
         request_id: str,
         correlation_id: str,
@@ -199,6 +203,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         segments: list[str],
         request_id: str,
         correlation_id: str,
@@ -221,6 +226,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         segments: list[str],
         request_id: str,
         correlation_id: str,
@@ -315,6 +321,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         segments: list[str],
         request_id: str,
         correlation_id: str,
@@ -333,6 +340,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         segments: list[str],
         request_id: str,
         correlation_id: str,
@@ -340,7 +348,9 @@ class ControlPlaneHTTP:
         if len(segments) not in {1, 2}:
             raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_model_providers(context, _page_query(request.query))
+            page = await self._control_plane.list_model_providers(
+                context, _page_query(request.query)
+            )
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
             provider_id, command = segments[1].rsplit(":", 1)
@@ -370,6 +380,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         segments: list[str],
         request_id: str,
         correlation_id: str,
@@ -401,6 +412,7 @@ class ControlPlaneHTTP:
         self,
         request: HTTPRequest,
         context: RequestContext,
+        query: PageQuery,
         collection: Literal["plans", "steps", "artifacts", "results"],
         segments: list[str],
         request_id: str,
@@ -409,7 +421,9 @@ class ControlPlaneHTTP:
         if len(segments) not in {1, 2}:
             raise APIException(status=404, code="not_found", message="route not found")
         if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_references(context, collection, _page_query(request.query))
+            page = await self._control_plane.list_references(
+                context, collection, _page_query(request.query)
+            )
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_reference(context, collection, segments[1])
