@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_multi_agent_platform.release.cli import main as release_cli_main
 from ai_multi_agent_platform.release.version_projection import (
     ReleaseVersionProjectionError,
     project_release_version,
@@ -109,3 +110,33 @@ def test_version_projection_rejects_non_semver_target(tmp_path: Path, version: s
 
     with pytest.raises(ReleaseVersionProjectionError, match="SemVer"):
         project_release_version(tmp_path, target_version=version)
+
+
+def test_version_projection_cli_dry_run_is_machine_readable(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_fixture(tmp_path)
+
+    code = release_cli_main(
+        [
+            "version-project",
+            "--root",
+            str(tmp_path),
+            "--version",
+            "1.0.0",
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["current_version"] == "0.0.1"
+    assert payload["target_version"] == "1.0.0"
+    assert payload["written"] is False
+    assert set(payload["changed_files"]) == {
+        "pyproject.toml",
+        "src/ai_multi_agent_platform/__init__.py",
+        "release/compatibility.json",
+        "src/ai_multi_agent_platform/release/compatibility.json",
+    }
