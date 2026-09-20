@@ -1227,17 +1227,33 @@ try {
   await tabTo(page, cancelTaskButton, "Narrow Task Cancel action", { maxPresses: 80 });
   await assertHorizontallyReachable(page, cancelTaskButton, "Narrow Task Cancel action");
 
-  const confirmationDialogPromise = page.waitForEvent("dialog");
+  const confirmationDialogPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Keyboard destructive action did not expose a confirmation dialog")),
+      5_000,
+    );
+    page.once("dialog", async (dialog) => {
+      const snapshot = { type: dialog.type(), message: dialog.message() };
+      try {
+        await dialog.dismiss();
+        clearTimeout(timeout);
+        resolve(snapshot);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  });
   await page.keyboard.press("Enter");
   const confirmationDialog = await confirmationDialogPromise;
-  const confirmationMessage = confirmationDialog.message();
-  if (confirmationDialog.type() !== "confirm" || !confirmationMessage.includes("Cancel Task")) {
-    await confirmationDialog.dismiss();
+  if (
+    confirmationDialog.type !== "confirm"
+    || !confirmationDialog.message.includes("Cancel Task")
+  ) {
     throw new Error(
-      `Keyboard destructive action exposed an unexpected confirmation: ${confirmationDialog.type()} ${confirmationMessage}`,
+      `Keyboard destructive action exposed an unexpected confirmation: ${confirmationDialog.type} ${confirmationDialog.message}`,
     );
   }
-  await confirmationDialog.dismiss();
 
   const taskAfterDismissedConfirmation = await readPublicApiResource(
     page,
