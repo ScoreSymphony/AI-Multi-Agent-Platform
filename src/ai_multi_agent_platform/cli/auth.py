@@ -151,7 +151,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="platform")
     _add_common_arguments(parser)
     areas = parser.add_subparsers(dest="area", required=True)
+    add_auth_parsers(areas)
+    return parser
 
+
+def add_auth_parsers(
+    areas: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     auth = areas.add_parser("auth", help="manage canonical authentication and credentials")
     auth_commands = auth.add_subparsers(dest="command", required=True)
     login = auth_commands.add_parser("login", help="create a canonical browser session")
@@ -221,7 +227,6 @@ def _build_parser() -> argparse.ArgumentParser:
         decision_parser.add_argument("--comment")
         decision_parser.add_argument("--idempotency-key")
 
-    return parser
 
 
 def _common_parser() -> argparse.ArgumentParser:
