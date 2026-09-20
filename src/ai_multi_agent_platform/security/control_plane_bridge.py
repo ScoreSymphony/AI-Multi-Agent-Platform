@@ -35,6 +35,7 @@ _TOKEN_AUTHENTICATION_METHODS = frozenset(
         "worker_token",
         "automation_token",
         "integration_token",
+        "mobile_token",
     }
 )
 _SCOPE_FIELDS = frozenset({"actions", "resource_types", "resource_ids"})
