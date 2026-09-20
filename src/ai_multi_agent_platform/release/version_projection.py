@@ -216,12 +216,12 @@ def _pyproject_version(content: str) -> str:
 
 
 def _runtime_version(content: str) -> str:
-    matches = _RUNTIME_VERSION.findall(content)
+    matches = list(_RUNTIME_VERSION.finditer(content))
     if len(matches) != 1:
         raise ReleaseVersionProjectionError(
             "runtime package must contain exactly one __version__ assignment"
         )
-    return matches[0]
+    return matches[0].group(1)
 
 
 def _compatibility_document(content: str, *, label: str) -> dict[str, object]:
