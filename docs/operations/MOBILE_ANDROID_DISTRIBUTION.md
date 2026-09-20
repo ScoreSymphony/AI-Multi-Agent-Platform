@@ -43,7 +43,8 @@ The publish job creates:
 
 - `AI-Multi-Agent-Mobile-vX.Y.Z.apk`
 - `SHA256SUMS.txt`
-- `npm-dependency-tree.json`, the exact npm dependency resolution used for the APK build;
+- `npm-dependency-tree.json`, the exact npm dependency resolution used for the APK build and
+  published as the release manifest's `resolved_set`;
 - `mobile-release.json` with source commit, package/version/versionCode, APK digest, the
   resolved dependency-set digest, signer fingerprint and workflow provenance.
 
