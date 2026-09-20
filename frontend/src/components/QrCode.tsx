@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactElement } from "react";
 
 interface BlockSpec {
   data: number;
@@ -40,7 +40,7 @@ export function QrCode({ value, size = 256 }: { value: string; size?: number }) 
   const modules = matrix.length;
   const quiet = 4;
   const view = modules + quiet * 2;
-  const cells: JSX.Element[] = [];
+  const cells: ReactElement[] = [];
   for (let y = 0; y < modules; y += 1) {
     for (let x = 0; x < modules; x += 1) {
       if (!matrix[y][x]) continue;
