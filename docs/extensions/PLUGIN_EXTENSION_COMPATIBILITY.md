@@ -1,6 +1,6 @@
 # Plugin extension compatibility and lifecycle hardening
 
-This document complements `docs/PLUGINS.md` with the strict compatibility, failure-containment and permission rules required by issue #20.
+This document complements [`PLUGINS.md`](PLUGINS.md) with the strict compatibility, failure-containment and permission rules for plugin extensions.
 
 ## Activation is transactional at the registry boundary
 

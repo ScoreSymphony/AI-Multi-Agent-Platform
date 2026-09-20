@@ -1,7 +1,5 @@
 # Deployment profiles and self-hosted installation
 
-Issue: #39
-
 ## Architecture boundary
 
 Deployment profiles are compositions over canonical platform contracts. They do not define
@@ -70,7 +68,7 @@ cp config/single-node.env.example .env.single-node
 
 Review `.env.single-node`, especially `AI_MAP_DATA_DIR`, host and port. The platform does not
 silently load dotenv files: supported values enter through the process environment and then
-go through the #34 configuration resolver.
+go through the platform configuration resolver.
 
 For a POSIX shell:
 
@@ -192,7 +190,7 @@ curl http://127.0.0.1:8000/api/v1/readiness
 platform --endpoint http://127.0.0.1:8000 doctor
 ```
 
-`platform doctor` is the canonical operator diagnostic path from #38. It consumes only the
+`platform doctor` is the canonical operator diagnostic path. It consumes only the
 Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
 second backend-probing diagnostic authority.
 
@@ -207,7 +205,7 @@ manual-recovery boundaries and the reference free-space thresholds.
 
 Optional external adapters are not required by this profile and therefore cannot make the
 baseline unready merely by being absent. Advanced profiles that enable optional adapters may
-report their degradation through the progressive #16 health model.
+report their degradation through the progressive platform health model.
 
 ## Persistent layout
 
@@ -269,13 +267,13 @@ storage.
 ## Shutdown
 
 Use the service manager's normal graceful stop or `Ctrl+C` for a foreground process. The
-single-node server first enters the #1152 process-local drain gate, rejects new authoritative
+single-node server first enters the process-local drain gate, rejects new authoritative
 mutations, reports `draining`/not-ready, and gives already-admitted work only the configured
 `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` budget to settle. Uvicorn connection shutdown and ASGI
 lifespan/resource teardown share that bound.
 
 If the bound expires, process-local teardown is forced without inventing canonical terminal
-Task/Run/Step outcomes. The next process rebuilds from the same durable data root and the #707
+Task/Run/Step outcomes. The next process rebuilds from the same durable data root and the
 startup reconciliation remains the sole ordinary restart authority.
 
 See [Single-node graceful drain and shutdown recovery](SINGLE_NODE_DRAIN_SHUTDOWN.md) for the
@@ -283,7 +281,7 @@ in-flight disposition matrix, forced-stop behavior, telemetry and operator recov
 
 ## Backup, restore, and upgrades
 
-The supported single-node backup/restore path is the completed #40 contract implemented by
+The supported single-node backup/restore path is implemented by
 `platform-backup`; the maintained operator runbook is
 [Backup, restore, and disaster recovery](BACKUP_RESTORE.md). Backup format v1 is deliberately
 offline/quiesced: stop every process that can write the deployment data root before creating a
@@ -308,7 +306,7 @@ and cross-store validation succeed. Follow the runbook for build-commit pinning,
 recovery, relocation, post-restore validation and failure handling. This profile does **not** claim
 a live cross-provider snapshot while writers are running.
 
-Platform/schema upgrades use the completed #41 `platform-upgrade` lifecycle documented in
+Platform/schema upgrades use the supported `platform-upgrade` lifecycle documented in
 [Platform upgrades and migrations](UPGRADES.md). For a real release transition, preflight the
 source/target version vectors, create and verify the required source-release backup, quiesce/drain
 writers, apply the supported migration path, and validate readiness plus the canonical smoke before
@@ -337,8 +335,8 @@ expose no private admin port.
 
 Advanced profiles may add explicit internal flows for remote Workers, model endpoints, message
 transport, tools, browser services and connectors. Those services must not be made public by
-default simply because deployment tooling can expose a port. #240 owns that advanced
-packaging and its heterogeneous-device networking examples.
+default simply because deployment tooling can expose a port. The
+[advanced deployment guide](ADVANCED_DEPLOYMENT.md) owns distributed packaging and heterogeneous-device networking examples.
 
 ## Stage 2 — single-server operational hardening
 
@@ -390,7 +388,7 @@ the Control Plane.
 
 ### Least privilege and filesystem ownership
 
-Consume `docs/SECURE_DEPLOYMENT.md` as the baseline. For a typical service-manager deployment:
+Consume [Secure Deployment Baseline](../security/SECURE_DEPLOYMENT.md) as the baseline. For a typical service-manager deployment:
 
 - run `platform-server` as a dedicated non-root/non-administrator service identity;
 - make the application source/virtual environment and static frontend read-only to that
@@ -437,9 +435,9 @@ prevent the Stage-1 Control Plane from starting, becoming ready or executing
 surface unreachable without changing canonical Task/Run state.
 
 Multiple schedulable local and remote Workers are not required by this Stage-2 baseline.
-The completed #14 contracts provide shared Node/Worker registration, capability declaration,
-reservation and scheduling semantics, and completed #240 packages those contracts into advanced
-distributed and heterogeneous deployment profiles. Operators may adopt those advanced profiles
+The canonical Node/Worker contracts provide shared registration, capability declaration,
+reservation and scheduling semantics, while the [advanced deployment guide](ADVANCED_DEPLOYMENT.md)
+packages those contracts into distributed and heterogeneous deployment profiles. Operators may adopt those advanced profiles
 without changing the single-server baseline documented here.
 
 ## Resource guidance
@@ -458,25 +456,24 @@ The reference path itself is CPU-only and requires no accelerator.
 ## Advanced deployment integrations and remaining work
 
 The repository has a production-shaped Stage-1 single-node baseline plus the Stage-2
-single-server process/network hardening reference. Several advanced operational foundations that
-were originally tracked as follow-up work are now complete:
+single-server process/network hardening reference. The following advanced operational foundations
+are available without becoming prerequisites for the baseline:
 
-- #14 defines the canonical Node/Worker registry, capability, reservation and scheduling contracts,
-  while #240 packages multiple-local-Worker, distributed-Worker and heterogeneous multi-device
-  deployment profiles;
-- #40 provides tested offline/quiesced backup, verified restore and hardware-relocation behavior
-  through `platform-backup` and [the backup/restore runbook](BACKUP_RESTORE.md);
-- #41 provides the explicit platform/schema upgrade and migration lifecycle through
-  `platform-upgrade` and [the upgrade runbook](UPGRADES.md);
-- #89 provides the optional Control Plane HA/fencing/promotion semantics documented in
+- canonical Node/Worker registry, capability, reservation and scheduling contracts, with
+  multiple-local-Worker, distributed-Worker and heterogeneous multi-device profiles documented in
+  [Advanced distributed and heterogeneous deployment](ADVANCED_DEPLOYMENT.md);
+- tested offline/quiesced backup, verified restore and hardware-relocation behavior through
+  `platform-backup` and [the backup/restore runbook](BACKUP_RESTORE.md);
+- explicit platform/schema upgrade and migration lifecycle through `platform-upgrade` and
+  [the upgrade runbook](UPGRADES.md);
+- optional Control Plane HA/fencing/promotion semantics documented in
   [Control Plane high availability](CONTROL_PLANE_HIGH_AVAILABILITY.md).
 
-HA remains **optional/advanced** and is not a dependency of the ordinary single-node or
-single-server topology. The #89 semantics are complete, but a production-shaped independent
-multi-process/multi-host Control Plane profile still depends on later work tracked by #956
-(shared PostgreSQL durable-state adapters) and #566 (the combined production HA composition and
-failover proof).
+HA remains **Optional / Advanced** and is not a dependency of the ordinary single-node or
+single-server topology. A production-shaped independent multi-process/multi-host Control Plane
+profile remains outside the ordinary baseline and must be claimed only with its own compatibility
+and conformance evidence.
 
 Single-node/single-server production remains a valid topology independently of those optional HA
-extensions. Formal release publication/version finalization remains separate downstream work in
-#1237 rather than a prerequisite introduced by this deployment guide.
+extensions. Formal release publication/version finalization remains a separate downstream release
+operation rather than a prerequisite introduced by this deployment guide.

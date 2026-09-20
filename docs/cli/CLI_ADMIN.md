@@ -1,8 +1,6 @@
-# Progressive administrative CLI
+# Administrative CLI
 
-Issue: #38
-
-This document extends `docs/CLI.md` with the canonical administrative surface that became available after the initial CLI foundation.
+This document supplements [`CLI.md`](CLI.md) with selected administrative workflows exposed by the composed `platform` command.
 
 ## Architecture invariant
 
@@ -177,6 +175,6 @@ When `--yes` is omitted in a non-interactive environment, the CLI refuses the mu
 
 This confirmation layer does not grant permission. The Control Plane remains authoritative for authentication, authorization, approvals, idempotency, and the actual state transition.
 
-## Still progressive
+## Composition rule
 
-Issue #38 remains open. Commands for agents/teams, capabilities/tools, nodes/workers, approvals, authentication, safe configuration/secrets, automations, evaluations, plugins, import/export, and other later domains must be added only when their canonical Control Plane APIs are present. The CLI must not invent direct backend shortcuts while waiting for those APIs.
+The installed `platform` entry point now composes the supported product domains behind one discoverable command tree. Domain commands are exposed only when they have a canonical Control Plane contract; the CLI must not invent direct backend shortcuts for provider-private or implementation-only operations. Use [`CLI.md`](CLI.md) for the current top-level command inventory, help/completion behavior and cross-domain conventions.
