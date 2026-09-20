@@ -32,6 +32,16 @@ describe("mobile architecture boundary", () => {
     expect(session).not.toContain("localStorage");
   });
 
+  it("uses short-lived pairing instead of manual durable-token entry", () => {
+    const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
+    const session = readFileSync(resolve(ROOT, "src/session.ts"), "utf8");
+    expect(app).toContain("Confirm server & pair");
+    expect(app).toContain("Pairing code");
+    expect(app).not.toContain("Bearer credential</Text>");
+    expect(session).toContain("/api/v1/auth/mobile-pairings:consume");
+    expect(session).toContain("/api/v1/auth/me");
+  });
+
   it("keeps stale offline state visibly read-only in the application surface", () => {
     const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
     expect(app).toContain("Showing cached read-only data.");
