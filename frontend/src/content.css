@@ -3,6 +3,8 @@
  */
 
 main > .stack {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.35rem;
 }
 
@@ -275,6 +277,21 @@ dl > div:last-child,
 
   .detail-status {
     justify-content: flex-start;
+  }
+
+  .timeline li {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .35rem;
+  }
+
+  .timeline li > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .timeline li code {
+    overflow-wrap: anywhere;
   }
 
   .pagination {
