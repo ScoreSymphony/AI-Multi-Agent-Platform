@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .authentication import (
@@ -23,7 +24,7 @@ from .authentication import (
     SessionGrant,
     StoredCredential,
 )
-from .authentication_hardening import CredentialScope
+from .authentication_hardening import CredentialScope, IssuedMobilePairingChallenge
 
 _BUSY_MARKERS = (
     "database is locked",
@@ -49,6 +50,52 @@ class _ScopedAuthenticationService(Protocol):
         actor: AuthenticatedActor,
         *,
         now: datetime | None = None,
+    ) -> None: ...
+
+    def create_mobile_pairing_challenge(
+        self,
+        user_id: str,
+        *,
+        server_origin: str,
+        scope: CredentialScope | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedMobilePairingChallenge: ...
+
+    def complete_mobile_pairing(
+        self,
+        request_id: str,
+        proof: str,
+        *,
+        device_name: str,
+        device_metadata: Mapping[str, JsonValue] | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedCredential: ...
+
+    def cancel_mobile_pairing(
+        self,
+        user_id: str,
+        request_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None: ...
+
+    def list_mobile_devices(self, user_id: str) -> tuple[StoredCredential, ...]: ...
+
+    def rename_mobile_device(
+        self,
+        user_id: str,
+        credential_id: str,
+        device_name: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> StoredCredential: ...
+
+    def revoke_mobile_device(
+        self,
+        user_id: str,
+        credential_id: str,
+        *,
+        correlation_id: str | None = None,
     ) -> None: ...
 
 
@@ -133,6 +180,52 @@ class AsyncAuthenticationService(Protocol):
     ) -> IssuedCredential: ...
 
     async def revoke_credential(self, owner_id: str, credential_id: str) -> None: ...
+
+    async def create_mobile_pairing_challenge(
+        self,
+        user_id: str,
+        *,
+        server_origin: str,
+        scope: CredentialScope | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedMobilePairingChallenge: ...
+
+    async def complete_mobile_pairing(
+        self,
+        request_id: str,
+        proof: str,
+        *,
+        device_name: str,
+        device_metadata: Mapping[str, JsonValue] | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedCredential: ...
+
+    async def cancel_mobile_pairing(
+        self,
+        user_id: str,
+        request_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None: ...
+
+    async def list_mobile_devices(self, user_id: str) -> tuple[StoredCredential, ...]: ...
+
+    async def rename_mobile_device(
+        self,
+        user_id: str,
+        credential_id: str,
+        device_name: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> StoredCredential: ...
+
+    async def revoke_mobile_device(
+        self,
+        user_id: str,
+        credential_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None: ...
 
 
 class AuthenticationPersistenceOffload:
@@ -442,6 +535,106 @@ class AsyncAuthenticationServiceAdapter:
         await self._run(
             lambda: self._service.revoke_credential(owner_id, credential_id),
             message="failed to persist credential revocation",
+        )
+
+    async def create_mobile_pairing_challenge(
+        self,
+        user_id: str,
+        *,
+        server_origin: str,
+        scope: CredentialScope | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedMobilePairingChallenge:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        return await self._run(
+            lambda: scoped.create_mobile_pairing_challenge(
+                user_id,
+                server_origin=server_origin,
+                scope=scope,
+                correlation_id=correlation_id,
+            ),
+            message="failed to create mobile pairing challenge",
+        )
+
+    async def complete_mobile_pairing(
+        self,
+        request_id: str,
+        proof: str,
+        *,
+        device_name: str,
+        device_metadata: Mapping[str, JsonValue] | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedCredential:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        return await self._run(
+            lambda: scoped.complete_mobile_pairing(
+                request_id,
+                proof,
+                device_name=device_name,
+                device_metadata=device_metadata,
+                correlation_id=correlation_id,
+            ),
+            message="failed to complete mobile pairing",
+        )
+
+    async def cancel_mobile_pairing(
+        self,
+        user_id: str,
+        request_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        await self._run(
+            lambda: scoped.cancel_mobile_pairing(
+                user_id,
+                request_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to cancel mobile pairing",
+        )
+
+    async def list_mobile_devices(self, user_id: str) -> tuple[StoredCredential, ...]:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        return await self._run(
+            lambda: scoped.list_mobile_devices(user_id),
+            message="failed to read mobile device credentials",
+        )
+
+    async def rename_mobile_device(
+        self,
+        user_id: str,
+        credential_id: str,
+        device_name: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> StoredCredential:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        return await self._run(
+            lambda: scoped.rename_mobile_device(
+                user_id,
+                credential_id,
+                device_name,
+                correlation_id=correlation_id,
+            ),
+            message="failed to rename mobile device credential",
+        )
+
+    async def revoke_mobile_device(
+        self,
+        user_id: str,
+        credential_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None:
+        scoped = cast(_ScopedAuthenticationService, self._service)
+        await self._run(
+            lambda: scoped.revoke_mobile_device(
+                user_id,
+                credential_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to revoke mobile device credential",
         )
 
 
