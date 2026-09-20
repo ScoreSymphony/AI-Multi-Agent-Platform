@@ -1,8 +1,12 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  AppLink,
   matchPath,
   normalizeAppLinkHref,
   normalizeInternalNavigationHref,
+  RouterProvider,
 } from "./router";
 
 describe("cross-cutting route matching", () => {
@@ -35,6 +39,28 @@ describe("AppLink URL safety", () => {
     expect(normalizeAppLinkHref("vbscript:msgbox(1)")).toBeUndefined();
     expect(normalizeAppLinkHref("blob:https://router.invalid/id")).toBeUndefined();
     expect(normalizeAppLinkHref("http://[")).toBeUndefined();
+  });
+});
+
+describe("AppLink rendered href safety", () => {
+  it("omits executable destinations at the rendered anchor boundary", () => {
+    const unsafeMarkup = renderToStaticMarkup(
+      createElement(
+        RouterProvider,
+        null,
+        createElement(AppLink, { href: "javascript:alert(1)" }, "Unsafe"),
+      ),
+    );
+    const safeMarkup = renderToStaticMarkup(
+      createElement(
+        RouterProvider,
+        null,
+        createElement(AppLink, { href: "https://docs.example.test/guide" }, "Docs"),
+      ),
+    );
+
+    expect(unsafeMarkup).not.toContain("href=");
+    expect(safeMarkup).toContain('href="https://docs.example.test/guide"');
   });
 });
 
