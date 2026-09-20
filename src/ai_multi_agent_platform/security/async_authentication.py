@@ -17,9 +17,12 @@ from .authentication import (
     AuthenticatedActor,
     BrowserSession,
     IssuedCredential,
+    IssuedMobilePairing,
     LocalAuthenticationService,
     LocalUserAccount,
     LoginResult,
+    MobileDevice,
+    MobileDeviceGrant,
     SessionGrant,
     StoredCredential,
 )
@@ -133,6 +136,34 @@ class AsyncAuthenticationService(Protocol):
     ) -> IssuedCredential: ...
 
     async def revoke_credential(self, owner_id: str, credential_id: str) -> None: ...
+
+    async def create_mobile_pairing(
+        self,
+        user_id: str,
+        server_origin: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> IssuedMobilePairing: ...
+
+    async def consume_mobile_pairing(
+        self,
+        pairing_code: str,
+        *,
+        server_origin: str,
+        device_name: str,
+        device_platform: str,
+        pairing_id: str | None = None,
+        protocol_version: int = 1,
+        correlation_id: str | None = None,
+    ) -> MobileDeviceGrant: ...
+
+    async def cancel_mobile_pairing(self, user_id: str, pairing_id: str) -> None: ...
+
+    async def list_mobile_devices(self, user_id: str) -> tuple[MobileDevice, ...]: ...
+
+    async def revoke_mobile_device(self, user_id: str, device_id: str) -> None: ...
+
+    async def revoke_all_mobile_devices(self, user_id: str) -> int: ...
 
 
 class AuthenticationPersistenceOffload:
@@ -442,6 +473,70 @@ class AsyncAuthenticationServiceAdapter:
         await self._run(
             lambda: self._service.revoke_credential(owner_id, credential_id),
             message="failed to persist credential revocation",
+        )
+
+    async def create_mobile_pairing(
+        self,
+        user_id: str,
+        server_origin: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> IssuedMobilePairing:
+        return await self._run(
+            lambda: self._service.create_mobile_pairing(
+                user_id,
+                server_origin,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile pairing challenge",
+        )
+
+    async def consume_mobile_pairing(
+        self,
+        pairing_code: str,
+        *,
+        server_origin: str,
+        device_name: str,
+        device_platform: str,
+        pairing_id: str | None = None,
+        protocol_version: int = 1,
+        correlation_id: str | None = None,
+    ) -> MobileDeviceGrant:
+        return await self._run(
+            lambda: self._service.consume_mobile_pairing(
+                pairing_code,
+                server_origin=server_origin,
+                device_name=device_name,
+                device_platform=device_platform,
+                pairing_id=pairing_id,
+                protocol_version=protocol_version,
+                correlation_id=correlation_id,
+            ),
+            message="failed to consume mobile pairing challenge",
+        )
+
+    async def cancel_mobile_pairing(self, user_id: str, pairing_id: str) -> None:
+        await self._run(
+            lambda: self._service.cancel_mobile_pairing(user_id, pairing_id),
+            message="failed to cancel mobile pairing challenge",
+        )
+
+    async def list_mobile_devices(self, user_id: str) -> tuple[MobileDevice, ...]:
+        return await self._run(
+            lambda: self._service.list_mobile_devices(user_id),
+            message="failed to read mobile devices",
+        )
+
+    async def revoke_mobile_device(self, user_id: str, device_id: str) -> None:
+        await self._run(
+            lambda: self._service.revoke_mobile_device(user_id, device_id),
+            message="failed to revoke mobile device",
+        )
+
+    async def revoke_all_mobile_devices(self, user_id: str) -> int:
+        return await self._run(
+            lambda: self._service.revoke_all_mobile_devices(user_id),
+            message="failed to revoke mobile devices",
         )
 
 
