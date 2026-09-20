@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -163,6 +164,37 @@ def test_mobile_pairing_rejects_remote_http_and_cross_user_management() -> None:
     )
     with pytest.raises(KeyError):
         auth.revoke_mobile_device(bob.user_id, grant.device.device_id, now=NOW)
+
+
+def test_mobile_pairing_consumption_is_atomic_under_concurrency() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    pairing = auth.create_mobile_pairing(user.user_id, "https://platform.example", now=NOW)
+
+    def consume(name: str):
+        return auth.consume_mobile_pairing(
+            pairing.pairing_code,
+            pairing_id=pairing.pairing_id,
+            server_origin="https://platform.example",
+            device_name=name,
+            device_platform="android",
+            now=NOW + timedelta(seconds=1),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(consume, f"Phone {index}") for index in range(2)]
+
+    successes = []
+    failures: list[AuthenticationFailure] = []
+    for future in futures:
+        try:
+            successes.append(future.result())
+        except AuthenticationError as exc:
+            failures.append(exc.failure)
+
+    assert len(successes) == 1
+    assert failures == [AuthenticationFailure.REPLAY_REJECTED]
+    assert len(auth.list_mobile_devices(user.user_id)) == 1
 
 
 def test_mobile_device_revocation_rejects_next_canonical_bearer_request() -> None:
