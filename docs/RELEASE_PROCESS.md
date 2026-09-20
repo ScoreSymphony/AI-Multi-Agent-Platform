@@ -33,12 +33,25 @@ Publication is still blocked until the terminal #747 product-readiness audit pas
 release candidate, all release-blocking V1/M3 findings are resolved or explicitly reclassified as
 non-blocking, and the complete release checklist below is green for that exact source commit.
 
-Until the exact release candidate is frozen, repository/package metadata intentionally remains on
-the pre-release development version. The final `1.0.0` projection must be performed atomically on
-the accepted candidate across package metadata, runtime `__version__`, canonical
-`VersionSnapshot.platform_release`/compatibility metadata, shipped built-in compatibility ranges,
-release-manifest metadata and the Git tag/release identity. Historical migration/adoption evidence
-that deliberately names `0.0.1` must not be rewritten as part of that projection.
+Until all remaining source-changing release blockers are resolved, repository/package metadata
+intentionally remains on the pre-release development version. Before the terminal exact-candidate
+#747 audit, project the target version across the canonical source-tree release surfaces with:
+
+```bash
+platform-release version-project --root . --version 1.0.0
+platform-release version-project --root . --version 1.0.0 --write
+```
+
+The first command is a fail-closed dry run. The write command refuses to hide a pre-existing
+version mismatch and updates package metadata, runtime `__version__`, and the repository/packaged
+compatibility `VersionSnapshot.platform_release` together. Historical migration/adoption evidence
+that deliberately names `0.0.1` is outside that projection and must remain unchanged.
+
+Commit that projection as part of the release candidate **before** the final #747 PASS. The
+resulting exact commit is then the candidate that receives terminal #747, CI, security,
+compatibility, clean-install and first-run evidence. After #747 passes, do not modify the source
+tree: release-manifest/artifact assembly, the `v1.0.0` tag and GitHub publication must all bind to
+that already-audited source commit.
 
 The release/update system itself is no longer only policy documentation. The merged #42 work
 provides release-manifest validation, compatibility inventory, advisory upstream discovery,
@@ -72,16 +85,16 @@ advisory: it cannot mutate production pins, approve or merge changes, deploy a r
 
 ## Publication
 
-1. Select the exact source commit intended for release.
-2. Run the required acceptance/conformance profile and release checks against that commit.
-3. Create a release candidate without modifying the already-tested source tree.
-4. Freeze exact dependency lock/resolved sets and record their cryptographic digests.
-5. Verify generated artifacts and checksums.
-6. Populate a reviewed generation-input document with the exact SBOM/provenance references and typed gate evidence, then run `platform-release generate` for the exact release commit and validate the generated manifest.
-7. Tag the accepted commit with the semantic version.
-8. Publish a GitHub release using the matching changelog section.
-9. Record artifact checksums, canonical source revision and tested compatibility profiles.
-10. Verify a clean installation using the published artifacts.
+1. Resolve or explicitly defer every remaining source-changing release blocker.
+2. Dry-run `platform-release version-project --root . --version <version>`, then write the target version with `--write`.
+3. Commit the complete version projection and treat that commit as the release-candidate source tree.
+4. Run #747 and every required acceptance/conformance, CI, compatibility, CodeQL, dependency-review, clean-install and first-run check against that exact commit.
+5. If any required fix changes the source tree, create a new candidate commit and rerun every affected gate; material changes require a new terminal #747 decision.
+6. Once the exact candidate passes, freeze exact dependency lock/resolved sets and record their cryptographic digests.
+7. Build release artifacts from that accepted commit and verify their checksums.
+8. Populate a reviewed generation-input document with the exact SBOM/provenance references and typed gate evidence, then run `platform-release generate` for the exact accepted commit and validate the generated manifest.
+9. Tag the accepted commit with the semantic version and publish a GitHub release using the matching changelog section.
+10. Record artifact checksums, canonical source revision and tested compatibility profiles, then verify a clean installation using the published artifacts/source.
 
 `platform-release generate` performs deterministic assembly and hashing; it does not infer that a gate passed or synthesize approval evidence. Missing, stale or failed required evidence therefore continues to block the generated release manifest rather than weakening the manifest-v2 contract.
 
