@@ -32,6 +32,15 @@ describe("mobile architecture boundary", () => {
     expect(session).not.toContain("localStorage");
   });
 
+  it("scans pairing QR codes inside the companion before confirmation", () => {
+    const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
+    expect(app).toContain('from "expo-camera"');
+    expect(app).toContain("CameraView");
+    expect(app).toContain('barcodeTypes: ["qr"]');
+    expect(app).toContain("Scan pairing QR");
+    expect(app).toContain("Confirm server & pair");
+  });
+
   it("uses short-lived pairing instead of manual durable-token entry", () => {
     const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
     const session = readFileSync(resolve(ROOT, "src/session.ts"), "utf8");
