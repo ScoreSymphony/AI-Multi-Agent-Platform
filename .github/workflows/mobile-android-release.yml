@@ -46,8 +46,8 @@ jobs:
       - name: Pin supported npm
         run: npm install --global npm@11.6.0
 
-      - name: Install mobile dependencies
-        run: npm install --no-audit --no-fund --package-lock=false
+      - name: Install mobile dependencies from committed lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Validate release configuration and dependency graph
         env:
