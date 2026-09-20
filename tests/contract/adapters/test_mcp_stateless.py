@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.adapters.mcp import MCPServerConfig
 from ai_multi_agent_platform.adapters.mcp_stateless import (
     MCP_STATELESS_PROTOCOL_REVISION,
@@ -85,7 +86,7 @@ async def test_stateless_client_populates_required_metadata_on_every_request() -
     assert meta["io.modelcontextprotocol/clientCapabilities"] == {}
     assert meta["io.modelcontextprotocol/clientInfo"] == {
         "name": "ai-multi-agent-platform",
-        "version": "0.0.1",
+        "version": __version__,
     }
 
 
@@ -185,7 +186,7 @@ async def test_stateless_client_lists_and_calls_tools_without_stateful_initializ
             "io.modelcontextprotocol/clientCapabilities": {},
             "io.modelcontextprotocol/clientInfo": {
                 "name": "ai-multi-agent-platform",
-                "version": "0.0.1",
+                "version": __version__,
             },
         },
     }
