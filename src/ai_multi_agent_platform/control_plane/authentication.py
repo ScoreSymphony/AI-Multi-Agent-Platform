@@ -7,6 +7,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError
@@ -488,6 +489,33 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
                 request_id=request_id,
                 correlation_id=correlation_id,
             )
+        pairing_errors = {
+            AuthenticationFailure.PAIRING_EXPIRED: (
+                410,
+                "pairing_expired",
+                "mobile pairing challenge expired",
+            ),
+            AuthenticationFailure.PAIRING_CANCELLED: (
+                410,
+                "pairing_cancelled",
+                "mobile pairing challenge was cancelled",
+            ),
+            AuthenticationFailure.PAIRING_ALREADY_USED: (
+                409,
+                "pairing_already_used",
+                "mobile pairing challenge was already consumed",
+            ),
+        }
+        pairing_error = pairing_errors.get(error.failure)
+        if pairing_error is not None:
+            status, code, message = pairing_error
+            return cls._error(
+                status=status,
+                code=code,
+                message=message,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
         return cls._error(
             status=401,
             code="unauthorized",
@@ -583,7 +611,15 @@ def _with_authenticated_actor(
 def _public_route(method: str, relative: str) -> bool:
     if method == "GET" and relative in {"", "/", "/health", "/readiness", "/openapi.json"}:
         return True
-    return method == "POST" and relative in {"/auth/login", "/auth/bootstrap-admin"}
+    if method != "POST":
+        return False
+    if relative in {"/auth/login", "/auth/bootstrap-admin"}:
+        return True
+    return (
+        relative.startswith("/auth/mobile-pairing/")
+        and relative.endswith(":complete")
+        and bool(relative.removeprefix("/auth/mobile-pairing/").removesuffix(":complete"))
+    )
 
 
 def _relative_path(path: str) -> str:
@@ -593,6 +629,25 @@ def _relative_path(path: str) -> str:
     if not path.startswith(f"{prefix}/"):
         raise APIException(status=404, code="not_found", message="route not found")
     return path[len(prefix) :]
+
+
+def _normalize_mobile_server_origin(value: str) -> str:
+    trimmed = value.strip().rstrip("/")
+    try:
+        parsed = urlsplit(trimmed)
+    except ValueError as exc:
+        raise ValueError("server_origin must be an absolute URL") from exc
+    if not parsed.scheme or not parsed.netloc or parsed.hostname is None:
+        raise ValueError("server_origin must be an absolute URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("server_origin must not embed credentials")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ValueError("server_origin must contain only scheme, host and optional port")
+    local = parsed.hostname.casefold() in {"localhost", "127.0.0.1", "::1"}
+    scheme = parsed.scheme.casefold()
+    if scheme != "https" and not (local and scheme == "http"):
+        raise ValueError("remote mobile pairing requires HTTPS")
+    return f"{scheme}://{parsed.netloc}"
 
 
 def _header(headers: Mapping[str, str], name: str) -> str | None:
@@ -737,6 +792,52 @@ def _augment_authentication_openapi(
                 "changeLocalPassword",
                 "Change the current local user's password and invalidate sessions.",
                 request_fields=("current_password", "new_password"),
+                parameters=(csrf_parameter,),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-pairing": {
+            "post": _auth_operation(
+                "createMobilePairingChallenge",
+                "Create a short-lived one-time mobile device pairing challenge.",
+                request_fields=("server_origin",),
+                status="201",
+                parameters=(csrf_parameter,),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-pairing/{{request_id}}:complete": {
+            "post": _auth_operation(
+                "completeMobilePairing",
+                "Consume a one-time mobile pairing proof and issue the device credential once.",
+                public=True,
+                request_fields=("proof", "device_name"),
+                status="201",
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-pairing/{{request_id}}:cancel": {
+            "post": _auth_operation(
+                "cancelMobilePairing",
+                "Cancel an owned pending mobile pairing challenge.",
+                parameters=(csrf_parameter,),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-devices": {
+            "get": _auth_operation(
+                "listMobileDevices",
+                "List revocable mobile device credential metadata for the current user.",
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-devices/{{credential_id}}:rename": {
+            "post": _auth_operation(
+                "renameMobileDevice",
+                "Rename one owned mobile device credential.",
+                request_fields=("device_name",),
+                parameters=(csrf_parameter,),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-devices/{{credential_id}}:revoke": {
+            "post": _auth_operation(
+                "revokeMobileDevice",
+                "Revoke one owned mobile device credential.",
                 parameters=(csrf_parameter,),
             )
         },
