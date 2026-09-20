@@ -252,6 +252,91 @@ def test_asgi_disconnect_is_not_converted_to_an_api_failure() -> None:
     assert sent == []
 
 
+def test_asgi_route_semantics_precede_malformed_json_validation() -> None:
+    app = ControlPlaneASGI(_http(_HealthControlPlane()))
+
+    async def invoke(method: str, path: str, body: bytes) -> tuple[int, dict[str, Any]]:
+        sent: list[dict[str, Any]] = []
+        delivered = False
+
+        async def receive() -> dict[str, Any]:
+            nonlocal delivered
+            if delivered:
+                return {"type": "http.disconnect"}
+            delivered = True
+            return {
+                "type": "http.request",
+                "body": body,
+                "more_body": False,
+            }
+
+        async def send(message: dict[str, Any]) -> None:
+            sent.append(message)
+
+        await app(
+            {
+                "type": "http",
+                "method": method,
+                "path": path,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"x-request-id", b"request_route_before_body"),
+                    (b"x-correlation-id", b"correlation_route_before_body"),
+                ],
+                "query_string": b"",
+            },
+            receive,
+            send,
+        )
+
+        start = next(message for message in sent if message["type"] == "http.response.start")
+        body_message = next(
+            message for message in sent if message["type"] == "http.response.body"
+        )
+        payload = json.loads(body_message["body"])
+        assert isinstance(payload, dict)
+        return int(start["status"]), payload
+
+    async def scenario() -> None:
+        wrong_method_status, wrong_method = await invoke(
+            "POST",
+            "/api/v1/openapi.json",
+            b"{",
+        )
+        assert wrong_method_status == 405
+        assert wrong_method["code"] == "method_not_allowed"
+        assert wrong_method["category"] == "transport"
+        assert wrong_method["request_id"] == "request_route_before_body"
+        assert wrong_method["correlation_id"] == "correlation_route_before_body"
+
+        unknown_status, unknown = await invoke(
+            "POST",
+            "/api/v1/does-not-exist/nested",
+            b"{",
+        )
+        assert unknown_status == 404
+        assert unknown["code"] == "not_found"
+        assert unknown["category"] == "resource"
+
+        valid_route_status, valid_route = await invoke(
+            "POST",
+            "/api/v1/projects",
+            b"{",
+        )
+        assert valid_route_status == 400
+        assert valid_route["code"] == "invalid_json"
+
+        non_object_wrong_method_status, non_object_wrong_method = await invoke(
+            "POST",
+            "/api/v1/health",
+            b"[]",
+        )
+        assert non_object_wrong_method_status == 405
+        assert non_object_wrong_method["code"] == "method_not_allowed"
+
+    asyncio.run(scenario())
+
+
 def test_notification_startup_failure_rolls_back_and_redacts_lifespan_message() -> None:
     control_plane = _LifecycleControlPlane(
         notification_start_error=RuntimeError("token=startup-secret"),
