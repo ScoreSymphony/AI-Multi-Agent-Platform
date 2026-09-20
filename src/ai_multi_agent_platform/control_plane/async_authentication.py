@@ -457,6 +457,26 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
             ]
             return self._response(200, {"items": items}, request_id, correlation_id)
 
+        if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
+            await self._authorize_credential_operation(
+                request,
+                actor,
+                action="revoke",
+                resource_ref=user_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            revoked_count = await self._runtime_authentication.revoke_all_mobile_devices(
+                user_id,
+                correlation_id=correlation_id,
+            )
+            return self._response(
+                200,
+                {"revoked": True, "revoked_count": revoked_count},
+                request_id,
+                correlation_id,
+            )
+
         if request.method == "POST" and relative.startswith("/auth/mobile-devices/"):
             suffix = relative.removeprefix("/auth/mobile-devices/")
             if suffix.endswith(":rename"):
