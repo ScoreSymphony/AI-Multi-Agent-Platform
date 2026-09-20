@@ -299,7 +299,7 @@ platform-backup create \
 platform-backup verify /srv/backups/ai-map
 platform-backup restore /srv/backups/ai-map \
   --target-data-dir /srv/ai-map-restored/data
-platform-server recover-restore
+AI_MAP_DATA_DIR=/srv/ai-map-restored/data platform-server recover-restore
 ```
 
 Restore publishes only after manifest, checksum, SQLite-integrity and durable-layout validation,
