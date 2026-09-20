@@ -189,6 +189,21 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     }
   }
 
+  async function revokeAllMobileDevices() {
+    if (!window.confirm("Revoke every active mobile device credential?")) return;
+    setMutating(true);
+    try {
+      await session.revokeAllMobileDevices();
+      setMobileDevices(await session.listMobileDevices());
+      setPairing(null);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
   async function revokeMobileDevice(credentialId: string) {
     if (!window.confirm(`Revoke mobile device ${credentialId}?`)) return;
     setMutating(true);
@@ -318,6 +333,16 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
                   Cancel pairing
                 </button>
               ) : null}
+              <button
+                disabled={
+                  mutating ||
+                  mobileDevices === null ||
+                  !mobileDevices.some((device) => device.revoked_at === null)
+                }
+                onClick={() => void revokeAllMobileDevices()}
+              >
+                Revoke all mobile devices
+              </button>
             </div>
 
             {pairing ? (
