@@ -41,8 +41,8 @@ The real-browser path retains evidence for:
 | Search | the real Search surface remains reachable and its query control remains usable at 390 CSS px |
 | Operator diagnostics | the completed first-run Task is reopened in Observability and its timeline table remains contained by the intentional scroll wrapper |
 | Dense tables | the representative table wrapper must expose `overflow-x: auto|scroll`; real overflow, when present, must be horizontally scrollable without forcing document-level overflow |
-| Primary Task action | a canonical draft Task is opened at the narrow viewport and its Cancel action is reached by sequential Tab navigation |
-| Destructive confirmation | Enter on the keyboard-focused Cancel action must open the native confirmation; dismissing it must leave canonical Task state unchanged |
+| Primary Task action | a canonical draft Task is opened at the narrow viewport and its Queue action is reached by sequential Tab navigation with visible focus |
+| Destructive confirmation | Tab from Queue reaches Cancel; Enter on the keyboard-focused Cancel action must open the native confirmation, and dismissing it must leave canonical Task state unchanged |
 | Canonical navigation | the maintained first-run test continues to retain exact Task/Run/Result/Artifact links and public-Control-Plane identity checks |
 | Search/diagnostics | the existing #1296 Search -> Observability -> readiness path remains part of the same maintained browser run |
 
