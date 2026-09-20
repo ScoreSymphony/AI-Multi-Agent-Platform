@@ -46,23 +46,12 @@ def _session(context: OperationContext) -> SessionState:
     return SessionState(ref=BrowserSessionRef.create(context))
 
 
-def _answer(address: str) -> list[tuple[Any, ...]]:
-    family = socket.AF_INET6 if ":" in address else socket.AF_INET
-    sockaddr: tuple[Any, ...]
-    if family == socket.AF_INET6:
-        sockaddr = (address, 0, 0, 0)
-    else:
-        sockaddr = (address, 0)
-    return [(family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr)]
-
-
 def test_http_rebinding_is_blocked_before_socket_connect(monkeypatch: pytest.MonkeyPatch) -> None:
-    answers = iter((_answer(PUBLIC_V4), _answer("127.0.0.1")))
+    answers = iter(((PUBLIC_V4,), ("127.0.0.1",)))
     dns_calls: list[str] = []
     connect_calls: list[tuple[str, int]] = []
 
-    def fake_getaddrinfo(host: str, *args: Any, **kwargs: Any) -> list[tuple[Any, ...]]:
-        del args, kwargs
+    def fake_resolve(host: str) -> tuple[str, ...]:
         dns_calls.append(host)
         return next(answers)
 
@@ -71,7 +60,10 @@ def test_http_rebinding_is_blocked_before_socket_connect(monkeypatch: pytest.Mon
         connect_calls.append(address)
         raise AssertionError("forbidden destination reached socket connect")
 
-    monkeypatch.setattr(\n        "ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo\n    )
+    monkeypatch.setattr(
+        "ai_multi_agent_platform.browser.policy._resolve_addresses",
+        fake_resolve,
+    )
     monkeypatch.setattr(
         "ai_multi_agent_platform.browser.reference_http.socket.create_connection",
         fake_create_connection,
@@ -140,21 +132,21 @@ def test_redirect_hop_rebinding_is_blocked_before_second_request(
     pinned_connects: list[tuple[str, int]] = []
     answers = iter(
         (
-            _answer(PUBLIC_V4),
-            _answer(PUBLIC_V4),
-            _answer(PUBLIC_V4),
-            _answer("127.0.0.1"),
+            (PUBLIC_V4,),
+            (PUBLIC_V4,),
+            (PUBLIC_V4,),
+            ("127.0.0.1",),
         )
     )
 
-    def fake_getaddrinfo(host: str, *args: Any, **kwargs: Any) -> list[tuple[Any, ...]]:
-        del host, args, kwargs
+    def fake_resolve(host: str) -> tuple[str, ...]:
+        del host
         return next(answers)
 
     def route_pinned_to_fixture(
         address: tuple[str, int],
-        timeout: Any = socket._GLOBAL_DEFAULT_TIMEOUT,
-        source_address: tuple[str, int] | None = None,
+        timeout: Any,
+        source_address: tuple[str, int] | None,
     ) -> socket.socket:
         pinned_connects.append(address)
         return real_create_connection(
@@ -163,7 +155,10 @@ def test_redirect_hop_rebinding_is_blocked_before_second_request(
             source_address,
         )
 
-    monkeypatch.setattr(\n        "ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo\n    )
+    monkeypatch.setattr(
+        "ai_multi_agent_platform.browser.policy._resolve_addresses",
+        fake_resolve,
+    )
     monkeypatch.setattr(
         "ai_multi_agent_platform.browser.reference_http.socket.create_connection",
         route_pinned_to_fixture,
@@ -215,8 +210,8 @@ def test_https_connection_pins_ip_and_preserves_hostname_for_sni(
 
     def fake_create_connection(
         address: tuple[str, int],
-        timeout: Any = socket._GLOBAL_DEFAULT_TIMEOUT,
-        source_address: tuple[str, int] | None = None,
+        timeout: Any,
+        source_address: tuple[str, int] | None,
     ) -> Any:
         del timeout, source_address
         destinations.append(address)
@@ -270,11 +265,14 @@ def test_private_and_link_local_ipv4_ipv6_require_explicit_opt_in(
 def test_mixed_public_and_private_dns_answer_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_getaddrinfo(host: str, *args: Any, **kwargs: Any) -> list[tuple[Any, ...]]:
-        del host, args, kwargs
-        return _answer(PUBLIC_V4) + _answer("10.0.0.1")
+    def fake_resolve(host: str) -> tuple[str, ...]:
+        del host
+        return (PUBLIC_V4, "10.0.0.1")
 
-    monkeypatch.setattr(\n        "ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo\n    )
+    monkeypatch.setattr(
+        "ai_multi_agent_platform.browser.policy._resolve_addresses",
+        fake_resolve,
+    )
 
     with pytest.raises(ContractError) as caught:
         resolve_browser_target(
