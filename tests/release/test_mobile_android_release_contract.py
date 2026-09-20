@@ -76,6 +76,23 @@ def test_release_lineage_scan_paginates_all_github_releases() -> None:
     assert "draft == false" in workflow
 
 
+
+def test_release_publication_rejects_preexisting_version_tags() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "git/matching-refs/tags/$TAG?per_page=100" in workflow
+    assert 'any(.[][]; .ref == $ref)' in workflow
+    assert "Git tag $TAG already exists" in workflow
+
+
+def test_apk_metadata_enforces_android_7_minimum_sdk() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'EXPECTED_MIN_SDK="24"' in workflow
+    assert "sdkVersion:" in workflow
+    assert "APK minimum SDK mismatch" in workflow
+    assert '"minimum_android_api": 24' in workflow
+
 def test_signing_material_and_generated_native_project_are_ignored() -> None:
     ignore = GITIGNORE.read_text(encoding="utf-8")
 
