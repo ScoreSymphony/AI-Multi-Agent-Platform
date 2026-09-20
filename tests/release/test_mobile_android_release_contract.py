@@ -109,7 +109,7 @@ def test_partial_release_publication_is_resumable_only_for_matching_draft() -> N
 
     for required in (
         "--json isDraft,tagName,targetCommitish",
-        '"Existing draft release $TAG targets a different source commit"',
+        "Existing draft release $TAG targets a different source commit",
         'RELEASE_MODE="resume"',
         'gh release upload "$TAG"',
         "--clobber",
@@ -117,7 +117,7 @@ def test_partial_release_publication_is_resumable_only_for_matching_draft() -> N
         "--draft",
         'gh release edit "$TAG"',
         "--draft=false",
-        '"Git tag $TAG already exists without a matching resumable draft"',
+        "Git tag $TAG already exists without a matching resumable draft",
     ):
         assert required in workflow
 
