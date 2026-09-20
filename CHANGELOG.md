@@ -18,7 +18,7 @@ The project uses semantic versioning once a public prototype is released. Until 
 - Supported single-node deployment, optional Control Plane HA/failover, network-capable distributed transport and remote Workspace materialization.
 - Platform-owned durable Plan/Step coordination with persisted dependency progression, fan-out/fan-in, waits, Step retries, cancellation/reconciliation, claims/fencing and backend-neutral Control Plane projections.
 - Canonical Web and CLI durable workflow-progress views backed only by the versioned Control Plane, including Plan revision, Step/dependency state, latest Run attempts, waits/deadlines, retries and reconciliation evidence.
-- Platform-owned autonomous planning and bounded-replanning foundations with deterministic/model-backed planner paths, immutable planning proposals/revisions, #384 handoff and planned Step execution bindings that reach the canonical Agent runtime.
+- Platform-owned autonomous planning and bounded-replanning foundations with deterministic/model-backed planner paths, immutable planning proposals/revisions, canonical handoff and planned Step execution bindings that reach the Agent runtime.
 - Optional Proposal/Specification governance with versioned Proposal history, immutable Specification revisions/digests, exact-revision Approval binding, idempotent Task conversion, Search/audit integration and Web/CLI surfaces.
 - Provider-neutral repository-intelligence baseline capabilities for repository maps, deterministic search, exact source slices, health/index status and exact revision provenance, wired through the existing authorized Repository policy boundary.
 - Portable host-pressure and pressure-aware admission foundations, including observability integration, authenticated remote Worker pressure reporting, deployment composition and `platform doctor` visibility without creating a second scheduler.
@@ -34,16 +34,15 @@ The project uses semantic versioning once a public prototype is released. Until 
 
 ### Changed
 
-- The project has moved beyond the original architecture/prototype implementation waves; the remaining roadmap is now organized around final planning/replanning closure, workflow-progress semantic completion, host-pressure/runtime hardening, measured operating envelopes, real-host distributed acceptance, optional governance/repository-intelligence completion and final platform conformance.
-- Ordinary canonical Task/Run execution can use the shared `DistributedRuntime` when advanced deployment is explicitly enabled, while the #39 single-node path remains unchanged when distributed execution is disabled.
+- The project has moved beyond the original architecture/prototype implementation waves into final Operational V1 product-readiness, release-candidate hardening and publication preparation. Live work-item state remains authoritative on GitHub rather than in this changelog.
+- Ordinary canonical Task/Run execution can use the shared `DistributedRuntime` when advanced deployment is explicitly enabled, while the supported single-node path remains unchanged when distributed execution is disabled.
 - Reference distributed profiles are profile-aware and use the same authenticated Worker reporter/transport contracts for local and remote Workers rather than separate lifecycle models.
 - Templates now integrate canonical Workflow, Capability Assignment and Model Routing Policy owner domains instead of keeping those types as unresolved/fail-closed placeholders.
 - Registry activation routes through existing plugin/import/template owner domains instead of creating a second installation or mutation authority.
-- Accounting integrations now derive Workspace, Node/Worker, Agent/Team, Organization/Team and budget-notification behavior from their canonical source domains while preserving #76 as the accounting authority.
-- Planning activation now preserves validated Step execution requirements into the canonical #384/Agent runtime path instead of allowing a planned Agent binding to degrade silently into generic execution.
+- Accounting integrations now derive Workspace, Node/Worker, Agent/Team, Organization/Team and budget-notification behavior from their canonical source domains while preserving the accounting domain as the authority.
+- Planning activation now preserves validated Step execution requirements into the canonical Agent runtime path instead of allowing a planned Agent binding to degrade silently into generic execution.
 - Repository intelligence is composed through `RepositoryService` authorization/provider routing rather than reading provider registries or concrete repository implementations directly.
 - Host-pressure diagnostics and admission are composed into existing scheduler, observability, Worker protocol and doctor surfaces rather than introducing parallel lifecycle or telemetry ownership.
-- Project status documentation now reflects the current open set (`#46, #388, #439, #440, #500, #501, #502, #560, #562`), the closure of #78/#421, and the absence of open pull requests at the 2026-09-07 snapshot.
 
 ### Fixed
 
@@ -64,8 +63,8 @@ The project uses semantic versioning once a public prototype is released. Until 
 
 ## Current release status
 
-- The usable single-node prototype acceptance gate required by #252 has passed.
+- The usable single-node prototype acceptance gate has passed.
 - No GitHub release or semantic-version tag has been published yet.
 - The historical `0.1.0` prototype target will not be published retroactively.
-- #46 full platform conformance is complete, so the first formal publication tracked by #1237 targets `1.0.0`.
-- Publication remains blocked on the exact-candidate #747 product-readiness PASS, resolution of all release-blocking findings, exact version projection, release-manifest/artifact generation and post-publication smoke verification.
+- Full platform conformance is complete, so the first formal publication targets `1.0.0`.
+- Publication remains blocked on an exact-candidate product-readiness PASS, resolution of all release-blocking findings, exact version projection, release-manifest/artifact generation and post-publication smoke verification.
