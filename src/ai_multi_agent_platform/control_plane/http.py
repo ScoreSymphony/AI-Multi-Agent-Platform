@@ -347,25 +347,11 @@ class ControlPlaneHTTP:
     ) -> HTTPResponse:
         if len(segments) not in {1, 2}:
             raise APIException(status=404, code="not_found", message="route not found")
-        command = next(
-            (
-                candidate
-                for candidate in ("enable", "disable", "refresh-health")
-                if len(segments) == 2 and segments[1].endswith(f":{candidate}")
-            ),
-            None,
-        )
-        if command is not None and request.method != "POST":
-            raise APIException(
-                status=405,
-                code="method_not_allowed",
-                message="method not allowed",
-            )
         if len(segments) == 1 and request.method == "GET":
             page = await self._control_plane.list_model_providers(context, query)
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and command is not None and request.method == "POST":
-            provider_id = segments[1].removesuffix(f":{command}")
+        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
+            provider_id, command = segments[1].rsplit(":", 1)
             if command == "enable":
                 item = await self._control_plane.set_model_provider_enabled(
                     context, provider_id, enabled=True
@@ -374,8 +360,14 @@ class ControlPlaneHTTP:
                 item = await self._control_plane.set_model_provider_enabled(
                     context, provider_id, enabled=False
                 )
-            else:
+            elif command == "refresh-health":
                 item = await self._control_plane.refresh_model_provider_health(context, provider_id)
+            else:
+                raise APIException(
+                    status=404,
+                    code="not_found",
+                    message="unknown model-provider command",
+                )
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_model_provider(context, segments[1])
@@ -393,29 +385,21 @@ class ControlPlaneHTTP:
     ) -> HTTPResponse:
         if len(segments) not in {1, 2}:
             raise APIException(status=404, code="not_found", message="route not found")
-        command = next(
-            (
-                candidate
-                for candidate in ("enable", "disable")
-                if len(segments) == 2 and segments[1].endswith(f":{candidate}")
-            ),
-            None,
-        )
-        if command is not None and request.method != "POST":
-            raise APIException(
-                status=405,
-                code="method_not_allowed",
-                message="method not allowed",
-            )
         if len(segments) == 1 and request.method == "GET":
             page = await self._control_plane.list_models(context, query)
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and command is not None and request.method == "POST":
-            model_id = segments[1].removesuffix(f":{command}")
+        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
+            model_id, command = segments[1].rsplit(":", 1)
             if command == "enable":
                 item = await self._control_plane.set_model_enabled(context, model_id, enabled=True)
-            else:
+            elif command == "disable":
                 item = await self._control_plane.set_model_enabled(context, model_id, enabled=False)
+            else:
+                raise APIException(
+                    status=404,
+                    code="not_found",
+                    message="unknown model command",
+                )
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_model(context, segments[1])
