@@ -41,6 +41,29 @@ The adoption release is deliberately pinned to `0.0.1`: future releases reject `
 untracked data root instead of inventing a source migration history. Normal `platform-server`
 startup also rejects an untracked data root once the running release is newer than the baseline.
 
+### First formal release transition: `0.0.1` -> `1.0.0`
+
+The first formal `1.0.0` release retains the current canonical domain schema and migration
+revision. A tracked `0.0.1` deployment therefore does **not** need a fabricated data migration
+merely because the product release identifier changes.
+
+The supported transition still goes through the normal upgrade authority:
+
+- the `0.0.1` data root must already contain its tracked `db/platform-upgrade.json` baseline;
+- preflight resolves an empty schema-migration plan and preserves migration revision `baseline`;
+- the platform-release change makes maintenance mandatory even with no `MigrationStep`;
+- `platform-upgrade ... apply --quiesced` records the release-only upgrade result and atomically
+  activates the `1.0.0` version vector;
+- the migration history remains unchanged because no schema mutation occurred;
+- an untracked data root cannot be adopted for the first time by `1.0.0`; baseline adoption
+  remains deliberately owned by `0.0.1`;
+- operators should still create and verify the source-release backup required by the release
+  procedure before replacing the executable, even though an empty schema-migration plan does not
+  itself make the preflight backup field mandatory.
+
+The release suite retains an explicit `0.0.1 -> 1.0.0` regression so a future version bump cannot
+accidentally turn this release-only activation into an unsupported migration path.
+
 ## Migration framework
 
 Production migrations are immutable `MigrationStep` records registered in release order. Every
