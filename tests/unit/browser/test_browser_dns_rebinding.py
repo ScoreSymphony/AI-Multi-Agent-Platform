@@ -25,7 +25,6 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext, OperationControl
 from ai_multi_agent_platform.domain import new_id
 
-
 PUBLIC_V4 = "93.184.216.34"
 
 
