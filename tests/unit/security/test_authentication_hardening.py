@@ -415,8 +415,8 @@ def test_mobile_pairing_is_single_use_revocable_and_secret_safe() -> None:
         correlation_id="pairing-correlation",
     )
 
-    assert challenge.secret not in repr(auth._mobile_pairings)
-    assert challenge.code not in repr(auth._mobile_pairings)
+    assert challenge.secret not in repr(auth._mobile_pairing)
+    assert challenge.code not in repr(auth._mobile_pairing)
     assert challenge.qr_payload.startswith("aiagentplatform://pair?")
     assert "https%3A%2F%2Fplatform.example" in challenge.qr_payload
 
@@ -437,10 +437,13 @@ def test_mobile_pairing_is_single_use_revocable_and_secret_safe() -> None:
     assert stored.metadata["device_name"] == "Samu Android"
     assert stored.metadata["server_origin"] == "https://platform.example"
     assert stored.secret_verifier not in issued.secret
-    assert auth.authenticate_bearer(
-        issued.secret,
-        now=NOW + timedelta(seconds=2),
-    ).identity.actor_id == user.user_id
+    assert (
+        auth.authenticate_bearer(
+            issued.secret,
+            now=NOW + timedelta(seconds=2),
+        ).identity.actor_id
+        == user.user_id
+    )
 
     with pytest.raises(AuthenticationError) as replay:
         auth.complete_mobile_pairing(
