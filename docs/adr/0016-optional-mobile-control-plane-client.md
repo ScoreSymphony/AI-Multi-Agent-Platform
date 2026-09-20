@@ -23,23 +23,28 @@ The initial supported platform baseline follows Expo SDK 57: Android 7+ and iOS 
 The mobile client:
 
 1. consumes only public `/api/v1` Control Plane resources/commands;
-2. uses an already-issued bearer credential rather than duplicating the browser cookie/CSRF
-   session mechanism;
-3. validates credentials through `/api/v1/auth/me`;
-4. persists credential material through `expo-secure-store` (Android Keystore-backed encrypted
+2. pairs through a short-lived, single-use QR/deep-link or fallback-code challenge created by an
+   authenticated trusted Web/CLI session;
+3. receives a dedicated revocable mobile bearer credential from the canonical Authentication
+   authority and validates it through `/api/v1/auth/me`;
+4. persists that credential only through `expo-secure-store` (Android Keystore-backed encrypted
    storage / iOS Keychain);
 5. requires HTTPS for non-loopback servers;
 6. treats cached read state as an explicitly stale projection only;
 7. does not queue mutations offline in the first slice;
-8. uses allowlisted deep links that identify canonical resources but never encode commands;
+8. uses allowlisted resource deep links plus the narrowly versioned `aiagentplatform://pair`
+   bootstrap envelope; opening a pairing link never consumes it without explicit confirmation;
 9. reads canonical Notifications; OS push delivery is deferred and may never become another
    notification authority;
 10. performs human takeover only through the existing Conversation-input resume route for an
     already persisted user message and waiting canonical Task;
 11. remains an optional repository client and never becomes a server/runtime dependency.
 
-The first slice does not expose credential issuance, secret management, administrator-only
-configuration, local model hosting or every Web administration surface.
+The mobile UI does not expose general credential issuance, secret management,
+administrator-only configuration, local model hosting or every Web administration surface.
+Mobile-device issuance is the narrow exception: the public consume route may return exactly one
+new device credential after a valid single-use pairing proof. General credential authority remains
+server-side.
 
 ## Consequences
 
