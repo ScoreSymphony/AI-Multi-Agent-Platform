@@ -34,6 +34,7 @@ from .authentication import (
     _optional_string,
     _protocol_version,
     _public_route,
+    _require_only_fields,
     _relative_path,
     _required_string,
 )
@@ -289,6 +290,17 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
             return response
 
         if request.method == "POST" and relative == "/auth/mobile-pairings:consume":
+            _require_only_fields(
+                request.body,
+                {
+                    "pairing_code",
+                    "pairing_id",
+                    "server_origin",
+                    "device_name",
+                    "device_platform",
+                    "protocol_version",
+                },
+            )
             grant = await self._runtime_authentication.consume_mobile_pairing(
                 _required_string(request.body, "pairing_code"),
                 server_origin=_required_string(request.body, "server_origin"),
@@ -423,6 +435,7 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
             return response
 
         if request.method == "POST" and relative == "/auth/mobile-pairings":
+            _require_only_fields(request.body, {"server_origin"})
             await self._authorize_credential_operation(
                 request,
                 actor,
