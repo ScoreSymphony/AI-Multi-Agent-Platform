@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
@@ -518,22 +519,38 @@ class ControlPlaneASGI:
             try:
                 decoded = json.loads(raw_body.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                await self._send_raw_error(
-                    400,
-                    "invalid_json",
-                    "request body is not valid JSON",
+                route_error = await self._route_error_before_body_validation(
+                    method,
+                    path,
                     headers,
-                    send,
                 )
+                if route_error is not None:
+                    await _send_response(route_error, send)
+                else:
+                    await self._send_raw_error(
+                        400,
+                        "invalid_json",
+                        "request body is not valid JSON",
+                        headers,
+                        send,
+                    )
                 return
             if not isinstance(decoded, dict):
-                await self._send_raw_error(
-                    400,
-                    "invalid_request",
-                    "request JSON body must be an object",
+                route_error = await self._route_error_before_body_validation(
+                    method,
+                    path,
                     headers,
-                    send,
                 )
+                if route_error is not None:
+                    await _send_response(route_error, send)
+                else:
+                    await self._send_raw_error(
+                        400,
+                        "invalid_request",
+                        "request JSON body must be an object",
+                        headers,
+                        send,
+                    )
                 return
             body = decoded
 
@@ -541,6 +558,77 @@ class ControlPlaneASGI:
             HTTPRequest(method=method, path=path, headers=headers, query=query, body=body)
         )
         await _send_response(response, send)
+
+    async def _route_error_before_body_validation(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str],
+    ) -> HTTPResponse | None:
+        request_id = headers.get("x-request-id") or f"request_{uuid4()}"
+        correlation_id = headers.get("x-correlation-id") or request_id
+        try:
+            version, _ = _split_version(path)
+            _require_supported_version(version)
+        except APIException as exc:
+            return self._http._error_response(exc, request_id, correlation_id)
+
+        openapi = await self._http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/{API_VERSION}/openapi.json",
+                headers=headers,
+            )
+        )
+        if openapi.status != 200 or not isinstance(openapi.body, dict):
+            return None
+        paths = openapi.body.get("paths")
+        if not isinstance(paths, dict):
+            return None
+
+        normalized_path = path.rstrip("/") or "/"
+        foundation_route_error = _foundation_route_error_before_body_validation(
+            method,
+            normalized_path,
+        )
+        if foundation_route_error is not None:
+            return self._http._error_response(
+                foundation_route_error,
+                request_id,
+                correlation_id,
+            )
+
+        allowed_methods: set[str] = set()
+        matched = False
+        for template, operations in paths.items():
+            if (
+                not isinstance(template, str)
+                or not isinstance(operations, dict)
+                or not _openapi_path_matches(template, normalized_path)
+            ):
+                continue
+            matched = True
+            allowed_methods.update(
+                operation.upper() for operation in operations if operation.lower() in _HTTP_METHODS
+            )
+
+        if not matched:
+            return self._http._error_response(
+                APIException(status=404, code="not_found", message="route not found"),
+                request_id,
+                correlation_id,
+            )
+        if method.upper() not in allowed_methods:
+            return self._http._error_response(
+                APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                ),
+                request_id,
+                correlation_id,
+            )
+        return None
 
     async def _stream_events(
         self,
@@ -645,6 +733,90 @@ class ControlPlaneASGI:
             ),
             send,
         )
+
+
+_HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "trace"})
+_TASK_COMMANDS = frozenset({"queue", "start", "cancel", "retry"})
+_MODEL_COMMANDS = frozenset({"enable", "disable"})
+_MODEL_PROVIDER_COMMANDS = frozenset({"enable", "disable", "refresh-health"})
+
+
+def _foundation_route_error_before_body_validation(
+    method: str,
+    path: str,
+) -> APIException | None:
+    if method.upper() == "POST":
+        for prefix, commands, message in (
+            (
+                f"/api/{API_VERSION}/models/",
+                _MODEL_COMMANDS,
+                "unknown model command",
+            ),
+            (
+                f"/api/{API_VERSION}/model-providers/",
+                _MODEL_PROVIDER_COMMANDS,
+                "unknown model-provider command",
+            ),
+        ):
+            if not path.startswith(prefix):
+                continue
+            relative = path[len(prefix) :]
+            if "/" in relative or ":" not in relative:
+                continue
+            _, command = relative.rsplit(":", 1)
+            if command not in commands:
+                return APIException(
+                    status=404,
+                    code="not_found",
+                    message=message,
+                )
+
+    task_prefix = f"/api/{API_VERSION}/tasks/"
+    if not path.startswith(task_prefix):
+        return None
+
+    task_relative = path[len(task_prefix) :]
+    if "/" not in task_relative and ":" in task_relative:
+        _, command = task_relative.split(":", 1)
+        if command not in _TASK_COMMANDS:
+            return APIException(
+                status=404,
+                code="not_found",
+                message="unknown task command",
+            )
+        if method.upper() != "POST":
+            return APIException(
+                status=405,
+                code="method_not_allowed",
+                message="method not allowed",
+            )
+        return None
+
+    task_segments = task_relative.split("/")
+    if (
+        len(task_segments) == 3
+        and task_segments[1] == "runs"
+        and task_segments[2].endswith(":cancel")
+        and method.upper() != "POST"
+    ):
+        return APIException(
+            status=405,
+            code="method_not_allowed",
+            message="method not allowed",
+        )
+    return None
+
+
+def _openapi_path_matches(template: str, path: str) -> bool:
+    normalized_template = template.rstrip("/") or "/"
+    pattern_parts: list[str] = []
+    cursor = 0
+    for match in re.finditer(r"\{[^{}]+\}", normalized_template):
+        pattern_parts.append(re.escape(normalized_template[cursor : match.start()]))
+        pattern_parts.append(r"[^/]+")
+        cursor = match.end()
+    pattern_parts.append(re.escape(normalized_template[cursor:]))
+    return re.fullmatch("".join(pattern_parts), path) is not None
 
 
 def _request_context(
