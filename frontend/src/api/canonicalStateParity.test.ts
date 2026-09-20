@@ -83,6 +83,23 @@ describe("canonical CLI/Web resource parity", () => {
     expect(canonicalTask.correlation_id).toBe(canonicalRun.correlation_id);
   });
 
+  it("delegates omitted Task list defaults to the canonical Control Plane", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(canonicalTaskPage), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.listTasks();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/tasks");
+    expect(init.method).toBe("GET");
+  });
+
   it("preserves shared pagination, filter and sort semantics for Task lists", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(canonicalTaskPage), {
@@ -252,8 +269,41 @@ describe("canonical CLI/Web resource parity", () => {
   });
 
 
-  it("preserves canonical not-found semantics", async () => {
-    const fixture = canonicalErrorCases.not_found;
+  it("preserves the shared canonical read-error taxonomy without Web reinterpretation", async () => {
+    for (const fixture of [
+      canonicalErrorCases.validation,
+      canonicalErrorCases.unauthenticated,
+      canonicalErrorCases.forbidden,
+      canonicalErrorCases.not_found,
+      canonicalErrorCases.unavailable,
+      canonicalErrorCases.retryable_backend_failure,
+      canonicalErrorCases.non_retryable_backend_failure,
+    ]) {
+      const fetchSpy = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(fixture.body), {
+          status: fixture.status,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": fixture.body.request_id,
+            "x-correlation-id": fixture.body.correlation_id,
+          },
+        }),
+      );
+      const client = new ControlPlaneClient({
+        fetchImpl: fetchSpy as unknown as typeof fetch,
+        maxReadRetries: 0,
+      });
+
+      await expect(client.getTask(canonicalTask.id)).rejects.toMatchObject({
+        status: fixture.status,
+        body: fixture.body,
+      });
+      expect(fetchSpy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("preserves canonical invalid-cursor validation on collection reads", async () => {
+    const fixture = canonicalErrorCases.invalid_cursor;
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(fixture.body), {
         status: fixture.status,
@@ -269,32 +319,39 @@ describe("canonical CLI/Web resource parity", () => {
       maxReadRetries: 0,
     });
 
-    await expect(client.getTask(canonicalTask.id)).rejects.toMatchObject({
+    await expect(client.listTasks({ cursor: "not-a-valid-cursor" })).rejects.toMatchObject({
       status: fixture.status,
       body: fixture.body,
     });
     expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      "/api/v1/tasks?cursor=not-a-valid-cursor",
+    );
   });
 
-  it("preserves canonical conflict semantics for lifecycle mutations", async () => {
-    const fixture = canonicalErrorCases.conflict;
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(fixture.body), {
-        status: fixture.status,
-        headers: {
-          "content-type": "application/json",
-          "x-request-id": fixture.body.request_id,
-          "x-correlation-id": fixture.body.correlation_id,
-        },
-      }),
-    );
-    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+  it("preserves canonical approval-required and conflict semantics for mutations", async () => {
+    for (const fixture of [
+      canonicalErrorCases.approval_required,
+      canonicalErrorCases.conflict,
+    ]) {
+      const fetchSpy = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(fixture.body), {
+          status: fixture.status,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": fixture.body.request_id,
+            "x-correlation-id": fixture.body.correlation_id,
+          },
+        }),
+      );
+      const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
 
-    await expect(client.queueTask(canonicalTask.id)).rejects.toMatchObject({
-      status: fixture.status,
-      body: fixture.body,
-    });
-    expect(fetchSpy).toHaveBeenCalledOnce();
+      await expect(client.queueTask(canonicalTask.id)).rejects.toMatchObject({
+        status: fixture.status,
+        body: fixture.body,
+      });
+      expect(fetchSpy).toHaveBeenCalledOnce();
+    }
   });
 
   it("preserves shared Marketplace pagination, filtering, sorting and canonical IDs", async () => {

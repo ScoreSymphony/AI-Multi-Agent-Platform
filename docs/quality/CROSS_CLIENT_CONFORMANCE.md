@@ -2,6 +2,11 @@
 
 Issue #1236 treats the public Web, CLI and HTTP API surfaces as projections of one canonical Control Plane. The server owns lifecycle, authorization, validation, idempotency and pagination semantics; clients may adapt presentation only.
 
+The operation-level final **Core** audit is retained in
+[`CROSS_CLIENT_CORE_AUDIT_1236.md`](CROSS_CLIENT_CORE_AUDIT_1236.md). Marketplace/provider-kind
+and real-browser/first-run acceptance remain separately owned tracks and are not treated as Core
+evidence merely because this aggregate document also records them.
+
 ## Invariants
 
 - Canonical IDs and resource states originate from the versioned `/api/v1` Control Plane.
@@ -124,7 +129,7 @@ The cross-client fixture set under `frontend/src/api/__fixtures__/` is intention
 7. canonical Task deep links resolve back through the public API;
 8. repeated Web reads observe refreshed server state rather than retaining client-owned lifecycle state;
 9. POST lifecycle mutations carry an idempotency key and are not client-retried even when a returned canonical error is retryable;
-10. authorization, not-found and conflict responses preserve canonical HTTP status, code, category and retryability across Web and CLI.
+10. validation, invalid-cursor, unauthenticated, forbidden, approval-required, not-found, conflict, unavailable, retryable-backend and non-retryable-backend responses preserve canonical HTTP status, code, category, retryability and safe details across Web and CLI.
 
 These fixtures are evidence, not a second schema. The OpenAPI / Control Plane contract remains authoritative.
 
