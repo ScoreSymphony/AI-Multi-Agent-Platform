@@ -10,11 +10,13 @@ ACCOUNTS = SECURITY_ROOT / "authentication_accounts.py"
 SESSIONS = SECURITY_ROOT / "authentication_sessions.py"
 CREDENTIALS = SECURITY_ROOT / "authentication_credentials.py"
 EXTERNAL = SECURITY_ROOT / "authentication_external.py"
+MOBILE = SECURITY_ROOT / "authentication_mobile.py"
 FOCUSED_MODULES = (
     ACCOUNTS,
     SECURITY_ROOT / "authentication_audit.py",
     CREDENTIALS,
     EXTERNAL,
+    MOBILE,
     SECURITY_ROOT / "authentication_models.py",
     SECURITY_ROOT / "authentication_passwords.py",
     SECURITY_ROOT / "authentication_protection.py",
@@ -132,6 +134,20 @@ def test_external_identity_entrypoints_delegate_to_external_service() -> None:
     )
 
 
+def test_mobile_pairing_entrypoints_delegate_to_mobile_service() -> None:
+    facade = _class(FACADE, "LocalAuthenticationService")
+    mappings = {
+        "create_mobile_pairing": "create_pairing",
+        "consume_mobile_pairing": "consume_pairing",
+        "cancel_mobile_pairing": "cancel_pairing",
+        "list_mobile_devices": "list_devices",
+        "revoke_mobile_device": "revoke_device",
+        "revoke_all_mobile_devices": "revoke_all_devices",
+    }
+    for method_name, delegated_name in mappings.items():
+        _assert_delegate(_method(facade, method_name), "_mobile", delegated_name)
+
+
 def test_focused_authentication_components_do_not_depend_back_on_facade() -> None:
     for path in FOCUSED_MODULES:
         assert path.exists(), f"missing focused authentication component: {path.relative_to(ROOT)}"
@@ -152,3 +168,4 @@ def test_focused_services_own_primary_authentication_responsibilities() -> None:
     _class(SESSIONS, "AuthenticationSessionService")
     _class(CREDENTIALS, "AuthenticationCredentialService")
     _class(EXTERNAL, "AuthenticationExternalIdentityService")
+    _class(MOBILE, "AuthenticationMobilePairingService")
