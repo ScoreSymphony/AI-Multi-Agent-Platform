@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import tomllib
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -100,7 +101,7 @@ def generate_release_sbom(
         "name": f"{project_name}-{project_version}",
         "documentNamespace": f"{_REPOSITORY}/spdx/{source_commit}",
         "creationInfo": {
-            "created": created_at,
+            "created": _spdx_timestamp(created_at),
             "creators": ["Tool: AI-Multi-Agent-Platform release evidence generator"],
         },
         "packages": packages,
@@ -111,6 +112,17 @@ def generate_release_sbom(
         json.dumps(document, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _spdx_timestamp(value: str) -> str:
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError("created_at must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("created_at must include an explicit timezone")
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _project_identity(path: Path) -> tuple[str, str, str]:
