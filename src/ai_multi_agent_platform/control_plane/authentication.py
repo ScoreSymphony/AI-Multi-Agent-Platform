@@ -19,6 +19,7 @@ from ai_multi_agent_platform.security.authentication import (
     LocalAuthenticationService,
     safe_actor,
     safe_credential,
+    safe_mobile_device,
     safe_session,
 )
 
@@ -211,6 +212,44 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             )
             return response
 
+        if request.method == "POST" and relative == "/auth/mobile-pairings:consume":
+            pairing_code = _required_string(request.body, "pairing_code")
+            server_origin = _required_string(request.body, "server_origin")
+            device_name = _required_string(request.body, "device_name")
+            device_platform = _required_string(request.body, "device_platform")
+            pairing_id = _optional_string(request.body.get("pairing_id"))
+            protocol_version = _protocol_version(request.body.get("protocol_version"))
+            grant = self._authentication.consume_mobile_pairing(
+                pairing_code,
+                server_origin=server_origin,
+                device_name=device_name,
+                device_platform=device_platform,
+                pairing_id=pairing_id,
+                protocol_version=protocol_version,
+                correlation_id=correlation_id,
+            )
+            return self._response(
+                201,
+                {
+                    "device": safe_mobile_device(
+                        grant.device,
+                        self._authentication.store.credentials.get(grant.device.credential_id),
+                    ),
+                    "credential": {
+                        "id": grant.credential.credential_id,
+                        "secret": grant.credential.secret,
+                        "expires_at": (
+                            grant.credential.expires_at.isoformat()
+                            if grant.credential.expires_at
+                            else None
+                        ),
+                        "secret_display": "one_time",
+                    },
+                },
+                request_id,
+                correlation_id,
+            )
+
         return self._error(
             status=404,
             code="not_found",
@@ -308,6 +347,123 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             if session_token is not None:
                 response.headers["set-cookie"] = self._clear_session_cookie()
             return response
+
+        if request.method == "POST" and relative == "/auth/mobile-pairings":
+            await self._authorize_credential_operation(
+                request,
+                actor,
+                action="create",
+                resource_ref=user_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+                bind_payload=True,
+            )
+            pairing = self._authentication.create_mobile_pairing(
+                user_id,
+                _required_string(request.body, "server_origin"),
+                correlation_id=correlation_id,
+            )
+            return self._response(
+                201,
+                {
+                    "id": pairing.pairing_id,
+                    "pairing_code": pairing.pairing_code,
+                    "server_origin": pairing.server_origin,
+                    "protocol_version": pairing.protocol_version,
+                    "created_at": pairing.created_at.isoformat(),
+                    "expires_at": pairing.expires_at.isoformat(),
+                    "qr_payload": pairing.qr_payload,
+                    "secret_display": "one_time",
+                },
+                request_id,
+                correlation_id,
+            )
+
+        if request.method == "POST" and relative.startswith("/auth/mobile-pairings/"):
+            suffix = relative.removeprefix("/auth/mobile-pairings/")
+            if suffix.endswith(":cancel"):
+                pairing_id = suffix.removesuffix(":cancel")
+                await self._authorize_credential_operation(
+                    request,
+                    actor,
+                    action="revoke",
+                    resource_ref=pairing_id,
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
+                self._authentication.cancel_mobile_pairing(
+                    user_id,
+                    pairing_id,
+                    correlation_id=correlation_id,
+                )
+                return self._response(
+                    200,
+                    {"id": pairing_id, "cancelled": True},
+                    request_id,
+                    correlation_id,
+                )
+
+        if request.method == "GET" and relative == "/auth/mobile-devices":
+            await self._authorize_credential_operation(
+                request,
+                actor,
+                action="list",
+                resource_ref=user_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            devices: list[JsonValue] = [
+                safe_mobile_device(
+                    item,
+                    self._authentication.store.credentials.get(item.credential_id),
+                )
+                for item in self._authentication.list_mobile_devices(user_id)
+            ]
+            return self._response(200, {"items": devices}, request_id, correlation_id)
+
+        if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
+            await self._authorize_credential_operation(
+                request,
+                actor,
+                action="revoke",
+                resource_ref=user_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            revoked = self._authentication.revoke_all_mobile_devices(
+                user_id,
+                correlation_id=correlation_id,
+            )
+            return self._response(
+                200,
+                {"revoked": revoked},
+                request_id,
+                correlation_id,
+            )
+
+        if request.method == "POST" and relative.startswith("/auth/mobile-devices/"):
+            suffix = relative.removeprefix("/auth/mobile-devices/")
+            if suffix.endswith(":revoke"):
+                device_id = suffix.removesuffix(":revoke")
+                await self._authorize_credential_operation(
+                    request,
+                    actor,
+                    action="revoke",
+                    resource_ref=device_id,
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
+                self._authentication.revoke_mobile_device(
+                    user_id,
+                    device_id,
+                    correlation_id=correlation_id,
+                )
+                return self._response(
+                    200,
+                    {"id": device_id, "revoked": True},
+                    request_id,
+                    correlation_id,
+                )
 
         if request.method == "GET" and relative == "/auth/credentials":
             await self._authorize_credential_operation(
@@ -583,7 +739,11 @@ def _with_authenticated_actor(
 def _public_route(method: str, relative: str) -> bool:
     if method == "GET" and relative in {"", "/", "/health", "/readiness", "/openapi.json"}:
         return True
-    return method == "POST" and relative in {"/auth/login", "/auth/bootstrap-admin"}
+    return method == "POST" and relative in {
+        "/auth/login",
+        "/auth/bootstrap-admin",
+        "/auth/mobile-pairings:consume",
+    }
 
 
 def _relative_path(path: str) -> str:
@@ -615,6 +775,22 @@ def _required_string(payload: dict[str, JsonValue], name: str) -> str:
     value = payload.get(name)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
+    return value
+
+
+def _optional_string(value: JsonValue | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("optional string value must be non-empty when provided")
+    return value.strip()
+
+
+def _protocol_version(value: JsonValue | None) -> int:
+    if value is None:
+        return 1
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("protocol_version must be an integer")
     return value
 
 
@@ -766,6 +942,96 @@ def _augment_authentication_openapi(
                     },
                     csrf_parameter,
                 ),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-pairings": {
+            "post": _auth_operation(
+                "createMobilePairing",
+                "Create a short-lived single-use mobile pairing challenge.",
+                request_fields=("server_origin",),
+                status="201",
+                parameters=(csrf_parameter,),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-pairings:consume": {
+            "post": {
+                **_auth_operation(
+                    "consumeMobilePairing",
+                    "Consume a short-lived mobile pairing challenge and issue one device credential.",
+                    public=True,
+                    status="201",
+                ),
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "pairing_code": {"type": "string"},
+                                    "pairing_id": {"type": "string"},
+                                    "server_origin": {"type": "string", "format": "uri"},
+                                    "device_name": {"type": "string"},
+                                    "device_platform": {
+                                        "type": "string",
+                                        "enum": ["android", "ios"],
+                                    },
+                                    "protocol_version": {"type": "integer", "enum": [1]},
+                                },
+                                "required": [
+                                    "pairing_code",
+                                    "server_origin",
+                                    "device_name",
+                                    "device_platform",
+                                ],
+                                "additionalProperties": False,
+                            }
+                        }
+                    },
+                },
+            }
+        },
+        f"/api/{API_VERSION}/auth/mobile-pairings/{{pairing_id}}:cancel": {
+            "post": _auth_operation(
+                "cancelMobilePairing",
+                "Cancel an unused pairing challenge owned by the current user.",
+                parameters=(
+                    {
+                        "name": "pairing_id",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    },
+                    csrf_parameter,
+                ),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-devices": {
+            "get": _auth_operation(
+                "listMobileDevices",
+                "List safe paired-device metadata for the current user.",
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-devices/{{device_id}}:revoke": {
+            "post": _auth_operation(
+                "revokeMobileDevice",
+                "Revoke one paired mobile device credential.",
+                parameters=(
+                    {
+                        "name": "device_id",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    },
+                    csrf_parameter,
+                ),
+            )
+        },
+        f"/api/{API_VERSION}/auth/mobile-devices:revoke-all": {
+            "post": _auth_operation(
+                "revokeAllMobileDevices",
+                "Revoke all paired mobile device credentials for the current user.",
+                parameters=(csrf_parameter,),
             )
         },
     }
