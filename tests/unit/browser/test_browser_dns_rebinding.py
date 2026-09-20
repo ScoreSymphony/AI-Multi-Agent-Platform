@@ -219,9 +219,7 @@ def test_https_connection_pins_ip_and_preserves_hostname_for_sni(
         fake_create_connection,
     )
 
-    reference_http: Any = importlib.import_module(
-        "ai_multi_agent_platform.browser.reference_http"
-    )
+    reference_http: Any = importlib.import_module("ai_multi_agent_platform.browser.reference_http")
     connection = reference_http._PinnedHTTPSConnection(
         "secure.example",
         443,
