@@ -587,6 +587,17 @@ class ControlPlaneASGI:
             return None
 
         normalized_path = path.rstrip("/") or "/"
+        foundation_route_error = _foundation_route_error_before_body_validation(
+            method,
+            normalized_path,
+        )
+        if foundation_route_error is not None:
+            return self._http._error_response(
+                foundation_route_error,
+                request_id,
+                correlation_id,
+            )
+
         allowed_methods: set[str] = set()
         matched = False
         for template, operations in paths.items():
@@ -729,6 +740,47 @@ class ControlPlaneASGI:
 _HTTP_METHODS = frozenset(
     {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
 )
+_TASK_COMMANDS = frozenset({"queue", "start", "cancel", "retry"})
+
+
+def _foundation_route_error_before_body_validation(
+    method: str,
+    path: str,
+) -> APIException | None:
+    task_prefix = f"/api/{API_VERSION}/tasks/"
+    if not path.startswith(task_prefix):
+        return None
+
+    task_relative = path[len(task_prefix) :]
+    if "/" not in task_relative and ":" in task_relative:
+        _, command = task_relative.split(":", 1)
+        if command not in _TASK_COMMANDS:
+            return APIException(
+                status=404,
+                code="not_found",
+                message="unknown task command",
+            )
+        if method.upper() != "POST":
+            return APIException(
+                status=405,
+                code="method_not_allowed",
+                message="method not allowed",
+            )
+        return None
+
+    task_segments = task_relative.split("/")
+    if (
+        len(task_segments) == 3
+        and task_segments[1] == "runs"
+        and task_segments[2].endswith(":cancel")
+        and method.upper() != "POST"
+    ):
+        return APIException(
+            status=405,
+            code="method_not_allowed",
+            message="method not allowed",
+        )
+    return None
 
 
 def _openapi_path_matches(template: str, path: str) -> bool:
