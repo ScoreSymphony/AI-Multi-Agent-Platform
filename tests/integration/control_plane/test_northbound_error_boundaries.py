@@ -334,6 +334,30 @@ def test_asgi_route_semantics_precede_malformed_json_validation() -> None:
         assert non_object_wrong_method_status == 405
         assert non_object_wrong_method["code"] == "method_not_allowed"
 
+        task_command_wrong_method_status, task_command_wrong_method = await invoke(
+            "GET",
+            "/api/v1/tasks/task_1:queue",
+            b"{",
+        )
+        assert task_command_wrong_method_status == 405
+        assert task_command_wrong_method["code"] == "method_not_allowed"
+
+        unknown_task_command_status, unknown_task_command = await invoke(
+            "POST",
+            "/api/v1/tasks/task_1:does-not-exist",
+            b"{",
+        )
+        assert unknown_task_command_status == 404
+        assert unknown_task_command["code"] == "not_found"
+
+        run_cancel_wrong_method_status, run_cancel_wrong_method = await invoke(
+            "GET",
+            "/api/v1/tasks/task_1/runs/run_1:cancel",
+            b"{",
+        )
+        assert run_cancel_wrong_method_status == 405
+        assert run_cancel_wrong_method["code"] == "method_not_allowed"
+
     asyncio.run(scenario())
 
 
