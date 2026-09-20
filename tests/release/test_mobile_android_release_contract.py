@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "mobile-android-release.yml"
 APP_CONFIG = ROOT / "mobile" / "app.json"
 PACKAGE_CONFIG = ROOT / "mobile" / "package.json"
+LOCK_CONFIG = ROOT / "mobile" / "package-lock.json"
 GITIGNORE = ROOT / ".gitignore"
 DOC = ROOT / "docs" / "operations" / "MOBILE_ANDROID_DISTRIBUTION.md"
 
@@ -27,6 +28,16 @@ def test_mobile_android_release_identity_is_explicit() -> None:
     assert expo["android"]["package"] == "org.scoresymphony.aimultiagentplatform"
     assert isinstance(expo["android"]["versionCode"], int)
     assert expo["android"]["versionCode"] > 0
+
+
+def test_mobile_release_dependency_override_patches_xcode_uuid() -> None:
+    package = json.loads(PACKAGE_CONFIG.read_text(encoding="utf-8"))
+    lock = json.loads(LOCK_CONFIG.read_text(encoding="utf-8"))
+
+    assert package["overrides"]["xcode"]["uuid"] == "11.1.1"
+    assert lock["packages"]["node_modules/xcode"]["version"] == "3.0.1"
+    assert lock["packages"]["node_modules/xcode"]["dependencies"]["uuid"] == "^7.0.3"
+    assert lock["packages"]["node_modules/uuid"]["version"] == "11.1.1"
 
 
 def test_production_signing_secrets_are_publish_only() -> None:
