@@ -65,6 +65,17 @@ def test_release_workflow_fails_closed_around_identity_and_integrity() -> None:
         assert required in workflow
 
 
+
+def test_release_lineage_scan_paginates_all_github_releases() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "gh release list --limit 100" not in workflow
+    assert "gh api --paginate" in workflow
+    assert '"/repos/$GITHUB_REPOSITORY/releases?per_page=100"' in workflow
+    assert "jq -sr" in workflow
+    assert "tag_name" in workflow
+    assert "draft == false" in workflow
+
 def test_signing_material_and_generated_native_project_are_ignored() -> None:
     ignore = GITIGNORE.read_text(encoding="utf-8")
 
