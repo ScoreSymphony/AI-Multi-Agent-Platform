@@ -7,7 +7,7 @@ on:
       - ".github/workflows/mobile-lockfile-bootstrap.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -18,6 +18,8 @@ jobs:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.2"
@@ -30,6 +32,19 @@ jobs:
 
       - name: Verify lockfile resolves cleanly
         run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Commit generated lockfile to the PR branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already current"
+          else
+            git commit -m "build(mobile): commit reproducible npm lockfile"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
 
       - name: Upload generated lockfile
         uses: actions/upload-artifact@v7
