@@ -61,7 +61,7 @@ def _http() -> ControlPlaneHTTP:
             config_id="model-local-general",
             display_name="Local General",
             provider_id="local-openai-compatible",
-            aliases=("general",),
+            aliases=("general", "local:qwen"),
             location=ModelLocation.LOCAL,
             capabilities=ModelCapabilities(
                 context_window=32768,
@@ -130,6 +130,20 @@ def test_model_and_provider_inventory_is_exposed_through_control_plane() -> None
         assert alias.status == 200
         assert isinstance(alias.body, dict)
         assert alias.body["id"] == "model-local-general"
+
+        colon_alias = await http.handle(
+            HTTPRequest(method="GET", path="/api/v1/models/local:qwen", headers=_headers())
+        )
+        assert colon_alias.status == 200
+        assert isinstance(colon_alias.body, dict)
+        assert colon_alias.body["id"] == "model-local-general"
+
+        wrong_command_method = await http.handle(
+            HTTPRequest(method="GET", path="/api/v1/models/local:qwen:disable", headers=_headers())
+        )
+        assert wrong_command_method.status == 405
+        assert isinstance(wrong_command_method.body, dict)
+        assert wrong_command_method.body["code"] == "method_not_allowed"
 
     asyncio.run(scenario())
 
