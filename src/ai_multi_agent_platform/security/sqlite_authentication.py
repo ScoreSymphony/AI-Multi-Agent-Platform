@@ -17,6 +17,8 @@ from .authentication import (
     ExternalIdentityMapping,
     InMemoryAuthenticationStore,
     LocalUserAccount,
+    MobilePairingChallenge,
+    PairedMobileDevice,
     StoredCredential,
 )
 from .authorization import ActorType
@@ -66,6 +68,8 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
         users = self._load_users()
         sessions = self._load_sessions()
         credentials = self._load_credentials()
+        mobile_pairings = self._load_mobile_pairings()
+        mobile_devices = self._load_mobile_devices()
         external_mappings = self._load_external_mappings()
 
         self.users = _WriteThroughDict(
@@ -85,6 +89,16 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             credentials,
             on_set=self._persist_credential,
             on_delete=lambda key: self._delete("auth_credentials", "credential_id", key),
+        )
+        self.mobile_pairings = _WriteThroughDict(
+            mobile_pairings,
+            on_set=self._persist_mobile_pairing,
+            on_delete=lambda key: self._delete("auth_mobile_pairings", "pairing_id", key),
+        )
+        self.mobile_devices = _WriteThroughDict(
+            mobile_devices,
+            on_set=self._persist_mobile_device,
+            on_delete=lambda key: self._delete("auth_mobile_devices", "device_id", key),
         )
         self.external_mappings = _WriteThroughDict(
             external_mappings,
@@ -136,6 +150,32 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                     expires_at TEXT,
                     revoked_at TEXT,
                     last_used_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS auth_mobile_pairings (
+                    pairing_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    server_origin TEXT NOT NULL,
+                    secret_verifier TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    protocol_version TEXT NOT NULL,
+                    consumed_at TEXT,
+                    cancelled_at TEXT,
+                    failed_attempts INTEGER NOT NULL DEFAULT 0,
+                    correlation_id TEXT,
+                    FOREIGN KEY(user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS auth_mobile_devices (
+                    device_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    credential_id TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    server_origin TEXT NOT NULL,
+                    platform TEXT,
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE,
+                    FOREIGN KEY(credential_id) REFERENCES auth_credentials(credential_id) ON DELETE CASCADE
                 );
                 CREATE TABLE IF NOT EXISTS auth_external_mappings (
                     provider_id TEXT NOT NULL,
@@ -214,6 +254,53 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                 last_used_at=_optional_datetime(row[10]),
             )
         return credentials
+
+    def _load_mobile_pairings(self) -> dict[str, MobilePairingChallenge]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT pairing_id, user_id, server_origin, secret_verifier, created_at, expires_at, "
+                "protocol_version, consumed_at, cancelled_at, failed_attempts, correlation_id "
+                "FROM auth_mobile_pairings"
+            ).fetchall()
+        return {
+            str(row[0]): MobilePairingChallenge(
+                pairing_id=str(row[0]),
+                user_id=str(row[1]),
+                server_origin=str(row[2]),
+                secret_verifier=str(row[3]),
+                created_at=_datetime(str(row[4])),
+                expires_at=_datetime(str(row[5])),
+                protocol_version=str(row[6]),
+                consumed_at=_optional_datetime(row[7]),
+                cancelled_at=_optional_datetime(row[8]),
+                failed_attempts=int(row[9]),
+                correlation_id=str(row[10]) if row[10] is not None else None,
+            )
+            for row in rows
+        }
+
+    def _load_mobile_devices(self) -> dict[str, PairedMobileDevice]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT device_id, user_id, credential_id, display_name, server_origin, platform, "
+                "metadata_json, created_at FROM auth_mobile_devices"
+            ).fetchall()
+        devices: dict[str, PairedMobileDevice] = {}
+        for row in rows:
+            metadata = json.loads(str(row[6]))
+            if not isinstance(metadata, dict):
+                raise ValueError(f"mobile device metadata is not an object: {row[0]}")
+            devices[str(row[0])] = PairedMobileDevice(
+                device_id=str(row[0]),
+                user_id=str(row[1]),
+                credential_id=str(row[2]),
+                display_name=str(row[3]),
+                server_origin=str(row[4]),
+                platform=str(row[5]) if row[5] is not None else None,
+                metadata=_json_mapping(metadata),
+                created_at=_datetime(str(row[7])),
+            )
+        return devices
 
     def _load_external_mappings(self) -> dict[tuple[str, str, str], ExternalIdentityMapping]:
         with self._connect() as connection:
@@ -305,6 +392,62 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                 ),
             )
 
+    def _persist_mobile_pairing(
+        self,
+        _key: str,
+        pairing: MobilePairingChallenge,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO auth_mobile_pairings "
+                "(pairing_id, user_id, server_origin, secret_verifier, created_at, expires_at, "
+                "protocol_version, consumed_at, cancelled_at, failed_attempts, correlation_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(pairing_id) DO UPDATE SET "
+                "consumed_at=excluded.consumed_at, cancelled_at=excluded.cancelled_at, "
+                "failed_attempts=excluded.failed_attempts, correlation_id=excluded.correlation_id",
+                (
+                    pairing.pairing_id,
+                    pairing.user_id,
+                    pairing.server_origin,
+                    pairing.secret_verifier,
+                    pairing.created_at.isoformat(),
+                    pairing.expires_at.isoformat(),
+                    pairing.protocol_version,
+                    _iso(pairing.consumed_at),
+                    _iso(pairing.cancelled_at),
+                    pairing.failed_attempts,
+                    pairing.correlation_id,
+                ),
+            )
+
+    def _persist_mobile_device(self, _key: str, device: PairedMobileDevice) -> None:
+        metadata_json = json.dumps(
+            dict(device.metadata),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO auth_mobile_devices "
+                "(device_id, user_id, credential_id, display_name, server_origin, platform, "
+                "metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(device_id) DO UPDATE SET "
+                "display_name=excluded.display_name, platform=excluded.platform, "
+                "metadata_json=excluded.metadata_json",
+                (
+                    device.device_id,
+                    device.user_id,
+                    device.credential_id,
+                    device.display_name,
+                    device.server_origin,
+                    device.platform,
+                    metadata_json,
+                    device.created_at.isoformat(),
+                ),
+            )
+
     def _persist_external_mapping(
         self,
         _key: tuple[str, str, str],
@@ -330,6 +473,8 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             ("auth_users", "user_id"),
             ("auth_sessions", "session_id"),
             ("auth_credentials", "credential_id"),
+            ("auth_mobile_pairings", "pairing_id"),
+            ("auth_mobile_devices", "device_id"),
         }
         if (table, key_name) not in allowed:
             raise ValueError("unsupported authentication deletion target")
