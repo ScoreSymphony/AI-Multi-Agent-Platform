@@ -39,6 +39,7 @@ def safe_credential(credential: StoredCredential) -> dict[str, JsonValue]:
         "expires_at": credential.expires_at.isoformat() if credential.expires_at else None,
         "revoked_at": credential.revoked_at.isoformat() if credential.revoked_at else None,
         "last_used_at": credential.last_used_at.isoformat() if credential.last_used_at else None,
+        "metadata": dict(credential.metadata),
     }
 
 
