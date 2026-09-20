@@ -16,6 +16,7 @@ from .authentication_accounts import AuthenticationAccountService
 from .authentication_audit import emit_authentication_audit
 from .authentication_credentials import AuthenticationCredentialService
 from .authentication_external import AuthenticationExternalIdentityService
+from .authentication_mobile import AuthenticationMobilePairingService
 from .authentication_models import (
     AuthenticatedActor,
     AuthenticationAuditRecord,
@@ -30,7 +31,10 @@ from .authentication_models import (
     IdentityProviderAdapter,
     IssuedCredential,
     LocalUserAccount,
+    IssuedMobilePairing,
     LoginResult,
+    MobileDevice,
+    MobileDeviceGrant,
     ReplayProtector,
     SessionGrant,
     StoredCredential,
@@ -43,7 +47,12 @@ from .authentication_passwords import (
     validate_password,
 )
 from .authentication_protection import InMemoryFailureRateLimiter, InMemoryReplayProtector
-from .authentication_serialization import safe_actor, safe_credential, safe_session
+from .authentication_serialization import (
+    safe_actor,
+    safe_credential,
+    safe_mobile_device,
+    safe_session,
+)
 from .authentication_sessions import AuthenticationSessionService
 from .authentication_store import InMemoryAuthenticationStore, normalize_username
 from .authentication_tokens import (
@@ -102,6 +111,13 @@ class LocalAuthenticationService:
         )
         self._external_identities = AuthenticationExternalIdentityService(
             store=self.store,
+            user=self._user,
+            require_account_active=self._require_account_active,
+            audit=self._audit,
+        )
+        self._mobile = AuthenticationMobilePairingService(
+            store=self.store,
+            credentials=self._credentials,
             user=self._user,
             require_account_active=self._require_account_active,
             audit=self._audit,
@@ -389,6 +405,90 @@ class LocalAuthenticationService:
     ) -> None:
         self._credentials.revoke_credential(owner_id, credential_id, now=now)
 
+    def create_mobile_pairing(
+        self,
+        user_id: str,
+        server_origin: str,
+        *,
+        now: datetime | None = None,
+        correlation_id: str | None = None,
+    ) -> IssuedMobilePairing:
+        return self._mobile.create_pairing(
+            user_id,
+            server_origin,
+            now=now,
+            correlation_id=correlation_id,
+        )
+
+    def consume_mobile_pairing(
+        self,
+        pairing_code: str,
+        *,
+        server_origin: str,
+        device_name: str,
+        device_platform: str,
+        pairing_id: str | None = None,
+        protocol_version: int = 1,
+        now: datetime | None = None,
+        correlation_id: str | None = None,
+    ) -> MobileDeviceGrant:
+        return self._mobile.consume_pairing(
+            pairing_code,
+            server_origin=server_origin,
+            device_name=device_name,
+            device_platform=device_platform,
+            pairing_id=pairing_id,
+            protocol_version=protocol_version,
+            now=now,
+            correlation_id=correlation_id,
+        )
+
+    def cancel_mobile_pairing(
+        self,
+        user_id: str,
+        pairing_id: str,
+        *,
+        now: datetime | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        self._mobile.cancel_pairing(
+            user_id,
+            pairing_id,
+            now=now,
+            correlation_id=correlation_id,
+        )
+
+    def list_mobile_devices(self, user_id: str) -> tuple[MobileDevice, ...]:
+        return self._mobile.list_devices(user_id)
+
+    def revoke_mobile_device(
+        self,
+        user_id: str,
+        device_id: str,
+        *,
+        now: datetime | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        self._mobile.revoke_device(
+            user_id,
+            device_id,
+            now=now,
+            correlation_id=correlation_id,
+        )
+
+    def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        now: datetime | None = None,
+        correlation_id: str | None = None,
+    ) -> int:
+        return self._mobile.revoke_all_devices(
+            user_id,
+            now=now,
+            correlation_id=correlation_id,
+        )
+
     def authenticate_worker_request(
         self,
         token: str,
@@ -573,7 +673,10 @@ __all__ = [
     "IssuedCredential",
     "LocalAuthenticationService",
     "LocalUserAccount",
+    "IssuedMobilePairing",
     "LoginResult",
+    "MobileDevice",
+    "MobileDeviceGrant",
     "ReplayProtector",
     "ScryptPasswordHasher",
     "SessionGrant",
@@ -581,5 +684,6 @@ __all__ = [
     "VerifiedExternalIdentity",
     "safe_actor",
     "safe_credential",
+    "safe_mobile_device",
     "safe_session",
 ]
