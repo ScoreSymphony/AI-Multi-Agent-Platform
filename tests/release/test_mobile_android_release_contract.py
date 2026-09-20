@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "mobile-android-release.yml"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 APP_CONFIG = ROOT / "mobile" / "app.json"
 PACKAGE_CONFIG = ROOT / "mobile" / "package.json"
 LOCK_CONFIG = ROOT / "mobile" / "package-lock.json"
@@ -94,6 +95,15 @@ def test_release_workflow_fails_closed_around_identity_and_integrity() -> None:
     ):
         assert required in workflow
 
+    assert "npm install --no-audit --no-fund --package-lock=false" not in workflow
+
+
+def test_normal_ci_uses_the_same_mobile_lockfile_contract() -> None:
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "Install optional mobile client dependencies from committed lockfile" in workflow
+    assert "working-directory: mobile" in workflow
+    assert "npm ci --no-audit --no-fund" in workflow
     assert "npm install --no-audit --no-fund --package-lock=false" not in workflow
 
 
