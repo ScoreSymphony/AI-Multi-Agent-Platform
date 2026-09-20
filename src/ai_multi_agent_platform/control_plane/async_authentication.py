@@ -453,8 +453,7 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
             )
             devices = await self._runtime_authentication.list_mobile_devices(user_id)
             items: list[JsonValue] = [
-                safe_credential_with_scope(self._hardened_authentication, item)
-                for item in devices
+                safe_credential_with_scope(self._hardened_authentication, item) for item in devices
             ]
             return self._response(200, {"items": items}, request_id, correlation_id)
 
