@@ -180,6 +180,29 @@ export interface SessionRenewal {
   expires_at: string;
 }
 
+export interface MobilePairingChallenge {
+  id: string;
+  pairing_code: string;
+  server_origin: string;
+  protocol_version: number;
+  created_at: string;
+  expires_at: string;
+  qr_payload: string;
+  secret_display: "one_time";
+}
+
+export interface MobileDeviceSummary {
+  id: string;
+  user_id: string;
+  credential_id: string;
+  display_name: string;
+  platform: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  active: boolean;
+}
+
 interface BrowserStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -271,6 +294,39 @@ export class BrowserSessionClient {
     return this.request<{ items: BrowserSessionSummary[] }>("/auth/sessions").then(
       (result) => result.items,
     );
+  }
+
+  createMobilePairing(serverOrigin: string): Promise<MobilePairingChallenge> {
+    return this.request<MobilePairingChallenge>("/auth/mobile-pairings", {
+      method: "POST",
+      body: { server_origin: serverOrigin },
+    });
+  }
+
+  listMobileDevices(): Promise<MobileDeviceSummary[]> {
+    return this.request<{ items: MobileDeviceSummary[] }>("/auth/mobile-devices").then(
+      (result) => result.items,
+    );
+  }
+
+  cancelMobilePairing(pairingId: string): Promise<{ id: string; cancelled: boolean }> {
+    return this.request<{ id: string; cancelled: boolean }>(
+      `/auth/mobile-pairings/${encodeURIComponent(pairingId)}:cancel`,
+      { method: "POST" },
+    );
+  }
+
+  revokeMobileDevice(deviceId: string): Promise<{ id: string; revoked: boolean }> {
+    return this.request<{ id: string; revoked: boolean }>(
+      `/auth/mobile-devices/${encodeURIComponent(deviceId)}:revoke`,
+      { method: "POST" },
+    );
+  }
+
+  revokeAllMobileDevices(): Promise<{ revoked: number }> {
+    return this.request<{ revoked: number }>("/auth/mobile-devices:revoke-all", {
+      method: "POST",
+    });
   }
 
   releaseStatus(): Promise<ReleaseOperatorStatus> {
