@@ -227,6 +227,119 @@ function requireText(haystack, needle, label) {
   }
 }
 
+async function activeElementIs(locator) {
+  return locator.evaluate((element) => document.activeElement === element);
+}
+
+async function assertKeyboardFocus(locator, label) {
+  await locator.waitFor();
+  if (!(await activeElementIs(locator))) {
+    throw new Error(`${label} did not receive sequential keyboard focus`);
+  }
+  const focusStyle = await locator.evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      display: style.display,
+      visibility: style.visibility,
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+    };
+  });
+  if (
+    focusStyle.display === "none"
+    || focusStyle.visibility === "hidden"
+    || focusStyle.outlineStyle === "none"
+    || Number.parseFloat(focusStyle.outlineWidth) < 1
+  ) {
+    throw new Error(`${label} did not expose a visible focus indicator: ${JSON.stringify(focusStyle)}`);
+  }
+}
+
+async function tabTo(page, locator, label, { reverse = false, maxPresses = 80 } = {}) {
+  await locator.waitFor();
+  if (await activeElementIs(locator)) {
+    await assertKeyboardFocus(locator, label);
+    return;
+  }
+  const key = reverse ? "Shift+Tab" : "Tab";
+  for (let press = 0; press < maxPresses; press += 1) {
+    await page.keyboard.press(key);
+    if (await activeElementIs(locator)) {
+      await assertKeyboardFocus(locator, label);
+      return;
+    }
+  }
+  throw new Error(`${label} was not reachable after ${maxPresses} sequential ${key} presses`);
+}
+
+async function assertNoDocumentHorizontalOverflow(page, label) {
+  const metrics = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  if (metrics.scrollWidth > metrics.clientWidth + 4) {
+    throw new Error(`${label} introduced document-level horizontal overflow: ${JSON.stringify(metrics)}`);
+  }
+}
+
+async function assertHorizontallyReachable(page, locator, label) {
+  await locator.waitFor();
+  const metrics = await locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  if (
+    metrics.width <= 0
+    || metrics.left < -4
+    || metrics.right > metrics.viewportWidth + 4
+  ) {
+    throw new Error(`${label} is clipped outside the viewport: ${JSON.stringify(metrics)}`);
+  }
+}
+
+async function assertUsableTableWrapper(page, locator, label) {
+  await locator.waitFor();
+  const metrics = await locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      overflowX: style.overflowX,
+      left: rect.left,
+      right: rect.right,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  if (!["auto", "scroll"].includes(metrics.overflowX)) {
+    throw new Error(`${label} does not expose intentional table overflow: ${JSON.stringify(metrics)}`);
+  }
+  if (
+    metrics.clientWidth <= 0
+    || metrics.left < -4
+    || metrics.right > metrics.viewportWidth + 4
+  ) {
+    throw new Error(`${label} table wrapper is clipped at the narrow viewport: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.scrollWidth > metrics.clientWidth) {
+    await locator.evaluate((element) => {
+      element.scrollLeft = Math.min(24, element.scrollWidth - element.clientWidth);
+    });
+    const scrolled = await locator.evaluate((element) => element.scrollLeft);
+    if (scrolled <= 0) {
+      throw new Error(`${label} table overflow could not be scrolled horizontally`);
+    }
+    await locator.evaluate((element) => {
+      element.scrollLeft = 0;
+    });
+  }
+}
+
 async function assertModelSetupContract(page) {
   const snapshot = await page.evaluate(async () => {
     const [statusResponse, manifestResponse] = await Promise.all([
@@ -305,17 +418,47 @@ try {
   await waitForUrl(frontendUrl, "Vite", () => viteLog);
 
   browser = await chromium.launch({ headless: true });
-  page = await browser.newPage();
+  page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(frontendUrl);
 
-  // Fresh installation: first administrator is created entirely in the browser.
+  // #1297: begin the release-candidate sanity pass at a real narrow viewport. The first-user
+  // form proves labelled controls, readable validation, actual Tab/Shift+Tab order and visible
+  // keyboard focus before the normal first-run workflow continues.
   await page.getByRole("heading", { name: "Create your administrator account", exact: true }).waitFor();
-  await page.getByLabel("Username", { exact: true }).fill(username);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByLabel("Confirm password", { exact: true }).fill(password);
-  await (await waitForButton(page, "Create administrator")).click();
+  await assertNoDocumentHorizontalOverflow(page, "Narrow first-user setup");
+  const usernameInput = page.getByLabel("Username", { exact: true });
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  const confirmationInput = page.getByLabel("Confirm password", { exact: true });
+  const createAdministratorButton = await waitForButton(page, "Create administrator");
+
+  // React intentionally autofocuses this field for ordinary users. Blur once so the retained
+  // acceptance evidence proves that the field is also reachable by an actual sequential Tab.
+  await usernameInput.evaluate((element) => element.blur());
+  await tabTo(page, usernameInput, "First-user Username field", { maxPresses: 4 });
+  await usernameInput.fill(username);
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(passwordInput, "First-user Password field");
+  await passwordInput.fill(password);
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(confirmationInput, "First-user password confirmation");
+  await confirmationInput.fill(`${password} mismatch`);
+
+  const mismatchAlert = page.getByRole("alert").filter({ hasText: "The passwords do not match." });
+  await mismatchAlert.waitFor();
+  await assertHorizontallyReachable(page, mismatchAlert, "First-user validation error");
+
+  await page.keyboard.press("Shift+Tab");
+  await assertKeyboardFocus(passwordInput, "Reverse keyboard traversal to Password");
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(confirmationInput, "Forward keyboard traversal to confirmation");
+  await confirmationInput.fill(password);
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(createAdministratorButton, "Create administrator action");
+  await assertHorizontallyReachable(page, createAdministratorButton, "Create administrator action");
+  await page.keyboard.press("Enter");
 
   await page.waitForURL("**/onboarding");
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
   await assertModelSetupContract(page);
@@ -904,15 +1047,14 @@ try {
   await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
   const observabilityLink = page.getByRole("link", { name: "Observability", exact: true });
   await observabilityLink.waitFor();
-  await observabilityLink.click();
-  await page.waitForURL(`${frontendUrl}/observability`);
-  await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
 
   const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
   if (!firstRunRunId) {
     throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
   }
 
+  // Register before route navigation: Observability may auto-select the same recent Task and
+  // start the canonical timeline request during initial render, before the explicit filter submit.
   const timelineResponsePromise = page.waitForResponse(
     (response) =>
       response.url().includes(
@@ -920,6 +1062,10 @@ try {
       )
       && response.request().method() === "GET",
   );
+  await observabilityLink.click();
+  await page.waitForURL(`${frontendUrl}/observability`);
+  await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
+
   await page.getByLabel("Exact Task ID", { exact: true }).fill(firstRunResult.task_id);
   await (await waitForButton(page, "Open telemetry")).click();
   const timelineResponse = await timelineResponsePromise;
@@ -967,6 +1113,161 @@ try {
   if (publicHealth.ready !== true || publicHealth.readiness_state !== "ready") {
     throw new Error(
       `Public Control Plane health was not normally ready: ${JSON.stringify(publicHealth)}`,
+    );
+  }
+
+
+  // #1297 desktop keyboard smoke: traverse the real shell in DOM order rather than assigning
+  // focus programmatically. Shift+Tab must return to the prior primary navigation target.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(frontendUrl);
+  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+  const skipLink = page.getByRole("link", { name: "Skip to content", exact: true });
+  const homeLink = page.getByRole("link", { name: "Home", exact: true });
+  const chatLink = page.getByRole("link", { name: "Chat", exact: true });
+  await tabTo(page, skipLink, "Desktop skip link", { maxPresses: 4 });
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(homeLink, "Desktop Home navigation");
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(chatLink, "Desktop Chat navigation");
+  await page.keyboard.press("Shift+Tab");
+  await assertKeyboardFocus(homeLink, "Desktop reverse navigation");
+
+  // #1297 narrow shell smoke: the pointer-free mobile menu must open from keyboard focus,
+  // expose its navigation links, navigate with Enter and close again on route change.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(frontendUrl);
+  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+  await assertNoDocumentHorizontalOverflow(page, "Narrow platform overview");
+  const narrowSkipLink = page.getByRole("link", { name: "Skip to content", exact: true });
+  const menuButton = page.getByRole("button", { name: "Toggle navigation", exact: true });
+  await tabTo(page, narrowSkipLink, "Narrow skip link", { maxPresses: 4 });
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(menuButton, "Mobile navigation toggle");
+  await assertHorizontallyReachable(page, menuButton, "Mobile navigation toggle");
+  await page.keyboard.press("Enter");
+  if ((await menuButton.getAttribute("aria-expanded")) !== "true") {
+    throw new Error("Mobile navigation did not open from the keyboard");
+  }
+  await page.keyboard.press("Shift+Tab");
+  const mobileNavigationTarget = await page.evaluate(() => {
+    const navigationElement = document.getElementById("platform-navigation");
+    const active = document.activeElement;
+    if (!navigationElement || !active || !navigationElement.contains(active) || active.tagName !== "A") {
+      return null;
+    }
+    return {
+      href: active.getAttribute("href"),
+      text: active.textContent?.trim() ?? "",
+    };
+  });
+  if (!mobileNavigationTarget?.href) {
+    throw new Error(`Open mobile navigation did not expose a keyboard-reachable link: ${JSON.stringify(mobileNavigationTarget)}`);
+  }
+  const mobileDestination = new URL(mobileNavigationTarget.href, frontendUrl);
+  const mobileNavigationPromise = page.waitForURL(`${frontendUrl}${mobileDestination.pathname}${mobileDestination.search}`);
+  await page.keyboard.press("Enter");
+  await mobileNavigationPromise;
+  await page.waitForFunction(() => (
+    document.querySelector('[aria-label="Toggle navigation"]')?.getAttribute("aria-expanded") === "false"
+  ));
+  if ((await menuButton.getAttribute("aria-expanded")) !== "false") {
+    throw new Error("Mobile navigation did not close after keyboard navigation");
+  }
+  await assertNoDocumentHorizontalOverflow(page, "Narrow shell destination");
+
+  // Search remains a usable release surface at the chosen narrow width.
+  await page.goto(`${frontendUrl}${searchPath}`);
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Search");
+  const narrowSearchInput = page.locator('input[name="q"]');
+  await tabTo(page, narrowSearchInput, "Narrow Search query", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, narrowSearchInput, "Narrow Search query");
+
+  // Re-open the real first-run timeline and prove its dense table remains contained by the
+  // intentional horizontally scrollable wrapper rather than clipping the product viewport.
+  await page.goto(`${frontendUrl}/observability`);
+  await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
+  await page.getByLabel("Exact Task ID", { exact: true }).fill(firstRunResult.task_id);
+  await (await waitForButton(page, "Open telemetry")).click();
+  const narrowTimelineHeading = page.getByRole("heading", { name: "Timeline", exact: true });
+  await narrowTimelineHeading.waitFor();
+  const narrowTimelineCard = narrowTimelineHeading.locator("..");
+  await narrowTimelineCard.locator("tbody tr").first().waitFor();
+  await assertUsableTableWrapper(
+    page,
+    narrowTimelineCard.locator(".table-wrap").first(),
+    "Narrow Observability timeline",
+  );
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Observability");
+
+  // A canonical draft Task gives the sanity pass a real primary action plus a destructive action
+  // without altering the retained first-run result. Reach Queue and then Cancel through sequential
+  // Tab presses, invoke the native confirmation with Enter, dismiss it with the keyboard-capable
+  // browser dialog path and prove that no mutation occurred.
+  const keyboardSanityTask = await publicApiCommand(page, "/tasks", {
+    title: "Keyboard destructive confirmation sanity",
+    objective: "Retain #1297 keyboard and narrow-viewport acceptance evidence.",
+    owner_type: taskViaApi.owner.type,
+    owner_id: taskViaApi.owner.id,
+    project_id: firstRunResult.project_id,
+  });
+  requireCanonicalIdentity(
+    keyboardSanityTask,
+    keyboardSanityTask.id,
+    "Keyboard sanity Task",
+  );
+  if (keyboardSanityTask.status !== "draft") {
+    throw new Error(`Keyboard sanity Task did not start as draft: ${JSON.stringify(keyboardSanityTask)}`);
+  }
+
+  await page.goto(`${frontendUrl}/tasks/${encodeURIComponent(keyboardSanityTask.id)}`);
+  await page.getByRole("heading", { name: "Keyboard destructive confirmation sanity", exact: true }).waitFor();
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Task detail");
+  const taskLifecycleCommands = page.locator('[aria-label="Task lifecycle commands"]');
+  const queueTaskButton = taskLifecycleCommands.getByRole("button", { name: "Queue", exact: true });
+  const cancelTaskButton = taskLifecycleCommands.getByRole("button", { name: "Cancel", exact: true });
+  await tabTo(page, queueTaskButton, "Narrow Task Queue action", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, queueTaskButton, "Narrow Task Queue action");
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(cancelTaskButton, "Narrow Task Cancel action");
+  await assertHorizontallyReachable(page, cancelTaskButton, "Narrow Task Cancel action");
+
+  const confirmationDialogPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Keyboard destructive action did not expose a confirmation dialog")),
+      5_000,
+    );
+    page.once("dialog", async (dialog) => {
+      const snapshot = { type: dialog.type(), message: dialog.message() };
+      try {
+        await dialog.dismiss();
+        clearTimeout(timeout);
+        resolve(snapshot);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  });
+  await page.keyboard.press("Enter");
+  const confirmationDialog = await confirmationDialogPromise;
+  if (
+    confirmationDialog.type !== "confirm"
+    || !confirmationDialog.message.includes("Cancel Task")
+  ) {
+    throw new Error(
+      `Keyboard destructive action exposed an unexpected confirmation: ${confirmationDialog.type} ${confirmationDialog.message}`,
+    );
+  }
+
+  const taskAfterDismissedConfirmation = await readPublicApiResource(
+    page,
+    `/tasks/${keyboardSanityTask.id}`,
+  );
+  if (taskAfterDismissedConfirmation.status !== "draft") {
+    throw new Error(
+      `Dismissed destructive confirmation mutated Task state: ${JSON.stringify(taskAfterDismissedConfirmation)}`,
     );
   }
 } catch (error) {
