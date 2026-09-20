@@ -228,7 +228,6 @@ def add_auth_parsers(
         decision_parser.add_argument("--idempotency-key")
 
 
-
 def _common_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
     _add_common_arguments(parser)
