@@ -29,6 +29,7 @@ from .authentication import (
     _augment_authentication_openapi,
     _cookies,
     _header,
+    _normalize_mobile_server_origin,
     _optional_datetime,
     _public_route,
     _relative_path,
@@ -238,6 +239,36 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        if (
+            request.method == "POST"
+            and relative.startswith("/auth/mobile-pairing/")
+            and relative.endswith(":complete")
+        ):
+            pairing_id = relative.removeprefix("/auth/mobile-pairing/").removesuffix(":complete")
+            proof = _required_string(request.body, "proof")
+            device_name = _required_string(request.body, "device_name")
+            raw_metadata = request.body.get("device_metadata")
+            if raw_metadata is not None and not isinstance(raw_metadata, dict):
+                raise ValueError("device_metadata must be an object")
+            issued = await self._runtime_authentication.complete_mobile_pairing(
+                pairing_id,
+                proof,
+                device_name=device_name,
+                device_metadata=cast(dict[str, JsonValue] | None, raw_metadata),
+                correlation_id=correlation_id,
+            )
+            return self._response(
+                201,
+                {
+                    "credential_id": issued.credential_id,
+                    "secret": issued.secret,
+                    "expires_at": issued.expires_at.isoformat() if issued.expires_at else None,
+                    "secret_display": "one_time",
+                },
+                request_id,
+                correlation_id,
+            )
+
         if request.method == "POST" and relative == "/auth/bootstrap-admin":
             username = _required_string(request.body, "username")
             password = _required_string(request.body, "password")
@@ -349,6 +380,131 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
                 correlation_id=correlation_id,
             )
         user_id = actor.identity.actor_id
+
+        if request.method == "POST" and relative == "/auth/mobile-pairing":
+            await self._authorize_credential_operation(
+                request,
+                actor,
+                action="create",
+                resource_ref=user_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+                bind_payload=True,
+            )
+            server_origin = _normalize_mobile_server_origin(
+                _required_string(request.body, "server_origin")
+            )
+            scope = CredentialScope.from_json(request.body.get("scope"))
+            challenge = await self._runtime_authentication.create_mobile_pairing_challenge(
+                user_id,
+                server_origin=server_origin,
+                scope=scope,
+                correlation_id=correlation_id,
+            )
+            return self._response(
+                201,
+                {
+                    "request_id": challenge.request_id,
+                    "server_origin": challenge.server_origin,
+                    "protocol_version": challenge.protocol_version,
+                    "qr_payload": challenge.qr_payload,
+                    "fallback_code": challenge.code,
+                    "created_at": challenge.created_at.isoformat(),
+                    "expires_at": challenge.expires_at.isoformat(),
+                    "scope": scope.to_json(),
+                    "secret_display": "one_time",
+                },
+                request_id,
+                correlation_id,
+            )
+
+        if request.method == "POST" and relative.startswith("/auth/mobile-pairing/"):
+            suffix = relative.removeprefix("/auth/mobile-pairing/")
+            if suffix.endswith(":cancel"):
+                pairing_id = suffix.removesuffix(":cancel")
+                await self._authorize_credential_operation(
+                    request,
+                    actor,
+                    action="revoke",
+                    resource_ref=pairing_id,
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
+                await self._runtime_authentication.cancel_mobile_pairing(
+                    user_id,
+                    pairing_id,
+                    correlation_id=correlation_id,
+                )
+                return self._response(
+                    200,
+                    {"request_id": pairing_id, "cancelled": True},
+                    request_id,
+                    correlation_id,
+                )
+
+        if request.method == "GET" and relative == "/auth/mobile-devices":
+            await self._authorize_credential_operation(
+                request,
+                actor,
+                action="list",
+                resource_ref=user_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            devices = await self._runtime_authentication.list_mobile_devices(user_id)
+            items: list[JsonValue] = [
+                safe_credential_with_scope(self._hardened_authentication, item)
+                for item in devices
+            ]
+            return self._response(200, {"items": items}, request_id, correlation_id)
+
+        if request.method == "POST" and relative.startswith("/auth/mobile-devices/"):
+            suffix = relative.removeprefix("/auth/mobile-devices/")
+            if suffix.endswith(":rename"):
+                credential_id = suffix.removesuffix(":rename")
+                await self._authorize_credential_operation(
+                    request,
+                    actor,
+                    action="update",
+                    resource_ref=credential_id,
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                    bind_payload=True,
+                )
+                device_name = _required_string(request.body, "device_name")
+                device = await self._runtime_authentication.rename_mobile_device(
+                    user_id,
+                    credential_id,
+                    device_name,
+                    correlation_id=correlation_id,
+                )
+                return self._response(
+                    200,
+                    safe_credential_with_scope(self._hardened_authentication, device),
+                    request_id,
+                    correlation_id,
+                )
+            if suffix.endswith(":revoke"):
+                credential_id = suffix.removesuffix(":revoke")
+                await self._authorize_credential_operation(
+                    request,
+                    actor,
+                    action="revoke",
+                    resource_ref=credential_id,
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
+                await self._runtime_authentication.revoke_mobile_device(
+                    user_id,
+                    credential_id,
+                    correlation_id=correlation_id,
+                )
+                return self._response(
+                    200,
+                    {"id": credential_id, "revoked": True},
+                    request_id,
+                    correlation_id,
+                )
 
         if request.method == "GET" and relative == "/auth/sessions":
             sessions = await self._runtime_authentication.list_sessions(user_id)
