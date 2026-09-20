@@ -1,45 +1,20 @@
 #!/usr/bin/env python3
-"""Generate release SBOM and provenance evidence without external tooling."""
+"""Generate a deterministic SPDX release SBOM without external SBOM tooling."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 _REPOSITORY = "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform"
-_SPDX_VERSION = "SPDX-2.3"
-_SPDX_DATA_LICENSE = "CC0-1.0"
 _SPDX_DOCUMENT_ID = "SPDXRef-DOCUMENT"
 _ROOT_PACKAGE_ID = "SPDXRef-Package-ai-multi-agent-platform"
 
-
-@dataclass(frozen=True, slots=True)
-class _Package:
-    ecosystem: str
-    name: str
-    version: str
-
-    @property
-    def spdx_id(self) -> str:
-        value = re.sub(r"[^A-Za-z0-9.-]+", "-", f"{self.ecosystem}-{self.name}-{self.version}")
-        return f"SPDXRef-Package-{value.strip('-')}"
-
-    @property
-    def purl(self) -> str | None:
-        if self.version == "NOASSERTION":
-            return None
-        if self.ecosystem == "pypi":
-            name = self.name.lower().replace("_", "-")
-            return f"pkg:pypi/{name}@{self.version}"
-        if self.ecosystem == "npm":
-            return f"pkg:npm/{self.name}@{self.version}"
-        return None
+type Package = tuple[str, str, str]
 
 
 def main() -> int:
@@ -47,52 +22,60 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--created-at", required=True)
     parser.add_argument("--pyproject", type=Path, required=True)
-    parser.add_argument("--platform-wheel", type=Path, required=True)
     parser.add_argument("--python-declared", type=Path, required=True)
     parser.add_argument("--python-resolved", type=Path, required=True)
     parser.add_argument("--frontend-lock", type=Path, required=True)
     parser.add_argument("--sbom-output", type=Path, required=True)
-    parser.add_argument("--provenance-output", type=Path, required=True)
     args = parser.parse_args()
 
-    generate_release_supply_chain_evidence(
+    generate_release_sbom(
         source_commit=str(args.source_commit),
         created_at=str(args.created_at),
         pyproject=args.pyproject,
-        platform_wheel=args.platform_wheel,
         python_declared=args.python_declared,
         python_resolved=args.python_resolved,
         frontend_lock=args.frontend_lock,
         sbom_output=args.sbom_output,
-        provenance_output=args.provenance_output,
     )
     return 0
 
 
-def generate_release_supply_chain_evidence(
+def generate_release_sbom(
     *,
     source_commit: str,
     created_at: str,
     pyproject: Path,
-    platform_wheel: Path,
     python_declared: Path,
     python_resolved: Path,
     frontend_lock: Path,
     sbom_output: Path,
-    provenance_output: Path,
 ) -> None:
     if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", source_commit) is None:
         raise ValueError("source_commit must be a full lowercase Git SHA")
 
-    project_name, project_version = _project_identity(pyproject)
+    project_name, project_version, project_license = _project_identity(pyproject)
     dependencies = {
-        *(_python_packages(python_resolved)),
-        *(_npm_packages(frontend_lock)),
+        *_python_packages(python_declared),
+        *_python_packages(python_resolved),
+        *_npm_packages(frontend_lock),
     }
-    dependencies.discard(_Package("pypi", project_name, project_version))
-    ordered = sorted(dependencies, key=lambda item: (item.ecosystem, item.name.lower(), item.version))
+    dependencies = {
+        item
+        for item in dependencies
+        if not (
+            item[0] == "pypi"
+            and _normalize_python_name(item[1]) == _normalize_python_name(project_name)
+        )
+    }
+    ordered = sorted(dependencies, key=lambda item: (item[0], item[1].lower(), item[2]))
 
-    packages = [_spdx_package(_Package("pypi", project_name, project_version))]
+    packages = [
+        _spdx_package(
+            ("pypi", project_name, project_version),
+            root=True,
+            license_declared=project_license,
+        )
+    ]
     packages.extend(_spdx_package(item) for item in ordered)
     relationships: list[dict[str, str]] = [
         {
@@ -105,14 +88,14 @@ def generate_release_supply_chain_evidence(
         {
             "spdxElementId": _ROOT_PACKAGE_ID,
             "relationshipType": "DEPENDS_ON",
-            "relatedSpdxElement": item.spdx_id,
+            "relatedSpdxElement": _spdx_id(item),
         }
         for item in ordered
     )
 
-    sbom = {
-        "spdxVersion": _SPDX_VERSION,
-        "dataLicense": _SPDX_DATA_LICENSE,
+    document = {
+        "spdxVersion": "SPDX-2.3",
+        "dataLicense": "CC0-1.0",
         "SPDXID": _SPDX_DOCUMENT_ID,
         "name": f"{project_name}-{project_version}",
         "documentNamespace": f"{_REPOSITORY}/spdx/{source_commit}",
@@ -123,40 +106,14 @@ def generate_release_supply_chain_evidence(
         "packages": packages,
         "relationships": relationships,
     }
-    _write_json(sbom_output, sbom)
-
-    provenance = {
-        "_type": "https://in-toto.io/Statement/v1",
-        "subject": [
-            _subject("platform.whl", platform_wheel),
-            _subject("sbom.spdx.json", sbom_output),
-        ],
-        "predicateType": f"{_REPOSITORY}/release-provenance/v1",
-        "predicate": {
-            "source": {
-                "repository": _REPOSITORY,
-                "commit": source_commit,
-            },
-            "release": {
-                "name": project_name,
-                "version": project_version,
-                "created_at": created_at,
-            },
-            "builder": {
-                "workflow": ".github/workflows/release-manifest.yml",
-            },
-            "materials": [
-                _material("pyproject.toml", pyproject),
-                _material("python-declared.txt", python_declared),
-                _material("python-resolved.txt", python_resolved),
-                _material("frontend/package-lock.json", frontend_lock),
-            ],
-        },
-    }
-    _write_json(provenance_output, provenance)
+    sbom_output.parent.mkdir(parents=True, exist_ok=True)
+    sbom_output.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
-def _project_identity(path: Path) -> tuple[str, str]:
+def _project_identity(path: Path) -> tuple[str, str, str]:
     document = tomllib.loads(path.read_text(encoding="utf-8"))
     project = document.get("project")
     if not isinstance(project, dict):
@@ -167,28 +124,35 @@ def _project_identity(path: Path) -> tuple[str, str]:
         raise ValueError("pyproject project.name is missing")
     if not isinstance(version, str) or not version:
         raise ValueError("pyproject project.version is missing")
-    return name, version
+    license_value = project.get("license")
+    license_text = "NOASSERTION"
+    if isinstance(license_value, dict):
+        candidate = license_value.get("text")
+        if isinstance(candidate, str) and candidate:
+            license_text = candidate
+    return name, version, license_text
 
 
-def _python_packages(path: Path) -> set[_Package]:
-    packages: set[_Package] = set()
+def _python_packages(path: Path) -> set[Package]:
+    packages: set[Package] = set()
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         if "==" in line:
             name, version = line.split("==", 1)
+            version = version.split(";", maxsplit=1)[0].strip()
             if name and version:
-                packages.add(_Package("pypi", name.strip(), version.strip()))
+                packages.add(("pypi", name.strip(), version))
             continue
         if " @ " in line:
             name, _ = line.split(" @ ", 1)
             if name:
-                packages.add(_Package("pypi", name.strip(), "NOASSERTION"))
+                packages.add(("pypi", name.strip(), "NOASSERTION"))
     return packages
 
 
-def _npm_packages(path: Path) -> set[_Package]:
+def _npm_packages(path: Path) -> set[Package]:
     raw: object = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("frontend lockfile must be a JSON object")
@@ -197,7 +161,7 @@ def _npm_packages(path: Path) -> set[_Package]:
     if not isinstance(packages_raw, dict):
         raise ValueError("frontend lockfile is missing packages")
 
-    packages: set[_Package] = set()
+    packages: set[Package] = set()
     for location, metadata_raw in packages_raw.items():
         if not isinstance(location, str) or not location or "node_modules/" not in location:
             continue
@@ -210,22 +174,49 @@ def _npm_packages(path: Path) -> set[_Package]:
         name = metadata.get("name")
         if not isinstance(name, str) or not name:
             name = location.rsplit("node_modules/", maxsplit=1)[-1]
-        packages.add(_Package("npm", name, version))
+        packages.add(("npm", name, version))
     return packages
 
 
-def _spdx_package(package: _Package) -> dict[str, object]:
+def _normalize_python_name(value: str) -> str:
+    return re.sub(r"[-_.]+", "-", value).lower()
+
+
+def _spdx_id(package: Package) -> str:
+    ecosystem, name, version = package
+    value = re.sub(r"[^A-Za-z0-9.-]+", "-", f"{ecosystem}-{name}-{version}")
+    return f"SPDXRef-Package-{value.strip('-')}"
+
+
+def _purl(package: Package) -> str | None:
+    ecosystem, name, version = package
+    if version == "NOASSERTION":
+        return None
+    if ecosystem == "pypi":
+        return f"pkg:pypi/{_normalize_python_name(name)}@{version}"
+    if ecosystem == "npm":
+        return f"pkg:npm/{name}@{version}"
+    return None
+
+
+def _spdx_package(
+    package: Package,
+    *,
+    root: bool = False,
+    license_declared: str = "NOASSERTION",
+) -> dict[str, object]:
+    _, name, version = package
     document: dict[str, object] = {
-        "SPDXID": _ROOT_PACKAGE_ID if package.name == "ai-multi-agent-platform" else package.spdx_id,
-        "name": package.name,
-        "versionInfo": package.version,
+        "SPDXID": _ROOT_PACKAGE_ID if root else _spdx_id(package),
+        "name": name,
+        "versionInfo": version,
         "downloadLocation": "NOASSERTION",
         "filesAnalyzed": False,
         "licenseConcluded": "NOASSERTION",
-        "licenseDeclared": "NOASSERTION",
+        "licenseDeclared": license_declared,
         "supplier": "NOASSERTION",
     }
-    purl = package.purl
+    purl = _purl(package)
     if purl is not None:
         document["externalRefs"] = [
             {
@@ -235,27 +226,6 @@ def _spdx_package(package: _Package) -> dict[str, object]:
             }
         ]
     return document
-
-
-def _subject(name: str, path: Path) -> dict[str, object]:
-    return {"name": name, "digest": {"sha256": _sha256(path)}}
-
-
-def _material(name: str, path: Path) -> dict[str, object]:
-    return {"uri": name, "digest": {"sha256": _sha256(path)}}
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _write_json(path: Path, document: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
