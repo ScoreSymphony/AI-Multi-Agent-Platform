@@ -40,11 +40,13 @@ Web/CLI session. The QR/deep-link or fallback code contains pairing material onl
 durable bearer credential. The mobile app displays and validates the target Control Plane origin
 before consuming the challenge.
 
-Successful consumption returns a dedicated scoped mobile credential exactly once. The app
-immediately validates it through `GET /api/v1/auth/me` and only then persists the credential and
-server URL through `expo-secure-store`. The credential is never written to ordinary application
-storage. Remote servers require HTTPS; loopback HTTP remains available only for explicit local
-development.
+Successful consumption returns a dedicated scoped mobile credential exactly once. Because the
+pairing proof cannot be replayed, the app immediately persists that one-time result and server URL
+through `expo-secure-store`, then validates it through `GET /api/v1/auth/me`. A canonical 401
+clears the stored credential; a transient network failure retains it so restart recovery can retry
+identity verification instead of losing a credential after consuming the challenge. The credential
+is never written to ordinary application storage. Remote servers require HTTPS; loopback HTTP
+remains available only for explicit local development.
 
 Paired devices and their non-secret created/last-used/revoked state remain server-owned. Web
 Settings can list and revoke one or all devices. Revocation invalidates the bearer credential on
@@ -84,8 +86,10 @@ provider/private identifiers and path traversal are rejected.
 
 The one special `aiagentplatform://pair` link is a versioned authentication bootstrap envelope.
 It carries only the validated HTTPS Control Plane origin, opaque pairing request ID and
-short-lived one-time code. Opening it never pairs automatically: the app shows the server identity
-and requires explicit confirmation before the public pairing endpoint is called.
+short-lived one-time code. The companion can scan that envelope directly with its `expo-camera`
+QR scanner or receive it as a deep link. Either path only fills the pending pairing state: the app
+shows the server identity and requires explicit confirmation before the public pairing endpoint is
+called.
 
 Resource deep links select read surfaces only; they never execute an approval, verification or
 Task mutation.
