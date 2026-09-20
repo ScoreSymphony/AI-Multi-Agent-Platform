@@ -895,6 +895,80 @@ try {
   await page.locator(".api-indicator").filter({ hasText: "/api/v1" }).waitFor();
   await manifestAlert.waitFor({ state: "detached" });
   await page.unroute(manifestApi, failManifestTemporarily);
+
+  // #1296: close the final #747 representative browser-evidence gap through
+  // operator diagnostics/status. Re-enter the already-proven Search/history
+  // surface, use the maintained shell navigation, and keep every read on the
+  // ordinary public Control Plane boundary.
+  await page.goto(`${frontendUrl}${searchPath}`);
+  await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
+  const observabilityLink = page.getByRole("link", { name: "Observability", exact: true });
+  await observabilityLink.waitFor();
+  await observabilityLink.click();
+  await page.waitForURL(`${frontendUrl}/observability`);
+  await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
+
+  const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
+  if (!firstRunRunId) {
+    throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
+  }
+
+  const timelineResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(
+        `/api/v1/tasks/${encodeURIComponent(firstRunResult.task_id)}/timeline`,
+      )
+      && response.request().method() === "GET",
+  );
+  await page.getByLabel("Exact Task ID", { exact: true }).fill(firstRunResult.task_id);
+  await (await waitForButton(page, "Open telemetry")).click();
+  const timelineResponse = await timelineResponsePromise;
+  if (!timelineResponse.ok()) {
+    throw new Error(
+      `Observability timeline failed with ${timelineResponse.status()}: ${await timelineResponse.text()}`,
+    );
+  }
+  const timelinePayload = await timelineResponse.json();
+  if (
+    !timelinePayload.items?.some(
+      (item) =>
+        item.type === "event"
+        && item.subject_type === "run"
+        && item.subject_id === firstRunRunId,
+    )
+  ) {
+    throw new Error(
+      `Public task timeline did not retain canonical Run ${firstRunRunId}: ${JSON.stringify(timelinePayload)}`,
+    );
+  }
+
+  const observabilityRoute = page.locator('main[data-route="/observability"]');
+  await observabilityRoute.locator(`code[title="${firstRunResult.task_id}"]`).first().waitFor();
+  const timelineHeading = page.getByRole("heading", { name: "Timeline", exact: true });
+  await timelineHeading.waitFor();
+  const timelineCard = timelineHeading.locator("..");
+  await timelineCard.locator("tbody tr").first().waitFor();
+  await timelineCard.getByText(`run:${firstRunRunId}`, { exact: true }).first().waitFor();
+  if ((await timelineCard.getByText("No timeline entries", { exact: true }).count()) !== 0) {
+    throw new Error("Observability rendered its empty state for the completed first-run Task");
+  }
+
+  // Finish on the canonical operator status surface and distinguish normal
+  // readiness from a degraded/empty presentation.
+  await page.goto(frontendUrl);
+  await page.getByRole("heading", { name: "Platform overview", exact: true }).waitFor();
+  const readinessMetric = page.locator(".metric").filter({ hasText: "Readiness" });
+  await readinessMetric.waitFor();
+  const readinessText = (await readinessMetric.innerText()).toLowerCase();
+  if (!readinessText.includes("ready") || readinessText.includes("degraded")) {
+    throw new Error(`Platform overview did not report ready status: ${readinessText}`);
+  }
+  const publicHealth = await readPublicApiResource(page, "/health");
+  if (publicHealth.ready !== true || publicHealth.readiness_state !== "ready") {
+    throw new Error(
+      `Public Control Plane health was not normally ready: ${JSON.stringify(publicHealth)}`,
+    );
+  }
 } catch (error) {
   await mkdir(artifactDir, { recursive: true }).catch(() => undefined);
   if (page) {
