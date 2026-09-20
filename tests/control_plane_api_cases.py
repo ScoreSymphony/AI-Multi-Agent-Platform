@@ -423,6 +423,44 @@ def test_route_semantics_distinguish_unknown_uri_from_wrong_method() -> None:
             assert response.body["correlation_id"] == "correlation-route-semantics"
             assert response.body.get("details", {}) == {}
 
+        unknown_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/projects/project_missing/does-not-exist",
+                headers=headers,
+                query={"limit": "bad"},
+            )
+        )
+        assert_error_envelope(unknown_with_bad_pagination, code="not_found", status=404)
+
+        wrong_method_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="DELETE",
+                path="/api/v1/projects/project_missing",
+                headers=headers,
+                query={"limit": "bad"},
+            )
+        )
+        assert_error_envelope(
+            wrong_method_with_bad_pagination,
+            code="method_not_allowed",
+            status=405,
+        )
+
+        selected_list_with_bad_pagination = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/projects",
+                headers=headers,
+                query={"limit": "bad"},
+            )
+        )
+        assert_error_envelope(
+            selected_list_with_bad_pagination,
+            code="invalid_request",
+            status=400,
+        )
+
     asyncio.run(scenario())
 
 
