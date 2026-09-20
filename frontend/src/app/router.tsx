@@ -70,13 +70,17 @@ export function AppLink({
 }: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const { navigate } = useRouter();
   const safeHref = normalizeAppLinkHref(href);
-  const renderedHref = (
+  const allowedHref = (
     safeHref?.startsWith("/")
     || safeHref?.startsWith("https://")
     || safeHref?.startsWith("http://")
   )
     ? safeHref
     : undefined;
+  const renderedHref = allowedHref?.replace(
+    /[<"']/g,
+    (character) => encodeURIComponent(character),
+  );
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (
