@@ -153,7 +153,7 @@ describe("MobileSessionStore", () => {
     expect(fetchImpl.mock.calls[1]?.[0]).toBe("https://platform.example/api/v1/auth/me");
   });
 
-  it("never persists a device credential when post-pair identity verification fails", async () => {
+  it("clears a paired device credential when canonical identity verification rejects it", async () => {
     const storage = new MemoryStorage();
     const store = new MobileSessionStore(storage);
     const fetchImpl = vi.fn()
@@ -192,6 +192,50 @@ describe("MobileSessionStore", () => {
     ).rejects.toThrow("Credential validation failed");
     expect(await store.current()).toBeNull();
     expect(await store.getToken()).toBeNull();
+  });
+
+  it("retains a consumed device credential when identity verification is temporarily offline", async () => {
+    const storage = new MemoryStorage();
+    const store = new MobileSessionStore(storage);
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            device: {
+              id: "mobile_device_1",
+              credential_id: "credential-1",
+              display_name: "Pixel",
+              platform: "android",
+              active: true,
+            },
+            credential: {
+              id: "credential-1",
+              secret: "amp1.credential-1.device-secret",
+              expires_at: null,
+              secret_display: "one_time",
+            },
+          }),
+          { status: 201 },
+        ),
+      )
+      .mockRejectedValueOnce(new Error("offline"));
+
+    await expect(
+      store.pair(
+        {
+          baseUrl: "https://platform.example",
+          pairingCode: "ABCDEFGH-JKLMNPQRSTUVWX234567",
+          deviceName: "Pixel",
+          devicePlatform: "android",
+        },
+        fetchImpl,
+      ),
+    ).rejects.toThrow("offline");
+
+    expect(await store.getToken()).toBe("amp1.credential-1.device-secret");
+    expect(await new MobileSessionStore(storage).current()).toEqual({
+      baseUrl: "https://platform.example",
+    });
   });
 
   it("requires TLS except for explicit loopback development", () => {
