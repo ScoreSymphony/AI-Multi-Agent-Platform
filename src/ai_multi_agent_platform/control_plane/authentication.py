@@ -787,7 +787,11 @@ def _require_only_fields(payload: dict[str, JsonValue], allowed: set[str]) -> No
     unexpected = set(payload).difference(allowed)
     if unexpected:
         names = ", ".join(sorted(unexpected))
-        raise ValueError(f"unexpected request field(s): {names}")
+        raise APIException(
+            status=400,
+            code="invalid_request",
+            message=f"unexpected request field(s): {names}",
+        )
 
 
 def _required_string(payload: dict[str, JsonValue], name: str) -> str:
@@ -809,7 +813,17 @@ def _protocol_version(value: JsonValue | None) -> int:
     if value is None:
         return 1
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("protocol_version must be an integer")
+        raise APIException(
+            status=400,
+            code="invalid_request",
+            message="protocol_version must be an integer",
+        )
+    if value != 1:
+        raise APIException(
+            status=400,
+            code="invalid_request",
+            message="unsupported mobile pairing protocol version",
+        )
     return value
 
 
