@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
+import threading
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -68,6 +69,7 @@ class AuthenticationMobilePairingService:
         self.audit = audit
         self.pairing_ttl = pairing_ttl
         self.max_failed_attempts = max_failed_attempts
+        self._mutation_lock = threading.RLock()
 
     def create_pairing(
         self,
@@ -80,19 +82,20 @@ class AuthenticationMobilePairingService:
         current = authentication_now(now)
         self.require_account_active(self.user(user_id))
         origin = normalize_pairing_server_origin(server_origin)
-        pairing_id = new_id("mobile_pairing")
-        locator = self._new_locator()
-        proof = _random_code(20)
-        self.store.mobile_pairings[pairing_id] = MobilePairingChallenge(
-            pairing_id=pairing_id,
-            user_id=user_id,
-            server_origin=origin,
-            code_locator=locator,
-            secret_verifier=secret_verifier(proof),
-            protocol_version=PAIRING_PROTOCOL_VERSION,
-            created_at=current,
-            expires_at=current + self.pairing_ttl,
-        )
+        with self._mutation_lock:
+            pairing_id = new_id("mobile_pairing")
+            locator = self._new_locator()
+            proof = _random_code(20)
+            self.store.mobile_pairings[pairing_id] = MobilePairingChallenge(
+                pairing_id=pairing_id,
+                user_id=user_id,
+                server_origin=origin,
+                code_locator=locator,
+                secret_verifier=secret_verifier(proof),
+                protocol_version=PAIRING_PROTOCOL_VERSION,
+                created_at=current,
+                expires_at=current + self.pairing_ttl,
+            )
         code = f"{locator}-{proof}"
         qr_payload = (
             f"{PAIRING_URI_SCHEME}://pair?"
@@ -141,6 +144,34 @@ class AuthenticationMobilePairingService:
         if protocol_version != PAIRING_PROTOCOL_VERSION:
             raise ValueError("unsupported mobile pairing protocol version")
         locator, proof = _parse_pairing_code(pairing_code)
+        with self._mutation_lock:
+            return self._consume_pairing_locked(
+                locator,
+                proof,
+                server_origin=origin,
+                device_name=device_name,
+                device_platform=device_platform,
+                pairing_id=pairing_id,
+                protocol_version=protocol_version,
+                now=current,
+                correlation_id=correlation_id,
+            )
+
+    def _consume_pairing_locked(
+        self,
+        locator: str,
+        proof: str,
+        *,
+        server_origin: str,
+        device_name: str,
+        device_platform: str,
+        pairing_id: str | None,
+        protocol_version: int,
+        now: datetime,
+        correlation_id: str | None,
+    ) -> MobileDeviceGrant:
+        current = now
+        origin = server_origin
         challenge = self._resolve_challenge(locator, pairing_id)
         if challenge.protocol_version != protocol_version or challenge.server_origin != origin:
             self._record_failure(challenge, current, correlation_id=correlation_id)
@@ -289,7 +320,7 @@ class AuthenticationMobilePairingService:
     ) -> MobilePairingChallenge:
         if pairing_id is not None:
             challenge = self.store.mobile_pairings.get(pairing_id)
-            if challenge is None or challenge.code_locator != locator:
+            if challenge is None:
                 raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
             return challenge
         matches = [
