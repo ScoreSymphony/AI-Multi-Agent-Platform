@@ -1,6 +1,6 @@
 # Configuration and Secrets
 
-This document defines the Issue #34 baseline for platform-wide configuration and credentials. Ordinary configuration and sensitive material are separate systems. Neither boundary mandates Vault, KMS, a cloud provider, a worker runtime or a particular authentication implementation.
+This document defines the platform-wide configuration and credential boundary. Ordinary configuration and sensitive material are separate systems. Neither boundary mandates Vault, KMS, a cloud provider, a worker runtime or a particular authentication implementation.
 
 ## Deterministic configuration hierarchy
 
@@ -31,7 +31,7 @@ Layers at the same scope retain caller order. Task/run overrides are denied by d
 
 ## Canonical secret reference
 
-Issue #43 already established `ai_multi_agent_platform.security.SecretReference`. Issue #34 reuses that type rather than defining a competing secret identity. It contains provider/backend identity, secret ID, owner/scope, optional version and non-secret metadata. Plaintext material is intentionally absent.
+`ai_multi_agent_platform.security.SecretReference` is the canonical platform secret reference; configuration reuses that type rather than defining a competing secret identity. It contains provider/backend identity, secret ID, owner/scope, optional version and non-secret metadata. Plaintext material is intentionally absent.
 
 `SecretReference` defensively sanitizes its metadata through the central structured-redaction rules at construction time, recursively freezes the sanitized metadata, and returns a fresh redacted copy from `to_dict()`. This means known sensitive metadata keys such as tokens, credentials, passwords, API keys and private keys are not retained in plaintext by the canonical reference object and cannot be reintroduced by mutating the original input mapping or the stored metadata after construction.
 
@@ -64,7 +64,7 @@ Every resolution carries `SecretAccessContext` with:
 - purpose;
 - requested lifetime.
 
-The reference backend already enforces optional consumer and purpose restrictions. Final authorization can later be supplied by Issue #15 without redesigning this request shape.
+The reference backend enforces optional consumer and purpose restrictions. Northbound/production composition additionally applies the platform's canonical authorization boundary; `SecretAccessContext` carries the scope needed for that decision without making the secret backend an authorization authority.
 
 Resolved material is wrapped in `SecretMaterial`. Normal string/repr output is always redacted; access requires the explicit `reveal()` call at the authorized operation boundary. The reference backend caps leases at one hour and also respects secret expiry.
 
@@ -79,7 +79,7 @@ Resolved material is wrapped in `SecretMaterial`. Normal string/repr output is a
 - Consumer/purpose/revocation denials map to `ErrorCode.FORBIDDEN`.
 - Provider/reference mismatches map to `ErrorCode.INVALID_REQUEST`.
 
-Downstream adapters may reinitialize when configuration or credential state changes; the core contract does not require those integrations to exist yet.
+Downstream adapters may reinitialize when configuration or credential state changes; the core contract remains independent from any particular integration.
 
 ## Safe introspection
 
@@ -97,7 +97,7 @@ Ordinary introspection never invokes `SecretProvider.resolve(...)`.
 
 ## Redaction
 
-Issue #34 extends the central security redaction boundary rather than introducing a duplicate implementation:
+Configuration and secret handling reuse the central security redaction boundary rather than introducing a duplicate implementation:
 
 - `redact_sensitive(...)` recursively masks common sensitive mapping keys and safely serializes `SecretReference` metadata;
 - `redact_text(...)` removes explicitly known sensitive values from free-text surfaces;
@@ -105,16 +105,16 @@ Issue #34 extends the central security redaction boundary rather than introducin
 
 These helpers are intended for logs, events, traces, API responses, prompts, exports, evaluation artifacts and diagnostics. Redaction is defense in depth; components must still avoid placing raw secret material into canonical state or telemetry.
 
-## Follow-up integration points
+## Integration boundaries
 
-The core contract intentionally does not require workers, plugins, final authorization, authentication, connectors or observability. Later integrations should consume this boundary:
+The core contract does not require a particular Worker, plugin, authentication, connector or observability implementation. Current platform integrations consume the same boundary without taking ownership away from configuration/secrets:
 
-- #10 model providers use secret references for provider credentials;
-- #12 tool/capability invocation requests scoped delivery;
-- #14 worker dispatch receives only operation-required credential material;
-- #15 authorizes resolution decisions;
-- #16 applies central redaction at telemetry boundaries;
-- #20 plugins declare configuration and secret requirements;
-- #32 exposes only safe configuration metadata;
-- #36 stores service/API/worker credentials through the secret boundary;
-- #44 connectors use per-connection secret references.
+- model providers refer to provider credentials through secret references;
+- tool/capability invocation requests scoped delivery;
+- Worker dispatch receives only operation-required credential material;
+- authorization governs secret-resolution decisions at the canonical security boundary;
+- observability applies central redaction at telemetry boundaries;
+- plugins declare configuration and secret requirements;
+- the Control Plane exposes only safe configuration metadata;
+- authentication keeps service/API/Worker credential handling behind the credential boundary;
+- connectors use per-Connection secret references.

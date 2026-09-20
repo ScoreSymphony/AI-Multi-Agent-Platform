@@ -22,11 +22,11 @@ The central invariant remains unchanged:
 The current platform already has substantial durability that a generic workflow-engine comparison would otherwise count as missing:
 
 - `PlatformKernel` owns canonical Task/Run state, idempotent commands, persisted Events and restart reconciliation (#6).
-- Forge is an optional execution-only backend. Its durable dispatch identity and interruption behavior remain backend-private; Forge does not schedule canonical retries or own Task/Run state (`docs/FORGE_REUSE_AUDIT.md`, #9).
-- The distributed runtime owns canonical Worker Jobs, heartbeat/liveness handling, reservations, dispatch idempotency, restart persistence, lost-worker reconciliation and fenced cross-Worker failover (`docs/DISTRIBUTED_RUNTIME.md`, #14).
-- Automation owns persisted schedules, missed-run handling, durable TriggerDelivery retry state, deduplication, canonical Event ingestion and autonomous restart-safe wakeups (`docs/AUTOMATION.md`, #18).
+- Forge is an optional execution-only backend. Its durable dispatch identity and interruption behavior remain backend-private; Forge does not schedule canonical retries or own Task/Run state (`docs/integrations/FORGE_REUSE_AUDIT.md`, #9).
+- The distributed runtime owns canonical Worker Jobs, heartbeat/liveness handling, reservations, dispatch idempotency, restart persistence, lost-worker reconciliation and fenced cross-Worker failover (`docs/runtime/DISTRIBUTED_RUNTIME.md`, #14).
+- Automation owns persisted schedules, missed-run handling, durable TriggerDelivery retry state, deduplication, canonical Event ingestion and autonomous restart-safe wakeups (`docs/runtime/AUTOMATION.md`, #18).
 - Message transport is explicitly at-least-once and separate from canonical Event history (ADR 0005).
-- The single-node deployment already has platform-owned persistent stores and backup/restore semantics; adding another stateful service therefore has a real operational and recovery cost (`docs/DEPLOYMENT.md`, `docs/BACKUP_RESTORE.md`).
+- The single-node deployment already has platform-owned persistent stores and backup/restore semantics; adding another stateful service therefore has a real operational and recovery cost (`docs/operations/DEPLOYMENT.md`, `docs/operations/BACKUP_RESTORE.md`).
 
 The remaining gap is narrower: the domain has canonical `Plan` and `Step` objects, dependency edges and Step lifecycle states, but the current platform does **not** yet provide a complete durable Plan/Step coordinator that persists and resumes multi-step dependency execution, long Step waits/signals, fan-out/fan-in barriers and Step-level retry deadlines as one coherent mechanism.
 
@@ -478,7 +478,7 @@ The DBOS system database/checkpoint state would likewise join the restore set. I
 
 ## Why Forge does not remove the remaining gap
 
-`docs/FORGE_REUSE_AUDIT.md` intentionally keeps Forge below `LifecycleBackend` and records that:
+`docs/integrations/FORGE_REUSE_AUDIT.md` intentionally keeps Forge below `LifecycleBackend` and records that:
 
 - canonical restart reconciliation is platform-owned;
 - Forge dispatch identity is backend-private;
@@ -575,11 +575,11 @@ These invariants are mandatory and repeat the #21 guardrails in implementation t
 ### Platform evidence
 
 - `src/ai_multi_agent_platform/domain/models.py` — canonical Plan/Step/Run models and lifecycle-capable Step state.
-- `docs/FORGE_REUSE_AUDIT.md` — Forge execution/recovery ownership and rejected legacy workflow lifecycle.
-- `docs/DISTRIBUTED_RUNTIME.md` — Worker Job ownership, leases, restart persistence, reconciliation and fencing.
-- `docs/AUTOMATION.md` — persisted schedules, TriggerDelivery retry/dedupe and autonomous restart-safe runtime.
-- `docs/DEPLOYMENT.md` — production-shaped single-node topology and platform stores.
-- `docs/BACKUP_RESTORE.md` — platform backup/restore ownership.
+- `docs/integrations/FORGE_REUSE_AUDIT.md` — Forge execution/recovery ownership and rejected legacy workflow lifecycle.
+- `docs/runtime/DISTRIBUTED_RUNTIME.md` — Worker Job ownership, leases, restart persistence, reconciliation and fencing.
+- `docs/runtime/AUTOMATION.md` — persisted schedules, TriggerDelivery retry/dedupe and autonomous restart-safe runtime.
+- `docs/operations/DEPLOYMENT.md` — production-shaped single-node topology and platform stores.
+- `docs/operations/BACKUP_RESTORE.md` — platform backup/restore ownership.
 - `docs/adr/0005-separate-message-transport-from-canonical-event-history.md` — at-least-once message delivery remains separate from canonical Event history.
 
 ### External-engine evidence reviewed on 2026-09-05

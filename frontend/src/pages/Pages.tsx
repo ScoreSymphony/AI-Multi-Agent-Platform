@@ -299,7 +299,7 @@ export function confirmRunCancellation(runId: string): boolean {
 
 export function UnavailablePage({ item, manifest }: { item: { label: string; apiResource?: string }; manifest: APImanifest | null }) {
   const registered = item.apiResource ? manifest?.resources.includes(item.apiResource) : false;
-  return <div className="stack"><header className="page-header"><p className="eyebrow">Stable navigation shell</p><h1>{item.label}</h1></header><DegradedState title={registered ? "UI integration pending" : "Canonical subsystem unavailable"} detail={registered ? `The Control Plane advertises ${item.apiResource}, but this #17 slice has not implemented its dedicated UI yet.` : "This route is intentionally stable, but its owning canonical subsystem/API is not currently available. No private backend fallback is used."} /></div>;
+  return <div className="stack"><header className="page-header"><p className="eyebrow">Stable navigation shell</p><h1>{item.label}</h1></header><DegradedState title={registered ? "UI integration pending" : "Canonical subsystem unavailable"} detail={registered ? `The Control Plane advertises ${item.apiResource}, but this client does not provide a dedicated product view for it.` : "This route is intentionally stable, but its owning canonical subsystem/API is not currently available. No private backend fallback is used."} /></div>;
 }
 
 function TaskTable({ tasks, compact = false }: { tasks: CanonicalTask[]; compact?: boolean }) {
