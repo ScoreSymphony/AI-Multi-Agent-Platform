@@ -19,9 +19,9 @@ from ai_multi_agent_platform.browser.policy import (
     resolve_browser_target,
 )
 from ai_multi_agent_platform.browser.reference_http import (
-    ReferenceBrowserTransport,
     _PinnedHTTPSConnection,
     _PinnedHTTPSHandler,
+    ReferenceBrowserTransport,
 )
 from ai_multi_agent_platform.browser.reference_page import SessionState
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
