@@ -25,6 +25,10 @@ This directory contains operator-facing, machine-readable release metadata for i
 - Manifest v2 binds declared dependency sets, exact dependency lockfiles/resolved dependency sets,
   typed gate evidence, source commit, artifact digests, SBOM and provenance references into one
   release snapshot.
+- The release-manifest workflow generates a deterministic SPDX 2.3 SBOM from the exact Python
+  declared/resolved sets plus the frontend lockfile, then uses GitHub's native `actions/attest@v4`
+  path to create Sigstore-signed build-provenance and SBOM attestations for the exact wheel.
+  The signed bundles, SBOM and checksums are retained with the release evidence.
 - Authoritative integration provenance remains in `upstream/*.yaml`; release artifacts copy the
   exact reviewed revision and attach release-specific hashes/SBOM/provenance rather than replacing
   those governance records.
@@ -34,13 +38,16 @@ For Python, the release workflow records two complementary dependency views. The
 environment. The declared set in `.release-evidence/python-declared.txt` is generated directly from
 `[project].dependencies` without evaluating PEP 508 environment markers. Both are bound into the
 release manifest. This prevents a Linux release runner from silently omitting platform-conditional
-requirements such as the Windows-only `tzdata` baseline from release evidence.
+requirements such as the Windows-only `tzdata` baseline from release evidence. The SBOM consumes
+both sets, so platform-conditional declared dependencies remain visible even when the release runner
+cannot install them locally.
 
 Use `platform-release generate --source-commit <sha> --input <path> --output <path>` to assemble a
 manifest from the exact source commit, canonical `VersionSnapshot`, reviewed compatibility inventory,
 dependency/artifact files and explicit typed gate evidence. Generation hashes the supplied files and
-validates the resulting manifest fail-closed; it does not invent passed gates, approvals, SBOMs or
-provenance.
+validates the resulting manifest fail-closed; it does not invent passed gates or approvals.
+The workflow resolves the reviewed SBOM/provenance placeholders only from the URLs returned by the
+signed GitHub attestation steps and persists the resolved generation input as release evidence.
 
 Use `platform-release upstream-check --observations <path>` to compare an observation snapshot with
 reviewed pins. `--disabled` and `--offline` make those states explicit without claiming that an
