@@ -826,6 +826,13 @@ def _augment_authentication_openapi(
                 "List revocable mobile device credential metadata for the current user.",
             )
         },
+        f"/api/{API_VERSION}/auth/mobile-devices:revoke-all": {
+            "post": _auth_operation(
+                "revokeAllMobileDevices",
+                "Revoke all active mobile device credentials owned by the current user.",
+                parameters=(csrf_parameter,),
+            )
+        },
         f"/api/{API_VERSION}/auth/mobile-devices/{{credential_id}}:rename": {
             "post": _auth_operation(
                 "renameMobileDevice",
