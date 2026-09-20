@@ -17,6 +17,8 @@ from .authentication import (
     ExternalIdentityMapping,
     InMemoryAuthenticationStore,
     LocalUserAccount,
+    MobileDevice,
+    MobilePairingChallenge,
     StoredCredential,
 )
 from .authorization import ActorType
@@ -67,6 +69,8 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
         sessions = self._load_sessions()
         credentials = self._load_credentials()
         external_mappings = self._load_external_mappings()
+        mobile_pairings = self._load_mobile_pairings()
+        mobile_devices = self._load_mobile_devices()
 
         self.users = _WriteThroughDict(
             users,
@@ -90,6 +94,16 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             external_mappings,
             on_set=self._persist_external_mapping,
             on_delete=self._delete_external_mapping,
+        )
+        self.mobile_pairings = _WriteThroughDict(
+            mobile_pairings,
+            on_set=self._persist_mobile_pairing,
+            on_delete=lambda key: self._delete("auth_mobile_pairings", "pairing_id", key),
+        )
+        self.mobile_devices = _WriteThroughDict(
+            mobile_devices,
+            on_set=self._persist_mobile_device,
+            on_delete=lambda key: self._delete("auth_mobile_devices", "device_id", key),
         )
 
     def _connect(self) -> sqlite3.Connection:
@@ -145,6 +159,30 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                     linked_at TEXT NOT NULL,
                     PRIMARY KEY(provider_id, issuer, subject),
                     FOREIGN KEY(user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS auth_mobile_pairings (
+                    pairing_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    server_origin TEXT NOT NULL,
+                    code_locator TEXT NOT NULL UNIQUE,
+                    secret_verifier TEXT NOT NULL,
+                    protocol_version INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    failed_attempts INTEGER NOT NULL DEFAULT 0,
+                    consumed_at TEXT,
+                    cancelled_at TEXT,
+                    FOREIGN KEY(user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS auth_mobile_devices (
+                    device_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    credential_id TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE,
+                    FOREIGN KEY(credential_id) REFERENCES auth_credentials(credential_id) ON DELETE CASCADE
                 );
                 """
             )
@@ -228,6 +266,48 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                 subject=str(row[2]),
                 user_id=str(row[3]),
                 linked_at=_datetime(str(row[4])),
+            )
+            for row in rows
+        }
+
+    def _load_mobile_pairings(self) -> dict[str, MobilePairingChallenge]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT pairing_id, user_id, server_origin, code_locator, secret_verifier, "
+                "protocol_version, created_at, expires_at, failed_attempts, consumed_at, "
+                "cancelled_at FROM auth_mobile_pairings"
+            ).fetchall()
+        return {
+            str(row[0]): MobilePairingChallenge(
+                pairing_id=str(row[0]),
+                user_id=str(row[1]),
+                server_origin=str(row[2]),
+                code_locator=str(row[3]),
+                secret_verifier=str(row[4]),
+                protocol_version=int(row[5]),
+                created_at=_datetime(str(row[6])),
+                expires_at=_datetime(str(row[7])),
+                failed_attempts=int(row[8]),
+                consumed_at=_optional_datetime(row[9]),
+                cancelled_at=_optional_datetime(row[10]),
+            )
+            for row in rows
+        }
+
+    def _load_mobile_devices(self) -> dict[str, MobileDevice]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT device_id, user_id, credential_id, display_name, platform, created_at "
+                "FROM auth_mobile_devices"
+            ).fetchall()
+        return {
+            str(row[0]): MobileDevice(
+                device_id=str(row[0]),
+                user_id=str(row[1]),
+                credential_id=str(row[2]),
+                display_name=str(row[3]),
+                platform=str(row[4]),
+                created_at=_datetime(str(row[5])),
             )
             for row in rows
         }
@@ -325,11 +405,63 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                 ),
             )
 
+    def _persist_mobile_pairing(
+        self,
+        _key: str,
+        pairing: MobilePairingChallenge,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO auth_mobile_pairings "
+                "(pairing_id, user_id, server_origin, code_locator, secret_verifier, "
+                "protocol_version, created_at, expires_at, failed_attempts, consumed_at, "
+                "cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(pairing_id) DO UPDATE SET "
+                "server_origin=excluded.server_origin, code_locator=excluded.code_locator, "
+                "secret_verifier=excluded.secret_verifier, "
+                "protocol_version=excluded.protocol_version, expires_at=excluded.expires_at, "
+                "failed_attempts=excluded.failed_attempts, consumed_at=excluded.consumed_at, "
+                "cancelled_at=excluded.cancelled_at",
+                (
+                    pairing.pairing_id,
+                    pairing.user_id,
+                    pairing.server_origin,
+                    pairing.code_locator,
+                    pairing.secret_verifier,
+                    pairing.protocol_version,
+                    pairing.created_at.isoformat(),
+                    pairing.expires_at.isoformat(),
+                    pairing.failed_attempts,
+                    _iso(pairing.consumed_at),
+                    _iso(pairing.cancelled_at),
+                ),
+            )
+
+    def _persist_mobile_device(self, _key: str, device: MobileDevice) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO auth_mobile_devices "
+                "(device_id, user_id, credential_id, display_name, platform, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(device_id) DO UPDATE SET "
+                "display_name=excluded.display_name, platform=excluded.platform",
+                (
+                    device.device_id,
+                    device.user_id,
+                    device.credential_id,
+                    device.display_name,
+                    device.platform,
+                    device.created_at.isoformat(),
+                ),
+            )
+
     def _delete(self, table: str, key_name: str, key: object) -> None:
         allowed = {
             ("auth_users", "user_id"),
             ("auth_sessions", "session_id"),
             ("auth_credentials", "credential_id"),
+            ("auth_mobile_pairings", "pairing_id"),
+            ("auth_mobile_devices", "device_id"),
         }
         if (table, key_name) not in allowed:
             raise ValueError("unsupported authentication deletion target")
