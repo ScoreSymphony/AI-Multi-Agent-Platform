@@ -257,6 +257,12 @@ POST /api/v1/auth/password:change
 GET  /api/v1/auth/credentials
 POST /api/v1/auth/credentials
 POST /api/v1/auth/credentials/{credential_id}:revoke
+POST /api/v1/auth/mobile-pairings
+POST /api/v1/auth/mobile-pairings:consume
+POST /api/v1/auth/mobile-pairings/{pairing_id}:cancel
+GET  /api/v1/auth/mobile-devices
+POST /api/v1/auth/mobile-devices/{device_id}:revoke
+POST /api/v1/auth/mobile-devices:revoke-all
 ```
 
 The personal-credential creation response contains the secret exactly once. List/detail
@@ -317,3 +323,27 @@ observability stack for the hooks themselves to exist.
 11. Security-sensitive authentication decisions expose redacted audit hooks without
     requiring #16.
 12. Raw credential values are excluded from ordinary audit/log/resource representations.
+
+
+## Mobile device pairing
+
+Issue #1320 adds a narrow first-party pairing protocol on top of the same canonical
+Authentication authority. An authenticated human creates a five-minute single-use challenge
+bound to that user and a validated Control Plane origin. Only a verifier of the random pairing
+proof is persisted. The QR/deep-link and fallback code are temporary pairing material, never
+durable bearer credentials.
+
+The unauthenticated consume route accepts only the supported protocol version, a matching HTTPS
+remote origin (loopback HTTP is development-only), device metadata and the one-time proof.
+Successful consumption atomically marks the challenge used and issues a `mobile` credential for
+the same human principal. Mobile credentials carry a deny-only action scope that permits normal
+monitor/read/create/modify/execute/review workflows while excluding credential-management and
+administrative authorization. Normal authorization and approval policy still run after
+authentication.
+
+Pairing failure counters are persisted with the challenge and lock the challenge after the bounded
+failure threshold. Success, failure, cancellation and device revocation are auditable by IDs and
+non-secret metadata only. Pairing codes, credential secrets and Authorization headers are never
+ordinary audit/resource fields. Device list responses expose only identifiers, display/platform
+metadata and created/last-used/revoked state. Server-side revocation invalidates the next bearer
+request.
