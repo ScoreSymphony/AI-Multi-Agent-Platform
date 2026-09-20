@@ -23,6 +23,7 @@ class AuthenticationMethod(StrEnum):
     WORKER_TOKEN = "worker_token"
     AUTOMATION_TOKEN = "automation_token"
     INTEGRATION_TOKEN = "integration_token"
+    MOBILE_TOKEN = "mobile_token"
     EXTERNAL_IDP = "external_idp"
 
 
@@ -32,6 +33,7 @@ class CredentialKind(StrEnum):
     WORKER = "worker"
     AUTOMATION = "automation"
     INTEGRATION = "integration"
+    MOBILE = "mobile"
 
 
 class AuthenticationFailure(StrEnum):
@@ -130,10 +132,55 @@ class StoredCredential:
 
 
 @dataclass(frozen=True, slots=True)
+class MobilePairingChallenge:
+    pairing_id: str
+    user_id: str
+    server_origin: str
+    code_locator: str
+    secret_verifier: str
+    protocol_version: int
+    created_at: datetime
+    expires_at: datetime
+    failed_attempts: int = 0
+    consumed_at: datetime | None = None
+    cancelled_at: datetime | None = None
+
+    def active(self, *, now: datetime) -> bool:
+        return self.consumed_at is None and self.cancelled_at is None and now < self.expires_at
+
+
+@dataclass(frozen=True, slots=True)
+class MobileDevice:
+    device_id: str
+    user_id: str
+    credential_id: str
+    display_name: str
+    platform: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedMobilePairing:
+    pairing_id: str
+    pairing_code: str
+    server_origin: str
+    protocol_version: int
+    created_at: datetime
+    expires_at: datetime
+    qr_payload: str
+
+
+@dataclass(frozen=True, slots=True)
 class IssuedCredential:
     credential_id: str
     secret: str
     expires_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class MobileDeviceGrant:
+    device: MobileDevice
+    credential: IssuedCredential
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,7 +277,11 @@ __all__ = [
     "IdentityProviderAdapter",
     "IssuedCredential",
     "LocalUserAccount",
+    "IssuedMobilePairing",
     "LoginResult",
+    "MobileDevice",
+    "MobileDeviceGrant",
+    "MobilePairingChallenge",
     "ReplayProtector",
     "SessionGrant",
     "StoredCredential",
