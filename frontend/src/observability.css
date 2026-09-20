@@ -58,6 +58,22 @@ main[data-route="/observability"] .toolbar button {
   min-height: 38px;
 }
 
+/* The recent-Task selector is a direct Card field rather than part of the toolbar. Long
+ * canonical Task labels must shrink with the card instead of expanding the mobile document. */
+main[data-route="/events"] .card > label,
+main[data-route="/observability"] .card > label {
+  display: grid;
+  gap: .3rem;
+  min-width: 0;
+}
+
+main[data-route="/events"] .card > label > select,
+main[data-route="/observability"] .card > label > select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 main[data-route="/events"] .metrics,
 main[data-route="/observability"] .metrics {
   grid-template-columns: repeat(5, minmax(0, 1fr));
