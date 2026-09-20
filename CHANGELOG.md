@@ -66,5 +66,5 @@ The project uses semantic versioning once a public prototype is released. Until 
 - The usable single-node prototype acceptance gate has passed.
 - No GitHub release or semantic-version tag has been published yet.
 - The historical `0.1.0` prototype target will not be published retroactively.
-- Full platform conformance is complete, so the first formal publication targets `1.0.0`.
-- Publication remains blocked on an exact-candidate product-readiness PASS, resolution of all release-blocking findings, exact version projection, release-manifest/artifact generation and post-publication smoke verification.
+- The platform-conformance implementation and prior acceptance baseline are complete; the first formal publication targets `1.0.0` and still requires exact-candidate release conformance under the release process.
+- Publication remains blocked on an exact-candidate product-readiness PASS, exact-candidate release conformance, resolution of all release-blocking findings, exact version projection, release-manifest/artifact generation and post-publication smoke verification.
