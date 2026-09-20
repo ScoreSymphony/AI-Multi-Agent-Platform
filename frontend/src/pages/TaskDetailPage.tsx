@@ -338,7 +338,7 @@ export function TaskDetailPage({
           />
         ) : null}
         <label htmlFor={`task-project-${taskId}`}>Destination Project</label>
-        <div className="actions">
+        <div className="actions task-project-actions">
           <select
             id={`task-project-${taskId}`}
             value={destinationProjectId}
