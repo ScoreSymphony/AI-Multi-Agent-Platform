@@ -263,8 +263,16 @@ jobs:
           )"
           test -n "$SIGNER_FINGERPRINT"
 
+          RELEASE_HISTORY="$RUNNER_TEMP/github-releases.json"
+          gh api --paginate \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RELEASE_HISTORY"
           PREVIOUS_TAG="$(
-            gh release list --limit 100 --json tagName,isDraft,publishedAt               --jq '[.[] | select((.tagName | startswith("mobile-v")) and (.isDraft == false))][0].tagName // ""'
+            jq -sr \
+              '[.[][] | select((.tag_name | startswith("mobile-v")) and (.draft == false))][0].tag_name // ""' \
+              "$RELEASE_HISTORY"
           )"
 
           if [ -n "$PREVIOUS_TAG" ]; then
