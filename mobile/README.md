@@ -35,16 +35,26 @@ canonical browser frontend.
 
 ## Authentication and secrets
 
-Mobile uses an already-issued bearer credential. Activation validates the credential through
-`GET /api/v1/auth/me` before it is persisted.
+Mobile pairs from an already-authenticated trusted Web session. The server creates a short-lived,
+single-use pairing challenge that the Android app receives through the `aiagentplatform://pair`
+QR deep link or through the displayed fallback request ID/code. The app shows the target Control
+Plane origin before accepting it.
 
-The raw credential and server URL are stored through `expo-secure-store`; the credential is
-not written to ordinary application storage. Remote servers require HTTPS. Loopback HTTP is
-accepted only for explicit local development.
+Successful completion issues a dedicated revocable mobile credential. The app validates that
+credential through `GET /api/v1/auth/me` before it is persisted. The raw credential and server
+URL are stored through `expo-secure-store`; the credential is not written to ordinary
+application storage. Remote servers require HTTPS. Loopback HTTP is accepted only for explicit
+local development.
 
-This first slice does not create/recover/reveal credentials and does not emulate the browser
-HttpOnly-cookie/CSRF session model. Credential issuance and revocation remain canonical server
-operations exposed through existing trusted Web/CLI/operator flows.
+Pairing challenges expire after five minutes, are single-use, and are server-side bound to the
+authenticated account that created them. Pairing secrets/codes are returned only while creating
+the challenge and are never included in normal device-list responses. Paired devices remain
+visible from Web settings and can be renamed or revoked there. A revoked/expired device
+credential is rejected by the canonical authentication boundary and removed locally after a
+canonical 401.
+
+The mobile client does not emulate the browser HttpOnly-cookie/CSRF session model. Authorization,
+credential scope, revocation and audit remain canonical server responsibilities.
 
 ## Offline semantics
 
@@ -77,8 +87,10 @@ The app registers `aiagentplatform://`. Only allowlisted canonical resource kind
 bounded canonical IDs are accepted. Query-string commands, arbitrary URLs, provider/private
 identifiers and path traversal are rejected.
 
-A deep link selects the relevant read surface; it never executes an approval, verification or
-Task mutation.
+Resource deep links select the relevant read surface; they never execute an approval,
+verification or Task mutation. The separately versioned `aiagentplatform://pair` deep link may
+carry only the one-time pairing origin/request/proof tuple and requires an explicit server review
+before a device credential is accepted.
 
 ## Initial workflows
 
