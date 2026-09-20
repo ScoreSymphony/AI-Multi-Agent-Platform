@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Button,
   Linking,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,11 @@ import {
   MobileControlPlaneError,
   OfflineMutationError,
 } from "./src/client";
-import { parseMobileDeepLink, type MobileRouteKind } from "./src/deepLinks";
+import {
+  parseMobileDeepLink,
+  parseMobilePairingLink,
+  type MobileRouteKind,
+} from "./src/deepLinks";
 import { ExpoSecureSecretStorage } from "./src/secureStore";
 import { MobileSessionStore } from "./src/session";
 import type {
@@ -46,7 +51,9 @@ export default function App() {
   const [stale, setStale] = useState(false);
 
   const [serverUrl, setServerUrl] = useState("https://");
-  const [token, setToken] = useState("");
+  const [pairingCode, setPairingCode] = useState("");
+  const [pairingId, setPairingId] = useState<string | null>(null);
+  const [deviceName, setDeviceName] = useState("My phone");
 
   const [tasks, setTasks] = useState<CanonicalTask[]>([]);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
@@ -113,6 +120,16 @@ export default function App() {
   useEffect(() => {
     const handle = (url: string | null) => {
       if (!url) return;
+      const pairing = parseMobilePairingLink(url);
+      if (pairing) {
+        setServerUrl(pairing.serverOrigin);
+        setPairingCode(pairing.pairingCode);
+        setPairingId(pairing.pairingId);
+        setNotice(
+          `Pairing request for ${pairing.serverOrigin}. Confirm the server before pairing.`,
+        );
+        return;
+      }
       const route = parseMobileDeepLink(url);
       if (!route) {
         setNotice("Rejected an invalid or unsupported deep link.");
@@ -132,14 +149,22 @@ export default function App() {
     void refreshCurrentTab(tab);
   }, [client, actor, tab]);
 
-  async function activate(): Promise<void> {
+  async function pairDevice(): Promise<void> {
     setBusy(true);
     setNotice(null);
     try {
-      const currentActor = await sessionStore.activate(serverUrl, token);
+      const currentActor = await sessionStore.pair({
+        baseUrl: serverUrl,
+        pairingCode,
+        pairingId,
+        deviceName,
+        devicePlatform: Platform.OS === "ios" ? "ios" : "android",
+        protocolVersion: 1,
+      });
       const session = await sessionStore.current();
-      if (!session) throw new Error("Secure session activation did not persist");
-      setToken("");
+      if (!session) throw new Error("Secure paired session did not persist");
+      setPairingCode("");
+      setPairingId(null);
       setActor(currentActor);
       setClient(makeClient(session.baseUrl));
       setServerUrl(session.baseUrl);
@@ -327,27 +352,43 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>AI Multi-Agent Platform</Text>
           <Text style={styles.muted}>
-            Mobile uses an already-issued bearer credential and validates it against
-            /api/v1/auth/me. Remote servers require TLS.
+            Scan the pairing QR with the phone camera or enter the short-lived fallback code.
+            Confirm the Control Plane server below before pairing. Remote servers require TLS.
           </Text>
-          <Text style={styles.label}>Control Plane URL</Text>
+          <Text style={styles.label}>Control Plane server</Text>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             value={serverUrl}
-            onChangeText={setServerUrl}
+            onChangeText={(value) => {
+              setServerUrl(value);
+              setPairingId(null);
+            }}
             style={styles.input}
           />
-          <Text style={styles.label}>Bearer credential</Text>
+          <Text style={styles.label}>Pairing code</Text>
           <TextInput
-            autoCapitalize="none"
+            autoCapitalize="characters"
             autoCorrect={false}
-            secureTextEntry
-            value={token}
-            onChangeText={setToken}
+            value={pairingCode}
+            onChangeText={(value) => {
+              setPairingCode(value);
+              if (!value) setPairingId(null);
+            }}
             style={styles.input}
           />
-          <Button title={busy ? "Validating…" : "Activate secure session"} onPress={() => void activate()} disabled={busy} />
+          <Text style={styles.label}>Device name</Text>
+          <TextInput
+            autoCorrect={false}
+            value={deviceName}
+            onChangeText={setDeviceName}
+            style={styles.input}
+          />
+          <Button
+            title={busy ? "Pairing…" : "Confirm server & pair"}
+            onPress={() => void pairDevice()}
+            disabled={busy || !pairingCode.trim() || !deviceName.trim()}
+          />
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </ScrollView>
       </SafeAreaView>
