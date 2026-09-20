@@ -27,7 +27,8 @@ from .marketplace import add_marketplace_parser, execute_marketplace
 from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_path
 from .registry import add_registry_parser, execute_registry
 from .render import Renderer
-from .repositories import add_repository_parser, run_cli as repository_run_cli
+from .repositories import add_repository_parser
+from .repositories import run_cli as repository_run_cli
 from .trace import add_trace_parser, execute_trace
 
 
