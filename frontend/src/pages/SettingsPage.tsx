@@ -3,11 +3,14 @@ import {
   BrowserSessionClient,
   type AuthenticatedActor,
   type BrowserSessionSummary,
+  type MobileDeviceCredential,
+  type MobilePairingChallenge,
   type ReleaseOperatorStatus,
 } from "../api/browserSession";
 import { ControlPlaneError } from "../api/client";
 import { OnboardingClient } from "../api/onboarding";
 import { SetupClient } from "../api/setup";
+import { QrCode } from "../components/QrCode";
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
 import { ComponentSetupPanel } from "./onboarding/ComponentSetupPanel";
 import { SetupLifecyclePanel } from "./onboarding/SetupLifecyclePanel";
@@ -20,6 +23,9 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
   const setupClient = useMemo(() => new SetupClient({ transport: session.transport }), [session]);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [sessions, setSessions] = useState<BrowserSessionSummary[] | null>(null);
+  const [mobileDevices, setMobileDevices] = useState<MobileDeviceCredential[] | null>(null);
+  const [pairing, setPairing] = useState<MobilePairingChallenge | null>(null);
+  const [pairingSecondsRemaining, setPairingSecondsRemaining] = useState<number | null>(null);
   const [releaseStatus, setReleaseStatus] = useState<ReleaseOperatorStatus | null>(null);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -43,13 +49,20 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     try {
       const currentActor = await session.me();
       setActor(currentActor);
-      setSessions(await session.listSessions());
+      const [nextSessions, nextDevices] = await Promise.all([
+        session.listSessions(),
+        session.listMobileDevices(),
+      ]);
+      setSessions(nextSessions);
+      setMobileDevices(nextDevices);
       setError(null);
       await loadReleaseStatus();
     } catch (nextError) {
       if (nextError instanceof ControlPlaneError && nextError.status === 401) {
         setActor(null);
         setSessions(null);
+        setMobileDevices(null);
+        setPairing(null);
         setReleaseStatus(null);
         setReleaseError(null);
         session.clearLocalSession();
@@ -66,6 +79,24 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     void loadIdentity();
   }, [loadIdentity]);
 
+  useEffect(() => {
+    if (pairing === null) {
+      setPairingSecondsRemaining(null);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((new Date(pairing.expires_at).getTime() - Date.now()) / 1000),
+      );
+      setPairingSecondsRemaining(remaining);
+      if (remaining === 0) setPairing(null);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [pairing]);
+
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMutating(true);
@@ -73,7 +104,12 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       const result = await session.login(username, password);
       setActor(result.actor);
       setPassword("");
-      setSessions(await session.listSessions());
+      const [nextSessions, nextDevices] = await Promise.all([
+        session.listSessions(),
+        session.listMobileDevices(),
+      ]);
+      setSessions(nextSessions);
+      setMobileDevices(nextDevices);
       await loadReleaseStatus();
       setError(null);
     } catch (nextError) {
@@ -89,6 +125,8 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       await session.logout();
       setActor(null);
       setSessions(null);
+      setMobileDevices(null);
+      setPairing(null);
       setReleaseStatus(null);
       setReleaseError(null);
       setError(null);
@@ -117,6 +155,63 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     try {
       await session.revokeSession(sessionId);
       await loadIdentity();
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function createMobilePairing() {
+    setMutating(true);
+    try {
+      const challenge = await session.createMobilePairing(window.location.origin);
+      setPairing(challenge);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function cancelMobilePairing() {
+    if (pairing === null) return;
+    setMutating(true);
+    try {
+      await session.cancelMobilePairing(pairing.request_id);
+      setPairing(null);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function revokeMobileDevice(credentialId: string) {
+    if (!window.confirm(`Revoke mobile device ${credentialId}?`)) return;
+    setMutating(true);
+    try {
+      await session.revokeMobileDevice(credentialId);
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function renameMobileDevice(device: MobileDeviceCredential) {
+    const currentName = device.metadata.device_name;
+    const nextName = window.prompt("Mobile device name", currentName)?.trim();
+    if (!nextName || nextName === currentName) return;
+    setMutating(true);
+    try {
+      await session.renameMobileDevice(device.id, nextName);
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
     } catch (nextError) {
       setError(nextError);
     } finally {
@@ -208,6 +303,97 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
 
           <SetupLifecyclePanel setup={setupClient} onboarding={componentSetupClient} />
           <ComponentSetupPanel onboarding={componentSetupClient} surface="settings" />
+
+          <Card title="Mobile companion">
+            <p>
+              Pair Android without copying a durable bearer token. Pairing material is short-lived
+              and single-use; the resulting device credential stays revocable from this server.
+            </p>
+            <div className="actions">
+              <button disabled={mutating || pairing !== null} onClick={() => void createMobilePairing()}>
+                Pair Android device
+              </button>
+              {pairing ? (
+                <button disabled={mutating} onClick={() => void cancelMobilePairing()}>
+                  Cancel pairing
+                </button>
+              ) : null}
+            </div>
+
+            {pairing ? (
+              <div className="grid-two">
+                <div>
+                  <QrCode value={pairing.qr_payload} />
+                </div>
+                <dl className="definition-list">
+                  <div><dt>Server</dt><dd><code>{pairing.server_origin}</code></dd></div>
+                  <div><dt>Request</dt><dd><code>{pairing.request_id}</code></dd></div>
+                  <div><dt>Fallback code</dt><dd><code>{pairing.fallback_code}</code></dd></div>
+                  <div>
+                    <dt>Expires</dt>
+                    <dd>
+                      {pairingSecondsRemaining === null
+                        ? formatDate(pairing.expires_at)
+                        : `${pairingSecondsRemaining}s`}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ) : null}
+
+            <h3>Paired devices</h3>
+            {mobileDevices === null ? (
+              <LoadingState />
+            ) : mobileDevices.length === 0 ? (
+              <EmptyState title="No paired mobile devices" />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Device</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Last used</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mobileDevices.map((device) => (
+                      <tr key={device.id}>
+                        <td>
+                          <strong>{device.metadata.device_name}</strong>
+                          <br />
+                          <code>{device.id}</code>
+                        </td>
+                        <td>
+                          <StatusBadge value={device.revoked_at ? "revoked" : "active"} />
+                        </td>
+                        <td>{formatDate(device.created_at)}</td>
+                        <td>{formatDate(device.last_used_at)}</td>
+                        <td>
+                          <div className="actions">
+                            <button
+                              disabled={mutating || device.revoked_at !== null}
+                              onClick={() => void renameMobileDevice(device)}
+                            >
+                              Rename
+                            </button>
+                            <button
+                              disabled={mutating || device.revoked_at !== null}
+                              onClick={() => void revokeMobileDevice(device.id)}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
 
           <Card title="Platform release & upstream updates">
             {releaseError ? (
