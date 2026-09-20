@@ -31,8 +31,6 @@ from .authentication import (
     _cookies,
     _header,
     _optional_datetime,
-    _optional_string,
-    _protocol_version,
     _public_route,
     _require_only_fields,
     _relative_path,
@@ -40,6 +38,7 @@ from .authentication import (
 )
 from .http import HTTPRequest, HTTPResponse
 from .models import APIException, api_exception_from_contract
+from .mobile_pairing_http import mobile_device_grant_body, parse_mobile_pairing_consume
 from .release_api import AuthenticatedControlPlaneHTTP as _ReleaseAuthenticatedControlPlaneHTTP
 
 
@@ -290,46 +289,22 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
             return response
 
         if request.method == "POST" and relative == "/auth/mobile-pairings:consume":
-            _require_only_fields(
-                request.body,
-                {
-                    "pairing_code",
-                    "pairing_id",
-                    "server_origin",
-                    "device_name",
-                    "device_platform",
-                    "protocol_version",
-                },
-            )
+            pairing = parse_mobile_pairing_consume(request.body)
             grant = await self._runtime_authentication.consume_mobile_pairing(
-                _required_string(request.body, "pairing_code"),
-                server_origin=_required_string(request.body, "server_origin"),
-                device_name=_required_string(request.body, "device_name"),
-                device_platform=_required_string(request.body, "device_platform"),
-                pairing_id=_optional_string(request.body.get("pairing_id")),
-                protocol_version=_protocol_version(request.body.get("protocol_version")),
+                pairing.pairing_code,
+                server_origin=pairing.server_origin,
+                device_name=pairing.device_name,
+                device_platform=pairing.device_platform,
+                pairing_id=pairing.pairing_id,
+                protocol_version=pairing.protocol_version,
                 correlation_id=correlation_id,
+            )
+            credential = self._hardened_authentication.store.credentials.get(
+                grant.device.credential_id
             )
             return self._response(
                 201,
-                {
-                    "device": safe_mobile_device(
-                        grant.device,
-                        self._hardened_authentication.store.credentials.get(
-                            grant.device.credential_id
-                        ),
-                    ),
-                    "credential": {
-                        "id": grant.credential.credential_id,
-                        "secret": grant.credential.secret,
-                        "expires_at": (
-                            grant.credential.expires_at.isoformat()
-                            if grant.credential.expires_at
-                            else None
-                        ),
-                        "secret_display": "one_time",
-                    },
-                },
+                mobile_device_grant_body(grant, credential),
                 request_id,
                 correlation_id,
             )
