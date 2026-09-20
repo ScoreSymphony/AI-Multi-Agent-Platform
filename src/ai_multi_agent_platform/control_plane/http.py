@@ -58,13 +58,31 @@ class ControlPlaneHTTP:
             version, relative = _split_version(request.path)
             _require_supported_version(version)
 
-            if request.method == "GET" and relative == "/openapi.json":
+            if relative == "/openapi.json":
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
                 return self._response(200, build_openapi(), request_id, correlation_id)
-            if request.method == "GET" and relative in {"/health", "/readiness"}:
+            if relative in {"/health", "/readiness"}:
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
                 health = await self._control_plane.health()
                 status = 200 if relative == "/health" or health.get("ready") is True else 503
                 return self._response(status, health, request_id, correlation_id)
-            if request.method == "GET" and relative in {"", "/"}:
+            if relative in {"", "/"}:
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
                 return self._response(
                     200,
                     {
@@ -175,17 +193,25 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "POST":
-            _require_json(request)
-            item = await self._control_plane.create_project(context, request.body)
-            return self._response(201, item, request_id, correlation_id)
-        if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_projects(context, query)
-            return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and request.method == "GET":
+        if len(segments) == 1:
+            if request.method == "POST":
+                _require_json(request)
+                item = await self._control_plane.create_project(context, request.body)
+                return self._response(201, item, request_id, correlation_id)
+            if request.method == "GET":
+                page = await self._control_plane.list_projects(context, query)
+                return self._response(200, page, request_id, correlation_id)
+            raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        if len(segments) == 2:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             item = await self._control_plane.get_project(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        raise APIException(status=404, code="not_found", message="route not found")
 
     async def _workspaces(
         self,
@@ -196,17 +222,25 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "POST":
-            _require_json(request)
-            item = await self._control_plane.create_workspace(context, request.body)
-            return self._response(201, item, request_id, correlation_id)
-        if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_workspaces(context, query)
-            return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and request.method == "GET":
+        if len(segments) == 1:
+            if request.method == "POST":
+                _require_json(request)
+                item = await self._control_plane.create_workspace(context, request.body)
+                return self._response(201, item, request_id, correlation_id)
+            if request.method == "GET":
+                page = await self._control_plane.list_workspaces(context, query)
+                return self._response(200, page, request_id, correlation_id)
+            raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        if len(segments) == 2:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             item = await self._control_plane.get_workspace(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        raise APIException(status=404, code="not_found", message="route not found")
 
     async def _tasks(
         self,
@@ -217,56 +251,110 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "POST":
-            _require_json(request)
-            item = await self._control_plane.create_task(context, request.body)
-            return self._response(201, item, request_id, correlation_id)
-        if len(segments) == 1 and request.method == "GET":
-            page = await self._control_plane.list_tasks(context, query)
-            return self._response(200, page, request_id, correlation_id)
+        if len(segments) == 1:
+            if request.method == "POST":
+                _require_json(request)
+                item = await self._control_plane.create_task(context, request.body)
+                return self._response(201, item, request_id, correlation_id)
+            if request.method == "GET":
+                page = await self._control_plane.list_tasks(context, query)
+                return self._response(200, page, request_id, correlation_id)
+            raise APIException(status=405, code="method_not_allowed", message="method not allowed")
 
-        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
-            task_id, command = segments[1].split(":", 1)
-            if command == "queue":
-                item = await self._control_plane.queue_task(context, task_id)
-            elif command == "start":
-                item = await self._control_plane.start_task(context, task_id)
-            elif command == "cancel":
-                item = await self._control_plane.cancel_task(context, task_id)
-            elif command == "retry":
-                item = await self._control_plane.retry_task(context, task_id)
-            else:
-                raise APIException(status=404, code="not_found", message="unknown task command")
-            return self._response(200, item, request_id, correlation_id)
+        if len(segments) == 2:
+            if ":" in segments[1]:
+                task_id, command = segments[1].split(":", 1)
+                if command not in {"queue", "start", "cancel", "retry"}:
+                    raise APIException(
+                        status=404,
+                        code="not_found",
+                        message="unknown task command",
+                    )
+                if request.method != "POST":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                if command == "queue":
+                    item = await self._control_plane.queue_task(context, task_id)
+                elif command == "start":
+                    item = await self._control_plane.start_task(context, task_id)
+                elif command == "cancel":
+                    item = await self._control_plane.cancel_task(context, task_id)
+                else:
+                    item = await self._control_plane.retry_task(context, task_id)
+                return self._response(200, item, request_id, correlation_id)
 
-        if len(segments) == 2 and request.method == "GET":
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             item = await self._control_plane.get_task(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        if len(segments) == 3 and segments[2] == "runs" and request.method == "GET":
-            page = await self._control_plane.list_runs(context, query, task_id=segments[1])
-            return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 3 and segments[2] == "timeline" and request.method == "GET":
-            page = await self._control_plane.timeline(context, segments[1], query)
-            return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 4 and segments[2] == "runs" and request.method == "GET":
-            item = await self._control_plane.get_run(context, segments[3], task_id=segments[1])
-            return self._response(200, item, request_id, correlation_id)
-        if (
-            len(segments) == 4
-            and segments[2] == "runs"
-            and segments[3].endswith(":cancel")
-            and request.method == "POST"
-        ):
-            run_id = segments[3].removesuffix(":cancel")
-            item = await self._control_plane.cancel_run(context, segments[1], run_id)
-            return self._response(200, item, request_id, correlation_id)
-        if len(segments) == 4 and segments[2:] == ["events", "stream"]:
-            raise APIException(
-                status=406,
-                code="stream_transport_required",
-                message="use the SSE transport for this endpoint",
-            )
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+
+        if len(segments) == 3:
+            if segments[2] == "runs":
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                page = await self._control_plane.list_runs(context, query, task_id=segments[1])
+                return self._response(200, page, request_id, correlation_id)
+            if segments[2] == "timeline":
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                page = await self._control_plane.timeline(context, segments[1], query)
+                return self._response(200, page, request_id, correlation_id)
+            raise APIException(status=404, code="not_found", message="route not found")
+
+        if len(segments) == 4:
+            if segments[2] == "runs":
+                if segments[3].endswith(":cancel"):
+                    run_id = segments[3].removesuffix(":cancel")
+                    if request.method != "POST":
+                        raise APIException(
+                            status=405,
+                            code="method_not_allowed",
+                            message="method not allowed",
+                        )
+                    item = await self._control_plane.cancel_run(context, segments[1], run_id)
+                    return self._response(200, item, request_id, correlation_id)
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                item = await self._control_plane.get_run(
+                    context,
+                    segments[3],
+                    task_id=segments[1],
+                )
+                return self._response(200, item, request_id, correlation_id)
+            if segments[2:] == ["events", "stream"]:
+                if request.method != "GET":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                raise APIException(
+                    status=406,
+                    code="stream_transport_required",
+                    message="use the SSE transport for this endpoint",
+                )
+            raise APIException(status=404, code="not_found", message="route not found")
+
+        raise APIException(status=404, code="not_found", message="route not found")
 
     async def _runs(
         self,
@@ -277,13 +365,25 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "GET":
+        if len(segments) == 1:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             page = await self._control_plane.list_runs(context, query)
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and request.method == "GET":
+        if len(segments) == 2:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             item = await self._control_plane.get_run(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        raise APIException(status=404, code="not_found", message="route not found")
 
     async def _model_providers(
         self,
@@ -294,32 +394,57 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "GET":
+        if len(segments) == 1:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             page = await self._control_plane.list_model_providers(context, query)
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
-            provider_id, command = segments[1].rsplit(":", 1)
-            if command == "enable":
-                item = await self._control_plane.set_model_provider_enabled(
-                    context, provider_id, enabled=True
-                )
-            elif command == "disable":
-                item = await self._control_plane.set_model_provider_enabled(
-                    context, provider_id, enabled=False
-                )
-            elif command == "refresh-health":
-                item = await self._control_plane.refresh_model_provider_health(context, provider_id)
-            else:
+        if len(segments) == 2:
+            if ":" in segments[1]:
+                provider_id, command = segments[1].rsplit(":", 1)
+                if command not in {"enable", "disable", "refresh-health"}:
+                    raise APIException(
+                        status=404,
+                        code="not_found",
+                        message="unknown model-provider command",
+                    )
+                if request.method != "POST":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                if command == "enable":
+                    item = await self._control_plane.set_model_provider_enabled(
+                        context,
+                        provider_id,
+                        enabled=True,
+                    )
+                elif command == "disable":
+                    item = await self._control_plane.set_model_provider_enabled(
+                        context,
+                        provider_id,
+                        enabled=False,
+                    )
+                else:
+                    item = await self._control_plane.refresh_model_provider_health(
+                        context,
+                        provider_id,
+                    )
+                return self._response(200, item, request_id, correlation_id)
+            if request.method != "GET":
                 raise APIException(
-                    status=404,
-                    code="not_found",
-                    message="unknown model-provider command",
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
                 )
-            return self._response(200, item, request_id, correlation_id)
-        if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_model_provider(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        raise APIException(status=404, code="not_found", message="route not found")
 
     async def _models(
         self,
@@ -330,26 +455,52 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "GET":
+        if len(segments) == 1:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             page = await self._control_plane.list_models(context, query)
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
-            model_id, command = segments[1].rsplit(":", 1)
-            if command == "enable":
-                item = await self._control_plane.set_model_enabled(context, model_id, enabled=True)
-            elif command == "disable":
-                item = await self._control_plane.set_model_enabled(context, model_id, enabled=False)
-            else:
+        if len(segments) == 2:
+            if ":" in segments[1]:
+                model_id, command = segments[1].rsplit(":", 1)
+                if command not in {"enable", "disable"}:
+                    raise APIException(
+                        status=404,
+                        code="not_found",
+                        message="unknown model command",
+                    )
+                if request.method != "POST":
+                    raise APIException(
+                        status=405,
+                        code="method_not_allowed",
+                        message="method not allowed",
+                    )
+                if command == "enable":
+                    item = await self._control_plane.set_model_enabled(
+                        context,
+                        model_id,
+                        enabled=True,
+                    )
+                else:
+                    item = await self._control_plane.set_model_enabled(
+                        context,
+                        model_id,
+                        enabled=False,
+                    )
+                return self._response(200, item, request_id, correlation_id)
+            if request.method != "GET":
                 raise APIException(
-                    status=404,
-                    code="not_found",
-                    message="unknown model command",
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
                 )
-            return self._response(200, item, request_id, correlation_id)
-        if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_model(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        raise APIException(status=404, code="not_found", message="route not found")
 
     async def _references(
         self,
@@ -361,13 +512,25 @@ class ControlPlaneHTTP:
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
-        if len(segments) == 1 and request.method == "GET":
+        if len(segments) == 1:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             page = await self._control_plane.list_references(context, collection, query)
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and request.method == "GET":
+        if len(segments) == 2:
+            if request.method != "GET":
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             item = await self._control_plane.get_reference(context, collection, segments[1])
             return self._response(200, item, request_id, correlation_id)
-        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+        raise APIException(status=404, code="not_found", message="route not found")
 
     @staticmethod
     def _response(
