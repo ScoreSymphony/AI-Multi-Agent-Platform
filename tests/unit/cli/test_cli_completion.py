@@ -64,6 +64,7 @@ def test_completion_scripts_are_dependency_free_shell_setup(
         assert marker in script
         assert "platform-completion candidates" in script
 
+
 def test_composed_product_surface_is_identical_for_root_help_and_completion(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
