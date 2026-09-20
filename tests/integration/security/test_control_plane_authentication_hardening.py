@@ -612,4 +612,53 @@ def test_mobile_pairing_openapi_documents_public_completion_and_device_managemen
     completion = paths["/api/v1/auth/mobile-pairing/{request_id}:complete"]["post"]
     assert completion["security"] == []
     assert "/api/v1/auth/mobile-devices" in paths
-    assert "/api/v1/auth/mobile-devices/{credential_id}:revoke" in paths
+    assert "/api/v1/auth/mobile-devices:revoke-all" in paths
+    revoke_path = paths["/api/v1/auth/mobile-devices/{credential_id}:revoke"]["post"]
+    assert any(parameter.get("name") == "credential_id" for parameter in revoke_path["parameters"])
+    assert any(parameter.get("name") == "request_id" for parameter in completion["parameters"])
+
+
+def test_mobile_pairing_http_bulk_revocation_invalidates_all_owned_devices() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    bootstrap = auth.create_personal_access_token(user.user_id, purpose="pairing-admin", now=NOW)
+    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
+
+    device_secrets: list[str] = []
+    for index in range(2):
+        challenge = auth.create_mobile_pairing_challenge(
+            user.user_id,
+            server_origin="https://platform.example",
+            now=NOW + timedelta(seconds=index),
+        )
+        issued = auth.complete_mobile_pairing(
+            challenge.request_id,
+            challenge.secret,
+            device_name=f"Device {index}",
+            now=NOW + timedelta(seconds=index + 1),
+        )
+        device_secrets.append(issued.secret)
+
+    revoked = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/mobile-devices:revoke-all",
+                headers={"authorization": f"Bearer {bootstrap.secret}"},
+            )
+        )
+    )
+    assert revoked.status == 200
+    assert revoked.body["revoked_count"] == 2
+
+    for secret in device_secrets:
+        rejected = _run(
+            http.handle(
+                HTTPRequest(
+                    method="GET",
+                    path="/api/v1/auth/me",
+                    headers={"authorization": f"Bearer {secret}"},
+                )
+            )
+        )
+        assert rejected.status == 401
