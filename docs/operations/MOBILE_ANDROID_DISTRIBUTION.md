@@ -109,10 +109,14 @@ planned compatibility migration with separate acceptance evidence.
 5. Approve the protected `mobile-production` Environment gate.
 6. Publication occurs only after tests, native build, APK metadata checks, production signing,
    signature verification, checksum generation and previous-release lineage checks all pass.
+   GitHub publication is staged as a draft first; if asset upload or publication is interrupted,
+   a later run may resume only the matching unpublished draft for the exact same source commit.
 
 Missing signing secrets, a version mismatch, signature verification failure, package drift,
 non-monotonic `versionCode`, a changed signing identity, an APK minimum SDK other than API 24,
-or a pre-existing release/tag for the requested mobile version prevents publication.
+a pre-existing published release, a standalone conflicting tag, or a draft tied to a different
+source commit prevents publication. A matching unpublished draft for the same source commit is
+the only retryable pre-existing release state.
 
 ## Direct install from GitHub Releases
 
