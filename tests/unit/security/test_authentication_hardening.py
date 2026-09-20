@@ -402,3 +402,178 @@ def test_worker_rotation_revokes_old_secret_and_preserves_scope() -> None:
     with pytest.raises(AuthenticationError) as compromised:
         auth.authenticate_bearer(rotation.replacement.secret, now=NOW)
     assert compromised.value.failure is AuthenticationFailure.CREDENTIAL_REVOKED
+
+
+def test_mobile_pairing_is_single_use_revocable_and_secret_safe() -> None:
+    records: list[AuthenticationAuditRecord] = []
+    auth = _service(audit=records)
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    challenge = auth.create_mobile_pairing_challenge(
+        user.user_id,
+        server_origin="https://platform.example",
+        now=NOW,
+        correlation_id="pairing-correlation",
+    )
+
+    assert challenge.secret not in repr(auth._mobile_pairings)
+    assert challenge.code not in repr(auth._mobile_pairings)
+    assert challenge.qr_payload.startswith("aiagentplatform://pair?")
+    assert "https%3A%2F%2Fplatform.example" in challenge.qr_payload
+
+    issued = auth.complete_mobile_pairing(
+        challenge.request_id,
+        challenge.secret,
+        device_name="Samu Android",
+        device_metadata={
+            "platform": "android",
+            "device_model": "test-device",
+            "app_version": "0.1.0",
+        },
+        now=NOW + timedelta(seconds=1),
+        correlation_id="pairing-correlation",
+    )
+    stored = auth.store.credentials[issued.credential_id]
+    assert stored.metadata["client"] == "mobile"
+    assert stored.metadata["device_name"] == "Samu Android"
+    assert stored.metadata["server_origin"] == "https://platform.example"
+    assert stored.secret_verifier not in issued.secret
+    assert auth.authenticate_bearer(
+        issued.secret,
+        now=NOW + timedelta(seconds=2),
+    ).identity.actor_id == user.user_id
+
+    with pytest.raises(AuthenticationError) as replay:
+        auth.complete_mobile_pairing(
+            challenge.request_id,
+            challenge.secret,
+            device_name="Replay",
+            now=NOW + timedelta(seconds=3),
+        )
+    assert replay.value.failure is AuthenticationFailure.PAIRING_ALREADY_USED
+
+    auth.revoke_mobile_device(
+        user.user_id,
+        issued.credential_id,
+        now=NOW + timedelta(seconds=4),
+    )
+    with pytest.raises(AuthenticationError) as revoked:
+        auth.authenticate_bearer(issued.secret, now=NOW + timedelta(seconds=5))
+    assert revoked.value.failure is AuthenticationFailure.CREDENTIAL_REVOKED
+
+    serialized_audit = repr(records)
+    assert challenge.secret not in serialized_audit
+    assert challenge.code not in serialized_audit
+    assert issued.secret not in serialized_audit
+
+
+def test_mobile_pairing_fallback_code_expiry_cancel_and_rate_limit() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+
+    fallback = auth.create_mobile_pairing_challenge(
+        user.user_id,
+        server_origin="https://platform.example",
+        now=NOW,
+    )
+    issued = auth.complete_mobile_pairing(
+        fallback.request_id,
+        fallback.code.lower(),
+        device_name="Fallback",
+        now=NOW + timedelta(seconds=1),
+    )
+    assert issued.credential_id in {
+        item.credential_id for item in auth.list_mobile_devices(user.user_id)
+    }
+
+    expired = auth.create_mobile_pairing_challenge(
+        user.user_id,
+        server_origin="https://platform.example",
+        now=NOW,
+    )
+    with pytest.raises(AuthenticationError) as expired_error:
+        auth.complete_mobile_pairing(
+            expired.request_id,
+            expired.secret,
+            device_name="Expired",
+            now=NOW + timedelta(minutes=5),
+        )
+    assert expired_error.value.failure is AuthenticationFailure.PAIRING_EXPIRED
+
+    cancelled = auth.create_mobile_pairing_challenge(
+        user.user_id,
+        server_origin="https://platform.example",
+        now=NOW,
+    )
+    auth.cancel_mobile_pairing(
+        user.user_id,
+        cancelled.request_id,
+        now=NOW + timedelta(seconds=1),
+    )
+    with pytest.raises(AuthenticationError) as cancelled_error:
+        auth.complete_mobile_pairing(
+            cancelled.request_id,
+            cancelled.secret,
+            device_name="Cancelled",
+            now=NOW + timedelta(seconds=2),
+        )
+    assert cancelled_error.value.failure is AuthenticationFailure.PAIRING_CANCELLED
+
+    attacked = auth.create_mobile_pairing_challenge(
+        user.user_id,
+        server_origin="https://platform.example",
+        now=NOW,
+    )
+    for offset in range(5):
+        with pytest.raises(AuthenticationError) as wrong:
+            auth.complete_mobile_pairing(
+                attacked.request_id,
+                "wrong-proof",
+                device_name="Attacker",
+                now=NOW + timedelta(seconds=offset),
+            )
+        assert wrong.value.failure is AuthenticationFailure.INVALID_CREDENTIALS
+    with pytest.raises(AuthenticationError) as limited:
+        auth.complete_mobile_pairing(
+            attacked.request_id,
+            "wrong-proof",
+            device_name="Attacker",
+            now=NOW + timedelta(seconds=6),
+        )
+    assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
+
+
+def test_mobile_device_management_is_owner_bound_and_metadata_is_constrained() -> None:
+    auth = _service()
+    alice = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    bob = auth.create_local_user("bob", PASSWORD, now=NOW)
+    challenge = auth.create_mobile_pairing_challenge(
+        alice.user_id,
+        server_origin="https://platform.example",
+        now=NOW,
+    )
+    issued = auth.complete_mobile_pairing(
+        challenge.request_id,
+        challenge.secret,
+        device_name="Alice phone",
+        now=NOW + timedelta(seconds=1),
+    )
+
+    with pytest.raises(KeyError):
+        auth.revoke_mobile_device(
+            bob.user_id,
+            issued.credential_id,
+            now=NOW + timedelta(seconds=2),
+        )
+    with pytest.raises(ValueError, match="unsupported mobile device metadata"):
+        second = auth.create_mobile_pairing_challenge(
+            alice.user_id,
+            server_origin="https://platform.example",
+            now=NOW,
+        )
+        auth.complete_mobile_pairing(
+            second.request_id,
+            second.secret,
+            device_name="Bad metadata",
+            device_metadata={"token": "must-not-be-accepted"},
+            now=NOW + timedelta(seconds=1),
+        )
