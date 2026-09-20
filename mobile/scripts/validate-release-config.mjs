@@ -4,7 +4,44 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EXPECTED_ANDROID_PACKAGE = "org.scoresymphony.aimultiagentplatform";
-const SEMVER = /^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:[+][0-9A-Za-z.-]+)?$/;
+const CORE_SEMVER = /^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(?:-([^+]+))?(?:[+](.+))?$/;
+const SEMVER_IDENTIFIER = /^[0-9A-Za-z-]+$/;
+const NUMERIC_IDENTIFIER = /^[0-9]+$/;
+
+function isValidSemVer(version) {
+  const match = CORE_SEMVER.exec(version);
+  if (!match) {
+    return false;
+  }
+
+  const prerelease = match[4];
+  if (prerelease) {
+    const identifiers = prerelease.split(".");
+    if (
+      identifiers.some(
+        (identifier) =>
+          !SEMVER_IDENTIFIER.test(identifier) ||
+          (NUMERIC_IDENTIFIER.test(identifier) &&
+            identifier.length > 1 &&
+            identifier.startsWith("0")),
+      )
+    ) {
+      return false;
+    }
+  }
+
+  const build = match[5];
+  if (
+    build &&
+    build
+      .split(".")
+      .some((identifier) => !SEMVER_IDENTIFIER.test(identifier))
+  ) {
+    return false;
+  }
+
+  return true;
+}
 
 function readJson(name) {
   return JSON.parse(readFileSync(resolve(ROOT, name), "utf8"));
@@ -20,7 +57,7 @@ const appDocument = readJson("app.json");
 const expo = appDocument.expo ?? {};
 const android = expo.android ?? {};
 
-if (!SEMVER.test(packageDocument.version ?? "")) {
+if (!isValidSemVer(packageDocument.version ?? "")) {
   fail("mobile/package.json must contain a semantic version");
 }
 if (expo.version !== packageDocument.version) {
