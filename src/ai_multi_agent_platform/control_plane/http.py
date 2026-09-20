@@ -745,6 +745,32 @@ def _foundation_route_error_before_body_validation(
     method: str,
     path: str,
 ) -> APIException | None:
+    if method.upper() == "POST":
+        for prefix, commands, message in (
+            (
+                f"/api/{API_VERSION}/models/",
+                _MODEL_COMMANDS,
+                "unknown model command",
+            ),
+            (
+                f"/api/{API_VERSION}/model-providers/",
+                _MODEL_PROVIDER_COMMANDS,
+                "unknown model-provider command",
+            ),
+        ):
+            if not path.startswith(prefix):
+                continue
+            relative = path[len(prefix) :]
+            if "/" in relative or ":" not in relative:
+                continue
+            _, command = relative.rsplit(":", 1)
+            if command not in commands:
+                return APIException(
+                    status=404,
+                    code="not_found",
+                    message=message,
+                )
+
     task_prefix = f"/api/{API_VERSION}/tasks/"
     if not path.startswith(task_prefix):
         return None
@@ -778,32 +804,6 @@ def _foundation_route_error_before_body_validation(
             code="method_not_allowed",
             message="method not allowed",
         )
-
-    if method.upper() == "POST":
-        for prefix, commands, message in (
-            (
-                f"/api/{API_VERSION}/models/",
-                _MODEL_COMMANDS,
-                "unknown model command",
-            ),
-            (
-                f"/api/{API_VERSION}/model-providers/",
-                _MODEL_PROVIDER_COMMANDS,
-                "unknown model-provider command",
-            ),
-        ):
-            if not path.startswith(prefix):
-                continue
-            relative = path[len(prefix) :]
-            if "/" in relative or ":" not in relative:
-                continue
-            _, command = relative.rsplit(":", 1)
-            if command not in commands:
-                return APIException(
-                    status=404,
-                    code="not_found",
-                    message=message,
-                )
     return None
 
 
