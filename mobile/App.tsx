@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import {
   ActivityIndicator,
   Button,
   Linking,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -18,7 +20,11 @@ import {
 } from "./src/client";
 import { parseMobileDeepLink, type MobileRouteKind } from "./src/deepLinks";
 import { ExpoSecureSecretStorage } from "./src/secureStore";
-import { MobileSessionStore } from "./src/session";
+import {
+  MobileSessionStore,
+  parseMobilePairingUri,
+  type MobilePairingDescriptor,
+} from "./src/session";
 import type {
   AuthenticatedActor,
   CanonicalAgent,
@@ -46,7 +52,11 @@ export default function App() {
   const [stale, setStale] = useState(false);
 
   const [serverUrl, setServerUrl] = useState("https://");
-  const [token, setToken] = useState("");
+  const [pairingCode, setPairingCode] = useState("");
+  const [deviceName, setDeviceName] = useState("My phone");
+  const [pairingPreview, setPairingPreview] = useState<MobilePairingDescriptor | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const [tasks, setTasks] = useState<CanonicalTask[]>([]);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
@@ -132,22 +142,81 @@ export default function App() {
     void refreshCurrentTab(tab);
   }, [client, actor, tab]);
 
-  async function activate(): Promise<void> {
+  async function finishPairing(
+    descriptor: MobilePairingDescriptor,
+  ): Promise<void> {
     setBusy(true);
     setNotice(null);
     try {
-      const currentActor = await sessionStore.activate(serverUrl, token);
+      const currentActor = await sessionStore.pair(
+        descriptor,
+        deviceName,
+        Platform.OS,
+      );
       const session = await sessionStore.current();
-      if (!session) throw new Error("Secure session activation did not persist");
-      setToken("");
+      if (!session) throw new Error("Secure pairing did not persist");
+      setPairingCode("");
+      setPairingPreview(null);
+      setScanning(false);
       setActor(currentActor);
       setClient(makeClient(session.baseUrl));
       setServerUrl(session.baseUrl);
+      setNotice("Mobile device paired successfully.");
     } catch (error) {
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
       setReady(true);
+    }
+  }
+
+  async function pairFallbackCode(): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const currentActor = await sessionStore.pairWithCode(
+        serverUrl,
+        pairingCode,
+        deviceName,
+        Platform.OS,
+      );
+      const session = await sessionStore.current();
+      if (!session) throw new Error("Secure pairing did not persist");
+      setPairingCode("");
+      setActor(currentActor);
+      setClient(makeClient(session.baseUrl));
+      setServerUrl(session.baseUrl);
+      setNotice("Mobile device paired successfully.");
+    } catch (error) {
+      setNotice(messageFor(error));
+    } finally {
+      setBusy(false);
+      setReady(true);
+    }
+  }
+
+  async function startScanner(): Promise<void> {
+    const permission = cameraPermission?.granted
+      ? cameraPermission
+      : await requestCameraPermission();
+    if (!permission.granted) {
+      setNotice("Camera permission is required to scan a pairing QR code.");
+      return;
+    }
+    setScanning(true);
+    setNotice(null);
+  }
+
+  function previewScannedPairing(value: string): void {
+    try {
+      const descriptor = parseMobilePairingUri(value);
+      setPairingPreview(descriptor);
+      setServerUrl(descriptor.baseUrl);
+      setScanning(false);
+      setNotice(null);
+    } catch (error) {
+      setScanning(false);
+      setNotice(messageFor(error));
     }
   }
 
@@ -327,27 +396,82 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>AI Multi-Agent Platform</Text>
           <Text style={styles.muted}>
-            Mobile uses an already-issued bearer credential and validates it against
-            /api/v1/auth/me. Remote servers require TLS.
+            Pair this phone from an already authenticated Web or CLI session. The QR/code is
+            short-lived and single-use; the resulting device credential is kept in OS secure storage.
           </Text>
-          <Text style={styles.label}>Control Plane URL</Text>
+
+          <Text style={styles.label}>Device name</Text>
+          <TextInput
+            value={deviceName}
+            onChangeText={setDeviceName}
+            style={styles.input}
+          />
+
+          {pairingPreview ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Confirm server identity</Text>
+              <Text selectable>{pairingPreview.baseUrl}</Text>
+              <Text style={styles.muted}>
+                Only continue if this is the Control Plane you intended to pair with.
+              </Text>
+              <View style={styles.actions}>
+                <Button
+                  title={busy ? "Pairing…" : "Trust and pair"}
+                  onPress={() => void finishPairing(pairingPreview)}
+                  disabled={busy}
+                />
+                <Button
+                  title="Cancel"
+                  onPress={() => setPairingPreview(null)}
+                  disabled={busy}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          {scanning ? (
+            <View style={styles.scanner}>
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={({ data }) => previewScannedPairing(data)}
+              />
+              <Button title="Cancel scanner" onPress={() => setScanning(false)} />
+            </View>
+          ) : (
+            <Button
+              title="Scan pairing QR"
+              onPress={() => void startScanner()}
+              disabled={busy}
+            />
+          )}
+
+          <Text style={styles.label}>Fallback code</Text>
+          <Text style={styles.muted}>
+            If scanning is unavailable, enter the HTTPS Control Plane origin and the code shown by the trusted session.
+          </Text>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             value={serverUrl}
             onChangeText={setServerUrl}
             style={styles.input}
+            placeholder="https://platform.example"
           />
-          <Text style={styles.label}>Bearer credential</Text>
           <TextInput
-            autoCapitalize="none"
+            autoCapitalize="characters"
             autoCorrect={false}
-            secureTextEntry
-            value={token}
-            onChangeText={setToken}
+            value={pairingCode}
+            onChangeText={setPairingCode}
             style={styles.input}
+            placeholder="XXXX-XXXX-XXXX"
           />
-          <Button title={busy ? "Validating…" : "Activate secure session"} onPress={() => void activate()} disabled={busy} />
+          <Button
+            title={busy ? "Pairing…" : "Pair with code"}
+            onPress={() => void pairFallbackCode()}
+            disabled={busy}
+          />
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </ScrollView>
       </SafeAreaView>
@@ -613,4 +737,6 @@ const styles = StyleSheet.create({
   notice: { padding: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
   stale: { padding: 10, borderWidth: 1, borderRadius: 8, fontWeight: "600" },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  scanner: { minHeight: 320, gap: 8 },
+  camera: { minHeight: 280, borderRadius: 10, overflow: "hidden" },
 });
