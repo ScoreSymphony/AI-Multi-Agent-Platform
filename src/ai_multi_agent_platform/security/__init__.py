@@ -45,7 +45,6 @@ from .authentication_hardening import (
     CredentialRotation,
     CredentialScope,
     InMemoryRequestRateLimiter,
-    IssuedMobilePairingChallenge,
     LocalAuthenticationService,
     safe_credential_with_scope,
 )
@@ -97,6 +96,7 @@ from .egress_profiles import (
     new_egress_profile_id,
 )
 from .egress_resolution import RepositoryBackedEgressPolicy
+from .mobile_pairing import IssuedMobilePairingChallenge
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
 from .policy_profile_persistence import (
