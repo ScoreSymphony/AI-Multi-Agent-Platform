@@ -17,7 +17,7 @@ def test_distributed_profile_binds_complete_scenario_e_evidence() -> None:
     assert scenario.command is not None
     command = " ".join(scenario.command)
 
-    assert "test_two_node_selection_filters_resources_capabilities_and_model" in command
+    assert "test_registry_facts_feed_scheduler_candidate_selection" in command
     assert (
         "test_dispatch_authorization_denial_releases_reservation_before_worker_execution" in command
     )
