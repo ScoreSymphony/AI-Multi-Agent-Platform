@@ -176,10 +176,18 @@ class ControlPlaneHTTP(_RunControlPlaneHTTP):
         correlation_id: str,
     ) -> HTTPResponse:
         control_plane = cast(ControlPlane, self._control_plane)
-        if len(segments) == 3 and segments[2] == "trace" and request.method == "GET":
-            page = await control_plane.task_trace(context, segments[1], query)
-            return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 4 and segments[2] == "trace" and request.method == "GET":
+        if len(segments) in {3, 4} and segments[2] == "trace":
+            if request.method != "GET":
+                from .models import APIException
+
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
+            if len(segments) == 3:
+                page = await control_plane.task_trace(context, segments[1], query)
+                return self._response(200, page, request_id, correlation_id)
             item = await control_plane.trace_node(context, segments[1], segments[3])
             return self._response(200, item, request_id, correlation_id)
         return await super()._tasks(request, context, query, segments, request_id, correlation_id)
