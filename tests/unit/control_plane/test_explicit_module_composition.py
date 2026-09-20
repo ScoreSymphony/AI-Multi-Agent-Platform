@@ -279,6 +279,23 @@ def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
         paths = openapi.body["paths"]
         assert isinstance(paths, dict)
         assert "/api/v1/module-status" in paths
+        assert set(paths["/api/v1/module-status"]) == {"get"}
+
+        wrong_method = await http.handle(
+            HTTPRequest(method="POST", path="/api/v1/module-status")
+        )
+        assert wrong_method.status == 405
+        assert isinstance(wrong_method.body, dict)
+        assert wrong_method.body["code"] == "method_not_allowed"
+        assert wrong_method.body["category"] == "transport"
+
+        unknown_nested = await http.handle(
+            HTTPRequest(method="GET", path="/api/v1/module-status/does-not-exist")
+        )
+        assert unknown_nested.status == 404
+        assert isinstance(unknown_nested.body, dict)
+        assert unknown_nested.body["code"] == "not_found"
+        assert unknown_nested.body["category"] == "resource"
 
     asyncio.run(scenario())
 
