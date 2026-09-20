@@ -4,10 +4,10 @@ status: integrated
 integration_categories:
   - "library dependency"
 canonical_upstream: "https://github.com/expo/expo; https://github.com/facebook/react-native"
-pinned_revision: "expo 57.0.17; react-native 0.86.3; expo-secure-store 57.0.4"
+pinned_revision: "expo 57.0.17; react-native 0.86.3; expo-secure-store 57.0.4; expo-camera ~57.0.5"
 verified_license: "MIT"
 license_verification_date: "2026-09-19"
-last_review_date: "2026-09-19"
+last_review_date: "2026-09-20"
 platform_adapter_or_boundary: "mobile/ -> public /api/v1 Control Plane only"
 local_source_path: ""
 source_origin_path: ""
@@ -22,6 +22,7 @@ compatibility_constraints:
 security_constraints:
   - "Remote Control Plane URLs require HTTPS"
   - "Bearer credential persisted only through expo-secure-store"
+  - "expo-camera is used only for in-app QR pairing scans; camera media is not persisted or uploaded"
   - "Resource deep links never execute commands; aiagentplatform://pair is a versioned confirmation-gated authentication bootstrap envelope"
 deployment_constraints:
   - "Optional mobile build only; no server runtime dependency"
