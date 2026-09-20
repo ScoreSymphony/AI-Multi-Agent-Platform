@@ -328,16 +328,29 @@ def test_registered_resource_routes_distinguish_unknown_uri_from_wrong_method() 
         assert isinstance(wrong_command_method.body, dict)
         assert wrong_command_method.body["code"] == "method_not_allowed"
 
-        unknown_command_uri = await http.handle(
+        unknown_command_wrong_method = await http.handle(
             HTTPRequest(
                 method="GET",
                 path="/api/v1/commands/widget.does-not-exist",
                 headers=_headers(),
             )
         )
-        assert unknown_command_uri.status == 404
-        assert isinstance(unknown_command_uri.body, dict)
-        assert unknown_command_uri.body["code"] == "not_found"
+        assert unknown_command_wrong_method.status == 405
+        assert isinstance(unknown_command_wrong_method.body, dict)
+        assert unknown_command_wrong_method.body["code"] == "method_not_allowed"
+
+        unknown_command = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/widget.does-not-exist",
+                headers=_headers(key="missing-command"),
+                body={"resource_ref": widget_id},
+            )
+        )
+        assert unknown_command.status == 404
+        assert isinstance(unknown_command.body, dict)
+        assert unknown_command.body["code"] == "not_found"
+        assert unknown_command.body["details"] == {"command": "widget.does-not-exist"}
 
     asyncio.run(scenario())
 
