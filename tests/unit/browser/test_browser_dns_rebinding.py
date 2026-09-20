@@ -71,7 +71,7 @@ def test_http_rebinding_is_blocked_before_socket_connect(monkeypatch: pytest.Mon
         connect_calls.append(address)
         raise AssertionError("forbidden destination reached socket connect")
 
-    monkeypatch.setattr("ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(\n        "ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo\n    )
     monkeypatch.setattr(
         "ai_multi_agent_platform.browser.reference_http.socket.create_connection",
         fake_create_connection,
@@ -163,7 +163,7 @@ def test_redirect_hop_rebinding_is_blocked_before_second_request(
             source_address,
         )
 
-    monkeypatch.setattr("ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(\n        "ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo\n    )
     monkeypatch.setattr(
         "ai_multi_agent_platform.browser.reference_http.socket.create_connection",
         route_pinned_to_fixture,
@@ -274,7 +274,7 @@ def test_mixed_public_and_private_dns_answer_fails_closed(
         del host, args, kwargs
         return _answer(PUBLIC_V4) + _answer("10.0.0.1")
 
-    monkeypatch.setattr("ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(\n        "ai_multi_agent_platform.browser.policy.socket.getaddrinfo", fake_getaddrinfo\n    )
 
     with pytest.raises(ContractError) as caught:
         resolve_browser_target(
