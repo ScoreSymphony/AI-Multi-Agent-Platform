@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.adapters.hermes import HERMES_PINNED_REVISION
+from ai_multi_agent_platform.plugins.reference import reference_manifest
 from ai_multi_agent_platform.upgrade.versioning import current_release_versions
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +52,13 @@ def test_release_version_projection_matches_package_runtime_and_inventory() -> N
     assert package_version == __version__
     assert document["platform_release"] == package_version
     assert document["versions"]["platform_release"] == package_version
+
+
+def test_bundled_reference_plugin_tracks_current_platform_release() -> None:
+    supported = reference_manifest().supported_platform
+
+    assert supported.minimum == "0.0.1"
+    assert supported.maximum == __version__
 
 
 def test_compatibility_matrix_matches_active_governed_upstream_pins() -> None:
