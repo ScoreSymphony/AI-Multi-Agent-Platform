@@ -9,7 +9,6 @@ from ai_multi_agent_platform.control_plane.openapi import (
     build_openapi as build_foundation_openapi,
 )
 
-
 ERROR_RESPONSE_REF = {"$ref": "#/components/responses/Error"}
 
 
