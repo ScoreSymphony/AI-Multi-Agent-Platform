@@ -51,7 +51,7 @@ Caller-facing usable discovery uses `CapabilityRegistry.discover_capabilities()`
 - `ALLOW` keeps it visible;
 - `REQUIRE_APPROVAL` keeps it visible because it remains usable through the canonical approval path.
 
-The hook is an integration seam, not the final authorization engine. It works without a concrete implementation of issue #15 and can later delegate to that platform policy backend. Invocation remains the enforcement point and evaluates its invocation policy hook again immediately before governance/provider execution; a discovery result is never treated as a cached authorization grant.
+The hook is an integration seam, not a competing authorization engine. Production composition can delegate it to the canonical platform authorization/Approval boundary. Invocation remains the enforcement point and evaluates its invocation policy hook again immediately before governance/provider execution; a discovery result is never treated as a cached authorization grant.
 
 ## Version and feature compatibility
 
@@ -80,7 +80,7 @@ Credential need is first-class capability metadata through `CredentialRequiremen
 
 This classification is deliberately separate from safety sensitivity, side-effect classification, permissions and approvals. Discovery and invocation policy hooks receive the `CapabilitySpec`, so they can apply policy to credential-requiring capabilities without learning where credentials are stored or how they are fetched.
 
-The capability contract contains **no secret value, secret reference, secret provider, vault type or backend credential object**. Secret storage/retrieval remains outside #12 and belongs to the dedicated configuration/secrets and authorization boundaries.
+The capability contract contains **no secret value, secret reference, secret provider, vault type or backend credential object**. Secret storage/retrieval remains outside the Capability domain and belongs to the dedicated configuration/secrets and authorization boundaries.
 
 ## Capability identity versus canonical invocation identity
 

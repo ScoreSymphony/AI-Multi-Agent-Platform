@@ -223,7 +223,7 @@ For host/control-plane disaster recovery, pass the persisted registry snapshot t
 
 A Worker becomes schedulable again only after a fresh `RegistrationRequest`/authentication path reports its current state. This prevents old reservations from being treated as proof that a lost process or machine is still executing work.
 
-The fully packaged heterogeneous/multi-device deployment profiles remain owned by #240. #40 owns the durable-state relocation and disaster semantics they must consume: machine-local liveness/reservations are not canonical identity, durable IDs survive relocation, and replacement Workers must re-register. #240 must exercise the #40 contract when it adds real multi-host reference profiles: restore the durable Control Plane state onto a replacement topology, reauthenticate/re-register replacement Workers, and prove that canonical Task/Run history remains unchanged while new work can execute on the replacement resources.
+The packaged heterogeneous/multi-device deployment profiles consume these same durable-state relocation and disaster semantics: machine-local liveness/reservations are not canonical identity, durable IDs survive relocation, and replacement Workers must re-register. Distributed acceptance covers restoring durable Control Plane state onto a replacement topology, reauthenticating/re-registering replacement Workers, and preserving canonical Task/Run history while new work executes on replacement resources.
 
 ## Disaster-recovery scenarios
 
@@ -290,4 +290,4 @@ The v1 implementation covers:
 - restore while an optional adapter/runtime is unavailable;
 - restored single-node reference smoke.
 
-For #40 itself, heterogeneous topology packaging is not duplicated here: the cross-device deployment-profile acceptance belongs to #240, which consumes this durable relocation/recovery contract. Cross-version upgrade/migration remains #41.
+Heterogeneous topology packaging remains documented in the advanced deployment profile and consumes this durable relocation/recovery contract. Cross-version upgrade and migration use the supported lifecycle in [`UPGRADES.md`](UPGRADES.md); backup verification remains a required safety boundary where that policy requires it.

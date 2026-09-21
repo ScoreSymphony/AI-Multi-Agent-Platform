@@ -279,16 +279,8 @@ Issue #5 is guarded by explicit tests for all requested scenarios:
 
 Additional regression tests prevent duplicate domain/contract lifecycle types and reject non-canonical entity IDs at provider boundaries.
 
-## Deferred work
+## Current integration status
 
-Issue #5 defines architectural seams and enforceable adapter behavior. It does not implement:
+The provider seams defined here are now consumed by the maintained product rather than waiting on later foundation work. Production/reference composition includes durable Task/Run lifecycle and persistence, model routing, Capability/Tool execution including optional MCP transport, distributed Node/Worker scheduling, authentication/authorization/Approval enforcement, and Web/CLI clients through the versioned Control Plane.
 
-- production task/run persistence or lifecycle orchestration;
-- Hermes or Forge integrations;
-- production model-routing policy;
-- MCP transport;
-- production memory/file/knowledge backends;
-- distributed scheduling;
-- final authorization policy rules.
-
-Those belong to later numbered issues and must conform to these boundaries.
+Hermes remains an optional orchestrator implementation behind the platform-owned boundary. Forge is retired from the executable product and retained only as historical architecture evidence. Future provider implementations must continue to satisfy these contracts and the common conformance rules instead of becoming new lifecycle authorities.

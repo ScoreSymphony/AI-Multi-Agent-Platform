@@ -31,7 +31,7 @@ without changing canonical Task/Run contracts.
 
 ## Prerequisites
 
-Stage 1 currently targets a host with:
+The reference single-node profile targets a host with:
 
 - Python 3.12 or newer;
 - Git;
@@ -81,7 +81,7 @@ set +a
 For PowerShell, set the corresponding `AI_MAP_*` environment variables in the current
 process before invoking `platform-server`.
 
-The supported Stage-1 settings are:
+The supported reference single-node settings are:
 
 ```bash
 export AI_MAP_DATA_DIR="$PWD/.data/single-node"
@@ -190,9 +190,11 @@ curl http://127.0.0.1:8000/api/v1/readiness
 platform --endpoint http://127.0.0.1:8000 doctor
 ```
 
-`platform doctor` is the canonical operator diagnostic path. It consumes only the
-Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
-second backend-probing diagnostic authority.
+`platform doctor` is the canonical operator diagnostic path. It stays on the public
+Control Plane boundary: manifest, health and readiness remain foundational inputs, provider and
+dependency diagnostics come from the canonical health payload, and composed compute profiles may
+add canonical Node/Worker and host-pressure reads. Deployment profiles must not add direct
+backend-private probes or a second diagnostic authority.
 
 Required configuration failures block composition/startup. Required persistence is additionally
 a live readiness dependency: the single-node persistence probe verifies required roots, an
@@ -209,7 +211,8 @@ report their degradation through the progressive platform health model.
 
 ## Persistent layout
 
-The default data root is `.data/single-node`. Its current implementation layout is:
+The default data root is `.data/single-node`. Durable stores are domain-owned and the exact
+inventory evolves with the composed product surface. Representative core entries include:
 
 ```text
 .data/single-node/
@@ -219,16 +222,22 @@ The default data root is `.data/single-node`. Its current implementation layout 
 │   ├── authentication.sqlite3
 │   ├── authorization.sqlite3
 │   ├── files.sqlite3
-│   └── workspaces.sqlite3
+│   ├── workspaces.sqlite3
+│   └── ... additional domain-owned durable stores
 ├── files/
 ├── workspaces/
 └── executor/
     └── reference/
 ```
 
+Do not use this illustrative tree as the backup manifest. The authoritative required/optional
+durable-store inventory is owned by the backup inventory contract documented in
+[`BACKUP_RESTORE.md`](BACKUP_RESTORE.md); physical persistence ownership is described in
+[`../runtime/PERSISTENCE_TOPOLOGY.md`](../runtime/PERSISTENCE_TOPOLOGY.md).
+
 These paths are implementation configuration, not canonical resource IDs. Moving the data
-through #40 backup/restore must not require preserving a hostname, machine ID or filesystem
-path as canonical identity.
+through the supported backup/restore path must not require preserving a hostname, machine ID or
+filesystem path as canonical identity.
 
 Authentication SQLite stores password/token verifiers and safe metadata only. Raw passwords,
 browser-session secrets and bearer-token secrets are not persisted.
@@ -245,7 +254,7 @@ Before serving after a restart, local File/Workspace providers also reconcile on
 whose ownership can be proven: `PENDING` File writes are tombstoned and owned stale Workspace
 materializations are removed. Cleanup failure is fail-closed; unknown temp paths are preserved.
 
-The Stage-1 regression suite verifies restart persistence for:
+The single-node regression suite verifies restart persistence for:
 
 - canonical Task/Run state;
 - Project identity and idempotency state;
@@ -259,7 +268,7 @@ The `single-node-install-smoke` CI job additionally installs only `.[server]` in
 virtual environment, starts the real `platform-server` HTTP process, verifies canonical
 readiness, performs a graceful foreground shutdown, restarts against the same data root and
 verifies the retry-safe canonical smoke again. This is the installation/process-lifecycle
-proof required by #39.
+proof for the documented clean-install and restart lifecycle.
 
 The ReferenceExecutor itself remains replaceable and does not become canonical lifecycle
 storage.
@@ -329,7 +338,7 @@ operator copy first when retention is required.
 
 ## Networking baseline
 
-Stage 1 needs only the client/frontend-to-Control-Plane flow. SQLite and local file/workspace
+The reference single-node profile needs only the client/frontend-to-Control-Plane flow. SQLite and local file/workspace
 storage have no network listener. The reference orchestrator and executor are in-process and
 expose no private admin port.
 
@@ -338,10 +347,10 @@ transport, tools, browser services and connectors. Those services must not be ma
 default simply because deployment tooling can expose a port. The
 [advanced deployment guide](ADVANCED_DEPLOYMENT.md) owns distributed packaging and heterogeneous-device networking examples.
 
-## Stage 2 — single-server operational hardening
+## Single-server operational hardening
 
-Stage 2 extends the same single-machine architecture with optional process and network
-boundaries suitable for a longer-running server. It does **not** replace the Stage-1 profile
+The hardened single-server profile extends the same single-machine architecture with optional process and network
+boundaries suitable for a longer-running server. It does **not** replace the reference single-node profile
 and does not introduce a second Task/Run/Worker architecture.
 
 The recommended same-origin web composition is:
@@ -430,11 +439,11 @@ canonical Node/Task capacity metadata.
 ### Optionality/failure behavior
 
 Frontend, static-file server and reverse proxy are optional components. Their absence must not
-prevent the Stage-1 Control Plane from starting, becoming ready or executing
+prevent the reference single-node Control Plane from starting, becoming ready or executing
 `platform-server smoke`. When they are enabled, failures in the public edge may make the web
 surface unreachable without changing canonical Task/Run state.
 
-Multiple schedulable local and remote Workers are not required by this Stage-2 baseline.
+Multiple schedulable local and remote Workers are not required by the hardened single-server profile.
 The canonical Node/Worker contracts provide shared registration, capability declaration,
 reservation and scheduling semantics, while the [advanced deployment guide](ADVANCED_DEPLOYMENT.md)
 packages those contracts into distributed and heterogeneous deployment profiles. Operators may adopt those advanced profiles
@@ -453,10 +462,10 @@ needed by the chosen local workloads and measure:
 
 The reference path itself is CPU-only and requires no accelerator.
 
-## Advanced deployment integrations and remaining work
+## Advanced deployment integrations
 
-The repository has a production-shaped Stage-1 single-node baseline plus the Stage-2
-single-server process/network hardening reference. The following advanced operational foundations
+The repository has a production-shaped reference single-node baseline plus a hardened
+single-server process/network profile. The following advanced operational foundations
 are available without becoming prerequisites for the baseline:
 
 - canonical Node/Worker registry, capability, reservation and scheduling contracts, with
