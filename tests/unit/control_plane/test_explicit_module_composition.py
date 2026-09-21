@@ -424,7 +424,8 @@ def test_openapi_contributors_run_in_deterministic_module_order() -> None:
     assert second_spec["x-module-order"] == ["alpha", "beta"]
 
 
-def test_asgi_pre_body_classifier_uses_registered_exact_routes_and_dispatcher_normalization() -> None:
+def test_asgi_pre_body_classifier_uses_registered_exact_routes_and_dispatcher_normalization(
+) -> None:
     async def create_widget(request: HTTPRequest) -> HTTPResponse:
         del request
         return HTTPResponse(status=202, body={"status": "accepted"})
