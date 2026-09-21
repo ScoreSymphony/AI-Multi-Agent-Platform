@@ -1293,10 +1293,17 @@ try {
 
   // Re-open the real first-run timeline and prove its dense table remains contained by the
   // intentional horizontally scrollable wrapper rather than clipping the product viewport.
-  await page.goto(`${frontendUrl}/observability`);
+  await page.goto(
+    `${frontendUrl}/observability/${encodeURIComponent(firstRunResult.task_id)}`,
+  );
   await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
-  await page.getByLabel("Exact Task ID", { exact: true }).fill(firstRunResult.task_id);
-  await (await waitForButton(page, "Open telemetry")).click();
+  const narrowTaskIdInput = page.getByLabel("Exact Task ID", { exact: true });
+  await narrowTaskIdInput.waitFor();
+  if ((await narrowTaskIdInput.inputValue()) !== firstRunResult.task_id) {
+    throw new Error(
+      `Task-scoped Observability permalink did not retain the exact first-run Task ID: ${await narrowTaskIdInput.inputValue()}`,
+    );
+  }
   const narrowTimelineHeading = page.getByRole("heading", { name: "Timeline", exact: true });
   await narrowTimelineHeading.waitFor();
   const narrowTimelineCard = narrowTimelineHeading.locator("..");
