@@ -20,6 +20,21 @@ EXPECTED_LANES = frozenset(
 EXPECTED_VALIDATION_LANES = EXPECTED_LANES | {"quality"}
 
 
+def _report_run_attempt(
+    payload: dict[str, Any],
+    *,
+    kind: str,
+    lane: str,
+    path: Path,
+) -> int:
+    value = payload.get("run_attempt", 1)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(
+            f"invalid {kind} run_attempt for lane {lane} in {path}: {value!r}"
+        )
+    return value
+
+
 def _load_reports(
     root: Path,
     *,
@@ -27,14 +42,24 @@ def _load_reports(
     kind: str,
 ) -> dict[str, dict[str, Any]]:
     reports: dict[str, dict[str, Any]] = {}
+    attempts: dict[str, int] = {}
     for path in sorted(root.rglob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         lane = payload.get("lane")
         if not isinstance(lane, str) or lane not in expected:
             continue
-        if lane in reports:
-            raise ValueError(f"duplicate {kind} runtime report for lane: {lane}")
+        attempt = _report_run_attempt(payload, kind=kind, lane=lane, path=path)
+        current_attempt = attempts.get(lane)
+        if current_attempt is not None:
+            if attempt == current_attempt:
+                raise ValueError(
+                    f"duplicate {kind} runtime report for lane {lane} "
+                    f"at run attempt {attempt}"
+                )
+            if attempt < current_attempt:
+                continue
         reports[lane] = payload
+        attempts[lane] = attempt
     return reports
 
 
