@@ -129,6 +129,8 @@ describe("official multi-agent onboarding presentation", () => {
     expect(html).toContain("developer · researcher · reviewer");
     expect(html).toContain("parallel root");
     expect(html).toContain("step-approach");
+    expect(html).toContain("/workspaces/workspace-1");
+    expect(html).toContain("Open Workspace");
     expect(html).toContain("/results/result-final");
     expect(html).toContain("/artifacts/artifact-goal");
     expect(html).toContain("verification-final");
