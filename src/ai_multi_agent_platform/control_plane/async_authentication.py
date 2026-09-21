@@ -77,7 +77,7 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
         try:
             relative = _relative_path(request.path)
 
-            if relative.startswith("/auth/"):
+            if relative == "/auth" or relative.startswith("/auth/"):
                 route_error = _authentication_route_error(request.method, relative)
                 if route_error is not None:
                     raise route_error
