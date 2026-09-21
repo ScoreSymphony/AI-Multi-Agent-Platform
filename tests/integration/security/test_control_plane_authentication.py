@@ -345,9 +345,7 @@ def test_auth_openapi_documents_revoke_not_found_runtime_outcomes() -> None:
         "schema"
     ] == {"$ref": "#/components/schemas/APIError"}
 
-    session_operation = specification["paths"][
-        "/api/v1/auth/sessions/{session_id}:revoke"
-    ]["post"]
+    session_operation = specification["paths"]["/api/v1/auth/sessions/{session_id}:revoke"]["post"]
     credential_operation = specification["paths"][
         "/api/v1/auth/credentials/{credential_id}:revoke"
     ]["post"]
