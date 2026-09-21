@@ -281,6 +281,9 @@ def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
         assert isinstance(paths, dict)
         assert "/api/v1/module-status" in paths
         assert set(paths["/api/v1/module-status"]) == {"get"}
+        assert paths["/api/v1/module-status"]["get"]["responses"]["405"] == {
+            "$ref": "#/components/responses/Error"
+        }
 
         wrong_method = await http.handle(HTTPRequest(method="POST", path="/api/v1//module-status/"))
         assert wrong_method.status == 405
