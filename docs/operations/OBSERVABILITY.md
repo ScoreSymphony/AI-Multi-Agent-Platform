@@ -1,12 +1,10 @@
 # Observability
 
-Issue: #16
-
 ## Purpose
 
 Observability is a platform-owned, cross-cutting capability for explaining what happened across canonical Tasks, Runs and replaceable provider boundaries without making one monitoring vendor part of the platform architecture.
 
-The Stage 1 foundation is usable with only the canonical domain/kernel and reference execution path from #4-#7. Later Model, Tool, Agent, Worker, authorization, verification and accounting domains attach to the same contracts progressively.
+The observability baseline is usable with only the canonical domain/kernel and reference execution path. Model, Tool, Agent, Worker, authorization, verification and accounting domains attach to the same platform-owned contracts when composed.
 
 ## Ownership and source-of-truth rule
 
@@ -28,7 +26,7 @@ Task
             └── Worker Job / Node Execution
 ```
 
-Stage 1 implements Task -> Run -> Executor. Progressive instrumentation provides Orchestrator, Model, Tool, Agent-hook, Node and Worker provider seams. Real Agent and distributed Worker runtime integration remains dependent on #33 and #14 respectively.
+The baseline implements Task -> Run -> Executor, while the maintained composition also provides Orchestrator, Model, Tool, Agent, Node and Worker instrumentation seams. Optional distributed profiles extend the same trace and telemetry contracts rather than creating a second observability model.
 
 A trace is an operational identifier. It supplements canonical identifiers; it does not replace them.
 
@@ -113,7 +111,7 @@ Foundation metrics include:
 
 `platform.run.retries` is derived from a second or later deduplicated `run.created` event for the same canonical Task. Observability counts attempts it sees but does not own retry lifecycle state.
 
-Progressive Model instrumentation adds calls, latency/failures, provider-reported numeric usage and route/fallback counts. Tool instrumentation adds calls, latency/failures and canonical capability permission/approval outcomes. Worker/Node wrappers emit only measurements their current provider contracts actually expose; #14 remains responsible for the final heartbeat/job/resource runtime data.
+Progressive Model instrumentation adds calls, latency/failures, provider-reported numeric usage and route/fallback counts. Tool instrumentation adds calls, latency/failures and canonical capability permission/approval outcomes. Worker/Node wrappers emit only measurements their current provider contracts actually expose; composed distributed runtime telemetry supplies canonical heartbeat, job and resource observations without making observability the scheduling or lifecycle authority.
 
 ## Timeline semantics
 
@@ -166,16 +164,8 @@ The Control Plane exposes the backend-neutral `readiness_state` plus structured 
 
 Missing measurements are not fabricated.
 
-## Current completion boundary
+## Current completion state
 
-The observability foundation and progressive contracts are implemented, including async links, retry metrics, Model/Tool instrumentation, health aggregation, Control Plane timeline enrichment, #35 trace propagation and the #76 measurement handoff seam.
+The Operational V1 observability surface is integrated across the maintained Agent/Team, Model/Tool, Node/Worker, authorization/approval, Verification and accounting paths. Async links, retry metrics, health aggregation, Control Plane timeline enrichment, transport trace propagation and the measurement handoff remain provider-neutral and derived from canonical state.
 
-#16 nevertheless remains open until the real completion-input runtimes are available and integrated, especially:
-
-- #33 real Agent/Team runtime;
-- #14 real scheduler/Worker/Node runtime and heartbeat/job/resource telemetry;
-- #15 authorization/approval audit integration;
-- #86 verification telemetry;
-- #76 real accounting consumer integration.
-
-See `docs/history/issues/ISSUE_16_COMPLETION.md` for the current acceptance mapping and remaining closure checklist.
+Optional exporters and deployment-specific observability backends may add operational views, but they do not change canonical Task/Run ownership or the baseline local-first requirement. Historical acceptance mapping for the completed observability work remains under `docs/history/issues/ISSUE_16_COMPLETION.md`.
