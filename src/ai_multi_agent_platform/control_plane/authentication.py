@@ -23,12 +23,12 @@ from ai_multi_agent_platform.security.authentication import (
 )
 
 from .http import HTTPRequest, HTTPResponse, _request_context
-from .models import API_VERSION, APIError, APIException, api_exception_from_contract
 from .mobile_authentication import (
     handle_authenticated_mobile_auth_route,
     handle_public_mobile_auth_route,
     mobile_auth_openapi_paths,
 )
+from .models import API_VERSION, APIError, APIException, api_exception_from_contract
 from .search_contract import ControlPlaneHTTP as _ControlPlaneHTTP
 
 
