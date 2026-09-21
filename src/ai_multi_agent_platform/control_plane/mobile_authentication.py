@@ -37,7 +37,8 @@ def handle_public_mobile_auth_route(
         protocol_version=_required_string(request.body, "protocol_version"),
         correlation_id=correlation_id,
     )
-    return _typed_response(owner, 
+    return _typed_response(
+        owner,
         201,
         {
             "device": owner._authentication.mobile_pairing.safe_device(device),
@@ -68,7 +69,8 @@ async def handle_public_mobile_auth_route_async(
         protocol_version=_required_string(request.body, "protocol_version"),
         correlation_id=correlation_id,
     )
-    return _typed_response(owner, 
+    return _typed_response(
+        owner,
         201,
         {
             "device": await owner._runtime_authentication.safe_mobile_device(device),
@@ -191,7 +193,8 @@ async def _handle_pairing_management(
             pairing_id,
             correlation_id=correlation_id,
         )
-        return _typed_response(owner, 
+        return _typed_response(
+            owner,
             200,
             {"id": pairing_id, "cancelled": True},
             request_id,
@@ -246,7 +249,8 @@ async def _handle_pairing_management_async(
             pairing_id,
             correlation_id=correlation_id,
         )
-        return _typed_response(owner, 
+        return _typed_response(
+            owner,
             200,
             {"id": pairing_id, "cancelled": True},
             request_id,
@@ -392,7 +396,8 @@ async def _handle_one_device(
             _required_string(request.body, "display_name"),
             correlation_id=correlation_id,
         )
-        return _typed_response(owner, 
+        return _typed_response(
+            owner,
             200,
             owner._authentication.mobile_pairing.safe_device(device),
             request_id,
@@ -414,7 +419,8 @@ async def _handle_one_device(
             device_id,
             correlation_id=correlation_id,
         )
-        return _typed_response(owner, 
+        return _typed_response(
+            owner,
             200,
             {"id": device_id, "revoked": True},
             request_id,
@@ -454,7 +460,8 @@ async def _handle_one_device_async(
             _required_string(request.body, "display_name"),
             correlation_id=correlation_id,
         )
-        return _typed_response(owner, 
+        return _typed_response(
+            owner,
             200,
             await owner._runtime_authentication.safe_mobile_device(device),
             request_id,
@@ -476,7 +483,8 @@ async def _handle_one_device_async(
             device_id,
             correlation_id=correlation_id,
         )
-        return _typed_response(owner, 
+        return _typed_response(
+            owner,
             200,
             {"id": device_id, "revoked": True},
             request_id,
