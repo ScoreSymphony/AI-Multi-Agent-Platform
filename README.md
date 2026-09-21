@@ -202,7 +202,7 @@ For normative details, use [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE
 
 ## Current maturity
 
-The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not published a formal GitHub release, so release claims remain conservative while conformance, hardening and operational-version acceptance continue.
+The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not yet published a formal **platform** release. Optional component releases, including signed Mobile Android APK releases, are published independently and do not by themselves establish V1/M3 platform release completion. Platform release claims therefore remain conservative while conformance, hardening and operational-version acceptance continue.
 
 Architectural role and public compatibility maturity are separate concepts; the current taxonomy is documented in [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md). Curated point-in-time integration status lives in [`docs/STATUS.md`](docs/STATUS.md), while GitHub issues, dependencies, pull-request checks and merged repository state remain authoritative for individual work items. The README intentionally does not duplicate an issue/PR ledger or dated progress history.
 
