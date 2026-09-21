@@ -68,7 +68,7 @@ jobs:
         if: always() && matrix.kind == 'test'
         uses: actions/upload-artifact@v7
         with:
-          name: python-test-runtime-${{ matrix.lane }}
+          name: python-test-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: .artifacts/test-runtime/${{ matrix.lane }}.*
           if-no-files-found: warn
 
@@ -122,6 +122,7 @@ jobs:
           payload = {
               "schema_version": 1,
               "lane": os.environ["VALIDATION_LANE"],
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
               "wall_seconds": round(time.time() - started, 3),
           }
           path = Path(".artifacts/validation-runtime") / (
@@ -138,7 +139,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: python-validation-runtime-${{ matrix.lane }}
+          name: python-validation-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: .artifacts/validation-runtime/${{ matrix.lane }}.json
           if-no-files-found: warn
 
@@ -157,14 +158,14 @@ jobs:
         with:
           pattern: python-test-runtime-*
           path: .artifacts/test-runtime-aggregate
-          merge-multiple: true
+          merge-multiple: false
       - name: Download Python validation runtime evidence
         if: needs.python-validation.result == 'success'
         uses: actions/download-artifact@v8
         with:
           pattern: python-validation-runtime-*
           path: .artifacts/validation-runtime-aggregate
-          merge-multiple: true
+          merge-multiple: false
       - name: Verify frontend-independent Python aggregate budget
         if: needs.python-validation.result == 'success'
         run: |
@@ -175,7 +176,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: python-test-runtime-aggregate
+          name: python-test-runtime-aggregate-attempt-${{ github.run_attempt }}
           path: .artifacts/test-runtime-aggregate/aggregate.json
           if-no-files-found: warn
       - name: Require all Python validation lanes
