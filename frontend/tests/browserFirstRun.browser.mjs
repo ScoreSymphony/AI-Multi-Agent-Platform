@@ -1039,6 +1039,59 @@ try {
   await manifestAlert.waitFor({ state: "detached" });
   await page.unroute(manifestApi, failManifestTemporarily);
 
+  // #1333: prove the maintained operator chain Task -> Run -> Workspace against the
+  // real bound first-run resources. The Run projection is read only through the public
+  // Control Plane and must retain the immutable snapshot provenance used for execution.
+  const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
+  if (!firstRunRunId) {
+    throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
+  }
+  const firstRunRunViaApi = await readPublicApiResource(page, `/runs/${firstRunRunId}`);
+  if (
+    firstRunRunViaApi.workspace_id !== firstRunResult.workspace_id
+    || typeof firstRunRunViaApi.workspace_snapshot_id !== "string"
+    || !firstRunRunViaApi.workspace_snapshot_id
+    || typeof firstRunRunViaApi.workspace_content_checksum !== "string"
+    || !firstRunRunViaApi.workspace_content_checksum
+  ) {
+    throw new Error(
+      `Canonical Run did not expose immutable Workspace provenance: ${JSON.stringify(firstRunRunViaApi)}`,
+    );
+  }
+
+  const firstRunTaskPath = `/tasks/${encodeURIComponent(firstRunResult.task_id)}`;
+  await page.goto(`${frontendUrl}${firstRunTaskPath}`);
+  await page.locator(`main[data-route="${firstRunTaskPath}"]`).waitFor();
+  const taskToRunLink = page.locator(`a[href="/runs/${firstRunRunId}"]`).first();
+  await taskToRunLink.waitFor();
+  await taskToRunLink.click();
+  await page.waitForURL(`${frontendUrl}/runs/${firstRunRunId}`);
+  const workspaceProvenanceCard = page.getByRole("heading", {
+    name: "Workspace provenance",
+    exact: true,
+  }).locator("..");
+  await workspaceProvenanceCard.waitFor();
+  const runToWorkspaceLink = workspaceProvenanceCard.getByRole("link", {
+    name: "Open Workspace",
+    exact: true,
+  });
+  if ((await runToWorkspaceLink.getAttribute("href")) !== `/workspaces/${firstRunResult.workspace_id}`) {
+    throw new Error("Run detail did not deep-link its canonical Workspace binding");
+  }
+  requireText(
+    await workspaceProvenanceCard.innerText(),
+    firstRunRunViaApi.workspace_snapshot_id,
+    "Run Workspace snapshot provenance",
+  );
+  requireText(
+    await workspaceProvenanceCard.innerText(),
+    firstRunRunViaApi.workspace_content_checksum,
+    "Run Workspace checksum provenance",
+  );
+  await runToWorkspaceLink.click();
+  await page.waitForURL(`${frontendUrl}/workspaces/${firstRunResult.workspace_id}`);
+  await page.locator(`code[title="${firstRunResult.workspace_id}"]`).first().waitFor();
+
   // #1296: close the final #747 representative browser-evidence gap through
   // operator diagnostics/status. Re-enter the already-proven Search/history
   // surface, use the maintained shell navigation, and keep every read on the
@@ -1047,11 +1100,6 @@ try {
   await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
   const observabilityLink = page.getByRole("link", { name: "Observability", exact: true });
   await observabilityLink.waitFor();
-
-  const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
-  if (!firstRunRunId) {
-    throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
-  }
 
   // Register before route navigation: Observability may auto-select the same recent Task and
   // start the canonical timeline request during initial render, before the explicit filter submit.
@@ -1095,6 +1143,13 @@ try {
   const timelineCard = timelineHeading.locator("..");
   await timelineCard.locator("tbody tr").first().waitFor();
   await timelineCard.getByText(`run:${firstRunRunId}`, { exact: true }).first().waitFor();
+  const traceWorkspaceLink = observabilityRoute.locator(
+    `a[href="/workspaces/${firstRunResult.workspace_id}"]`,
+  ).first();
+  await traceWorkspaceLink.waitFor();
+  if ((await traceWorkspaceLink.getAttribute("href")) !== `/workspaces/${firstRunResult.workspace_id}`) {
+    throw new Error("Task-scoped observability did not retain the canonical Workspace correlation");
+  }
   if ((await timelineCard.getByText("No timeline entries", { exact: true }).count()) !== 0) {
     throw new Error("Observability rendered its empty state for the completed first-run Task");
   }
