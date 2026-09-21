@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import pytest
@@ -471,7 +472,7 @@ def test_asgi_pre_body_classifier_uses_registered_exact_routes_and_dispatcher_no
 
         start = next(message for message in sent if message["type"] == "http.response.start")
         body_message = next(message for message in sent if message["type"] == "http.response.body")
-        payload = __import__("json").loads(body_message["body"])
+        payload = json.loads(body_message["body"])
         assert isinstance(payload, dict)
         return int(start["status"]), payload
 
