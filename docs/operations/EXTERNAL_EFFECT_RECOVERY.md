@@ -1,6 +1,6 @@
 # External side-effect recovery
 
-Issue #1154 closes the reliability gap left after #707 for external actions whose provider outcome
+The external-effect recovery subsystem closes the reliability gap for external actions whose provider outcome
 is ambiguous after dispatch. The platform does **not** claim exactly-once execution and does not
 blindly replay a non-idempotent action after timeout, cancellation, process loss or a lost callback.
 
@@ -77,7 +77,7 @@ respect to external side effects. A terminal recovery record is returned unchang
 
 The existing distributed Worker runtime remains the owner of Worker dispatch recovery. It already
 persists Worker-job ownership before dispatch and reconciles the same `worker_job_id` after lost
-acknowledgement. #1154 does not introduce a competing Worker lifecycle.
+acknowledgement. This recovery subsystem does not introduce a competing Worker lifecycle.
 
 Other owner-specific external-effect paths keep the same rule:
 
@@ -145,7 +145,7 @@ authorized operator confirmation.
 
 ## Observability
 
-Recovery transitions reuse #16 telemetry without recording request/response bodies or private
+Recovery transitions reuse canonical telemetry without recording request/response bodies or private
 provider recovery values. The runtime emits events for:
 
 - `external_effect.uncertain_outcome_detected`
