@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ControlPlaneClient } from "../api/client";
 import {
   isTelemetryEntry,
@@ -37,7 +37,6 @@ export function ObservabilityPage({
   const [timelineTotal, setTimelineTotal] = useState<number | null>(null);
   const [taskError, setTaskError] = useState<unknown>(null);
   const [timelineError, setTimelineError] = useState<unknown>(null);
-  const timelineRequestGeneration = useRef(0);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -56,9 +55,7 @@ export function ObservabilityPage({
   }, [client]);
 
   const loadTimeline = useCallback(async (cursor?: string, append = false) => {
-    const requestGeneration = ++timelineRequestGeneration.current;
-    const taskId = selectedTaskId;
-    if (!taskId) {
+    if (!selectedTaskId) {
       setTimeline([]);
       setTimelineNextCursor(null);
       setTimelineTotal(0);
@@ -66,24 +63,21 @@ export function ObservabilityPage({
       return;
     }
     try {
-      const next = await client.timeline(taskId, {
+      const next = await client.timeline(selectedTaskId, {
         limit: 100,
         cursor,
         direction: "asc",
       });
-      if (requestGeneration !== timelineRequestGeneration.current) return;
       setTimeline((current) => append && current ? [...current, ...next.items] : next.items);
       setTimelineNextCursor(next.next_cursor);
       setTimelineTotal(next.total);
       setTimelineError(null);
     } catch (error) {
-      if (requestGeneration !== timelineRequestGeneration.current) return;
       setTimelineError(error);
     }
   }, [client, selectedTaskId]);
 
   useEffect(() => {
-    timelineRequestGeneration.current += 1;
     setSelectedTaskId(initialTaskId);
     setTaskIdDraft(initialTaskId);
   }, [initialTaskId]);
@@ -106,7 +100,6 @@ export function ObservabilityPage({
 
   const applyTaskId = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    timelineRequestGeneration.current += 1;
     setSelectedTaskId(taskIdDraft.trim());
   };
 
@@ -152,7 +145,6 @@ export function ObservabilityPage({
             <select
               value={tasks.items.some((task) => task.id === selectedTaskId) ? selectedTaskId : ""}
               onChange={(event) => {
-                timelineRequestGeneration.current += 1;
                 setSelectedTaskId(event.target.value);
                 setTaskIdDraft(event.target.value);
               }}
