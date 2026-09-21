@@ -105,7 +105,7 @@ Copy-Item config\single-node.env.example .env.single-node
 $env:AI_MAP_DATA_DIR = ".data\single-node"
 $env:AI_MAP_HOST = "127.0.0.1"
 $env:AI_MAP_PORT = "8000"
-$env:AI_MAP_SECURE_COOKIE = "true"
+$env:AI_MAP_SECURE_COOKIE = "false"
 $env:AI_MAP_LOG_LEVEL = "info"
 $env:AI_MAP_SHUTDOWN_TIMEOUT_SECONDS = "30"
 
@@ -202,7 +202,7 @@ For normative details, use [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE
 
 ## Current maturity
 
-The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not published a formal GitHub release, so release claims remain conservative while conformance, hardening and operational-version acceptance continue.
+The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not published the formal platform `1.0.0` release. Optional mobile companion releases are published independently and do not make Mobile/Android part of the V1/M3 baseline; platform release claims remain conservative while conformance, hardening and operational-version acceptance continue.
 
 Architectural role and public compatibility maturity are separate concepts; the current taxonomy is documented in [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md). Curated point-in-time integration status lives in [`docs/STATUS.md`](docs/STATUS.md), while GitHub issues, dependencies, pull-request checks and merged repository state remain authoritative for individual work items. The README intentionally does not duplicate an issue/PR ledger or dated progress history.
 
