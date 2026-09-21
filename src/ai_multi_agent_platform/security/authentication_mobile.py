@@ -27,6 +27,11 @@ from .authorization import ActorType
 
 _PAIRING_ALPHABET = "".join(ch for ch in ascii_uppercase + digits if ch not in "0O1I")
 _PAIRING_PROTOCOL_VERSION = "1"
+_MOBILE_CREDENTIAL_SCOPE: dict[str, JsonValue] = {
+    "actions": ["view", "read", "create", "modify", "execute", "approve"],
+    "resource_types": [],
+    "resource_ids": [],
+}
 
 
 class MobilePairingError(ValueError):
@@ -196,6 +201,7 @@ class MobilePairingService:
                 CredentialKind.MOBILE,
                 purpose=f"mobile device: {display_name}",
                 now=current,
+                scope=_MOBILE_CREDENTIAL_SCOPE,
             )
             device_id = new_id("mobile_device")
             device = PairedMobileDevice(
@@ -311,6 +317,7 @@ class MobilePairingService:
             "id": device.device_id,
             "user_id": device.user_id,
             "credential_id": device.credential_id,
+            "scope": dict(credential.scope) if credential is not None else None,
             "display_name": device.display_name,
             "server_origin": device.server_origin,
             "platform": device.platform,
