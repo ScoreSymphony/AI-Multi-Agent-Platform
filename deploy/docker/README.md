@@ -1,9 +1,7 @@
-# Docker Compose single-server profile
+# Optional Docker Compose single-server profile
 
-Issue: #1378
-
-This directory implements the existing #39 single-server topology as a replaceable Docker
-Compose deployment choice. Docker container IDs, service names, networks, image tags and host
+This directory provides a replaceable Docker Compose deployment of the maintained single-server
+topology. Docker container IDs, service names, networks, image tags and host
 ports are deployment metadata only; they do not become canonical platform identity.
 
 The root `docker-compose.yml` builds two services:
@@ -66,8 +64,17 @@ docker compose -f docker-compose.yml up -d
 Do not use `docker compose down -v` for a normal restart. The `-v` option deletes the named
 volume and therefore deletes the local deployment data.
 
-Backup, restore and upgrade procedures remain the canonical procedures documented under
-`docs/operations/`; containerization does not introduce a second lifecycle authority.
+Container restart persistence is implemented by the named volume, but volume persistence is not
+a backup. The current optional Compose profile does **not** yet provide a container-aware canonical
+disaster-restore path equivalent to the maintained systemd/venv single-server profile:
+`platform-backup restore` intentionally requires a clean target directory, while this profile
+mounts the named volume directly at the fixed data-root path.
+
+Do not work around that boundary by copying a restored tree manually into an active volume; doing
+so would bypass the atomic restore/publication and post-restore recovery semantics. Deployments
+that require the currently supported canonical backup/restore contract should use the systemd/venv
+single-server profile until a clean replacement-volume restore workflow is provided. The
+authoritative backup, restore and upgrade contracts remain under `docs/operations/`.
 
 ## HTTPS and browser authentication
 
@@ -114,7 +121,9 @@ small intentionally:
 
 - `AI_MAP_PUBLIC_PORT` — host-side Web port, default `8080`;
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
-- `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`.
+- `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`. The current Compose
+  profile supports the default 30-second budget; do not raise it above 30 seconds while the
+  container stop grace remains fixed at 40 seconds.
 
 The container-internal data directory, Control Plane port and secure-cookie setting are fixed by
 the reference composition because changing them is not required for ordinary operator use.
@@ -138,8 +147,10 @@ Stop gracefully:
 docker compose -f docker-compose.yml stop
 ```
 
-The Control Plane gets a 40-second Compose stop grace period around the default 30-second
-platform shutdown/drain budget.
+The Control Plane gets a 40-second Compose stop grace period around the supported 30-second
+platform shutdown/drain budget. Larger application drain budgets are not currently supported by
+this Compose profile because the fixed container grace could terminate the process before the
+configured drain completes.
 
 Remove containers and the private network while retaining canonical state:
 
