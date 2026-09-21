@@ -6,9 +6,13 @@ from typing import Any
 
 import pytest
 
+from ai_multi_agent_platform.configuration import ConfigurationError
 from ai_multi_agent_platform.control_plane import ControlPlaneASGI, HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.deployment.config import load_single_node_config
+from ai_multi_agent_platform.deployment.config import (
+    MAX_SHUTDOWN_TIMEOUT_SECONDS,
+    load_single_node_config,
+)
 from ai_multi_agent_platform.deployment.drain import (
     SingleNodeDrainController,
     SingleNodeDrainState,
@@ -28,6 +32,28 @@ def test_shutdown_timeout_is_explicit_single_node_configuration(tmp_path: Path) 
         }
     )
     assert config.shutdown_timeout_seconds == 17
+
+
+def test_shutdown_timeout_supported_range_has_explicit_upper_bound(tmp_path: Path) -> None:
+    common = {
+        "AI_MAP_DATA_DIR": str(tmp_path / "data"),
+        "AI_MAP_SECURE_COOKIE": "false",
+    }
+    config = load_single_node_config(
+        {
+            **common,
+            "AI_MAP_SHUTDOWN_TIMEOUT_SECONDS": str(MAX_SHUTDOWN_TIMEOUT_SECONDS),
+        }
+    )
+    assert config.shutdown_timeout_seconds == MAX_SHUTDOWN_TIMEOUT_SECONDS
+
+    with pytest.raises(ConfigurationError):
+        load_single_node_config(
+            {
+                **common,
+                "AI_MAP_SHUTDOWN_TIMEOUT_SECONDS": str(MAX_SHUTDOWN_TIMEOUT_SECONDS + 1),
+            }
+        )
 
 
 def test_drain_rejects_mutations_and_projects_health_readiness(tmp_path: Path) -> None:
