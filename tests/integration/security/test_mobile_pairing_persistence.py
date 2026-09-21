@@ -40,10 +40,13 @@ def test_mobile_pairing_and_device_credential_survive_restart_without_raw_secret
     restored = third.mobile_pairing.list_devices(user.user_id)
     assert len(restored) == 1
     assert restored[0].device_id == device.device_id
-    assert third.authenticate_bearer(
-        issued.secret,
-        now=NOW + timedelta(seconds=2),
-    ).identity.actor_id == user.user_id
+    assert (
+        third.authenticate_bearer(
+            issued.secret,
+            now=NOW + timedelta(seconds=2),
+        ).identity.actor_id
+        == user.user_id
+    )
 
     with sqlite3.connect(database) as connection:
         pairing_verifier = connection.execute(
