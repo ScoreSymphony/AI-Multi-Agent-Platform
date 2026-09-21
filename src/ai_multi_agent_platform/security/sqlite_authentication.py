@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Mapping
+import threading
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import TypeVar
@@ -12,12 +14,15 @@ from typing import TypeVar
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .authentication import (
+    AuthenticationError,
+    AuthenticationFailure,
     BrowserSession,
     CredentialKind,
     ExternalIdentityMapping,
     InMemoryAuthenticationStore,
     LocalUserAccount,
     MobilePairingChallenge,
+    MobilePairingError,
     PairedMobileDevice,
     StoredCredential,
 )
@@ -25,6 +30,10 @@ from .authorization import ActorType
 
 K = TypeVar("K")
 V = TypeVar("V")
+
+
+class _AuthenticationTransactionState(threading.local):
+    connection: sqlite3.Connection | None = None
 
 
 class _WriteThroughDict(dict[K, V]):
@@ -62,6 +71,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._mobile_pairing_transaction_state = _AuthenticationTransactionState()
         self._initialize_schema()
         super().__init__()
 
@@ -111,6 +121,47 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA busy_timeout = 5000")
         return connection
+
+    @contextmanager
+    def mobile_pairing_transaction(self, pairing_id: str) -> Iterator[None]:
+        """Commit challenge consumption, credential issuance and device linkage atomically."""
+
+        if self._mobile_pairing_transaction_state.connection is not None:
+            raise RuntimeError("nested mobile pairing transactions are not supported")
+
+        connection = self._connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT consumed_at, cancelled_at FROM auth_mobile_pairings WHERE pairing_id = ?",
+                (pairing_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(pairing_id)
+            if row[0] is not None:
+                raise AuthenticationError(AuthenticationFailure.REPLAY_REJECTED)
+            if row[1] is not None:
+                raise MobilePairingError("mobile pairing challenge is cancelled")
+
+            self._mobile_pairing_transaction_state.connection = connection
+            yield
+            connection.commit()
+        except BaseException:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            self._mobile_pairing_transaction_state.connection = None
+            connection.close()
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        transaction_connection = self._mobile_pairing_transaction_state.connection
+        if transaction_connection is not None:
+            yield transaction_connection
+            return
+        with self._connect() as connection:
+            yield connection
 
     def _initialize_schema(self) -> None:
         with self._connect() as connection:
@@ -369,7 +420,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             separators=(",", ":"),
             ensure_ascii=False,
         )
-        with self._connect() as connection:
+        with self._write_connection() as connection:
             connection.execute(
                 "INSERT INTO auth_credentials (credential_id, owner_id, actor_type, kind, purpose, "
                 "secret_verifier, created_at, scope_json, expires_at, revoked_at, last_used_at) "
@@ -399,7 +450,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
         _key: str,
         pairing: MobilePairingChallenge,
     ) -> None:
-        with self._connect() as connection:
+        with self._write_connection() as connection:
             connection.execute(
                 "INSERT INTO auth_mobile_pairings "
                 "(pairing_id, user_id, server_origin, secret_verifier, created_at, expires_at, "
@@ -430,7 +481,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             separators=(",", ":"),
             ensure_ascii=False,
         )
-        with self._connect() as connection:
+        with self._write_connection() as connection:
             connection.execute(
                 "INSERT INTO auth_mobile_devices "
                 "(device_id, user_id, credential_id, display_name, server_origin, platform, "
