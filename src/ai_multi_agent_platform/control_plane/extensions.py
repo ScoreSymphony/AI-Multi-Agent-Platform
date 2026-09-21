@@ -631,7 +631,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                         segments[1],
                     )
                     return self._response(200, item, request_id, correlation_id)
-                normalized_path = request.path.rstrip("/") or "/"
+                normalized_path = _normalize_route_path(request.path)
                 registered_routes = getattr(
                     self._extended_control_plane,
                     "registered_routes",
@@ -694,7 +694,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
             and base_response.body.get("message") == "route not found"
         )
         if is_route_not_found:
-            normalized_path = request.path.rstrip("/") or "/"
+            normalized_path = _normalize_route_path(request.path)
             registered_routes = getattr(
                 self._extended_control_plane,
                 "registered_routes",
