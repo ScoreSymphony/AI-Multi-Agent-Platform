@@ -37,6 +37,7 @@ class HTTPRequest:
     query: Mapping[str, str] = field(default_factory=dict)
     body: dict[str, JsonValue] = field(default_factory=dict)
     trusted_actor: ActorContext | None = None
+    transport_peer: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -556,7 +557,14 @@ class ControlPlaneASGI:
             body = decoded
 
         response = await self._http.handle(
-            HTTPRequest(method=method, path=path, headers=headers, query=query, body=body)
+            HTTPRequest(
+                method=method,
+                path=path,
+                headers=headers,
+                query=query,
+                body=body,
+                transport_peer=_asgi_client_host(scope),
+            )
         )
         await _send_response(response, send)
 
@@ -802,6 +810,17 @@ def _openapi_path_matches(template: str, path: str) -> bool:
         cursor = match.end()
     pattern_parts.append(re.escape(normalized_template[cursor:]))
     return re.fullmatch("".join(pattern_parts), path) is not None
+
+
+def _asgi_client_host(scope: Mapping[str, Any]) -> str | None:
+    client = scope.get("client")
+    if not isinstance(client, (tuple, list)) or not client:
+        return None
+    host = client[0]
+    if not isinstance(host, str):
+        return None
+    normalized = host.strip()
+    return normalized or None
 
 
 def _request_context(

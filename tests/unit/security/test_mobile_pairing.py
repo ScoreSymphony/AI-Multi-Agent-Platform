@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from ai_multi_agent_platform.security import authentication_mobile as mobile_authentication
 from ai_multi_agent_platform.security.authentication import (
     AuthenticationError,
     AuthenticationFailure,
@@ -161,7 +162,59 @@ def test_mobile_pairing_rejects_expired_cancelled_wrong_and_cross_user_use() -> 
     assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
 
 
-def test_mobile_pairing_rate_limits_idless_fallback_abuse() -> None:
+def test_mobile_pairing_rate_limits_idless_fallback_without_global_lockout() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    grant = auth.mobile_pairing.create_challenge(
+        user.user_id,
+        "https://platform.example",
+        now=NOW,
+    )
+
+    for attempt in range(5):
+        with pytest.raises(AuthenticationError) as invalid:
+            auth.mobile_pairing.consume_challenge(
+                None,
+                "WRONG-FALLBACK-CODE",
+                device_name="Attacker",
+                caller_ref="198.51.100.10",
+                now=NOW + timedelta(seconds=attempt),
+            )
+        assert invalid.value.failure is AuthenticationFailure.INVALID_CREDENTIALS
+
+    with pytest.raises(AuthenticationError) as limited:
+        auth.mobile_pairing.consume_challenge(
+            None,
+            "WRONG-FALLBACK-CODE",
+            device_name="Attacker",
+            caller_ref="198.51.100.10",
+            now=NOW + timedelta(seconds=5),
+        )
+    assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
+
+    # A bad proof bucket must not lock out an unrelated legitimate fallback proof,
+    # even when both requests arrive through the same transport peer/reverse proxy.
+    device, issued = auth.mobile_pairing.consume_challenge(
+        None,
+        grant.secret,
+        device_name="Alice phone",
+        caller_ref="198.51.100.10",
+        now=NOW + timedelta(seconds=6),
+    )
+    assert device.user_id == user.user_id
+    assert (
+        auth.authenticate_bearer(
+            issued.secret,
+            now=NOW + timedelta(seconds=7),
+        ).identity.actor_id
+        == user.user_id
+    )
+
+
+def test_mobile_pairing_varied_fallback_codes_share_bounded_buckets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mobile_authentication, "_FALLBACK_RATE_BUCKETS", 1)
     auth = _service()
     user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
     auth.mobile_pairing.create_challenge(
@@ -174,8 +227,9 @@ def test_mobile_pairing_rate_limits_idless_fallback_abuse() -> None:
         with pytest.raises(AuthenticationError) as invalid:
             auth.mobile_pairing.consume_challenge(
                 None,
-                f"WRONG-{attempt}",
+                f"UNIQUE-WRONG-{attempt}",
                 device_name="Attacker",
+                caller_ref="198.51.100.10",
                 now=NOW + timedelta(seconds=attempt),
             )
         assert invalid.value.failure is AuthenticationFailure.INVALID_CREDENTIALS
@@ -183,11 +237,38 @@ def test_mobile_pairing_rate_limits_idless_fallback_abuse() -> None:
     with pytest.raises(AuthenticationError) as limited:
         auth.mobile_pairing.consume_challenge(
             None,
-            "WRONG-FINAL",
+            "ANOTHER-UNIQUE-WRONG-CODE",
             device_name="Attacker",
+            caller_ref="198.51.100.10",
             now=NOW + timedelta(seconds=5),
         )
     assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
+
+
+def test_mobile_pairing_prunes_expired_challenges_after_replay_window() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    old = auth.mobile_pairing.create_challenge(
+        user.user_id,
+        "https://platform.example",
+        now=NOW,
+    )
+    auth.mobile_pairing.consume_challenge(
+        old.pairing_id,
+        old.secret,
+        device_name="Old phone",
+        now=NOW + timedelta(seconds=1),
+    )
+    assert old.pairing_id in auth.store.mobile_pairings
+
+    fresh = auth.mobile_pairing.create_challenge(
+        user.user_id,
+        "https://platform.example",
+        now=NOW + timedelta(minutes=6),
+    )
+
+    assert old.pairing_id not in auth.store.mobile_pairings
+    assert fresh.pairing_id in auth.store.mobile_pairings
 
 
 def test_mobile_device_management_is_owner_bound() -> None:

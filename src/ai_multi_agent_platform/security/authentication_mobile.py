@@ -29,6 +29,7 @@ from .authorization import ActorType
 
 _PAIRING_ALPHABET = "".join(ch for ch in ascii_uppercase + digits if ch not in "0O1I")
 _PAIRING_PROTOCOL_VERSION = "1"
+_FALLBACK_RATE_BUCKETS = 1024
 _MOBILE_CREDENTIAL_SCOPE: dict[str, JsonValue] = {
     "actions": ["view", "read", "create", "modify", "execute", "approve"],
     "resource_types": [],
@@ -61,6 +62,7 @@ class MobilePairingService:
         )
         self.challenge_ttl = challenge_ttl
         self.max_failed_attempts = max_failed_attempts
+        self._fallback_rate_salt = secrets.token_bytes(32)
         self._lock = threading.Lock()
 
     def create_challenge(
@@ -72,6 +74,8 @@ class MobilePairingService:
         correlation_id: str | None = None,
     ) -> MobilePairingGrant:
         current = authentication_now(now)
+        with self._lock:
+            self._prune_expired_challenges(current)
         origin = normalize_pairing_origin(server_origin)
         self.authentication._require_account_active(self.authentication._user(user_id))
         pairing_id = new_id("pairing")
@@ -148,6 +152,7 @@ class MobilePairingService:
         platform: str | None = None,
         metadata: dict[str, JsonValue] | None = None,
         protocol_version: str = _PAIRING_PROTOCOL_VERSION,
+        caller_ref: str | None = None,
         now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> tuple[PairedMobileDevice, IssuedCredential]:
@@ -157,9 +162,11 @@ class MobilePairingService:
             code,
             device_name=device_name,
             protocol_version=protocol_version,
+            caller_ref=caller_ref,
             now=current,
         )
         with self._lock:
+            self._prune_expired_challenges(current, preserve_pairing_id=pairing_id)
             challenge = self._validate_pairing_proof(
                 pairing_id,
                 supplied,
@@ -195,6 +202,7 @@ class MobilePairingService:
         *,
         device_name: str,
         protocol_version: str,
+        caller_ref: str | None,
         now: datetime,
     ) -> tuple[str, str, str]:
         if protocol_version != _PAIRING_PROTOCOL_VERSION:
@@ -205,10 +213,28 @@ class MobilePairingService:
         supplied = _normalize_code(code)
         if not supplied:
             raise MobilePairingError("pairing code must not be blank")
-        rate_key = f"mobile-pairing:{pairing_id or 'fallback'}"
+        if pairing_id is not None:
+            rate_key = f"mobile-pairing:id:{pairing_id}"
+        else:
+            peer = caller_ref.strip() if isinstance(caller_ref, str) else ""
+            proof_bucket = self._fallback_rate_bucket(supplied)
+            rate_key = f"mobile-pairing:fallback:{peer or 'local'}:{proof_bucket}"
         if not self.authentication.rate_limiter.allow(rate_key, now=now):
             raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
         return display_name, supplied, rate_key
+
+    def _fallback_rate_bucket(self, supplied: str) -> str:
+        # A process-private salt prevents callers from selecting a particular bucket.
+        # Fixed bucket cardinality bounds limiter keys per observed peer while still
+        # forcing varied bogus proofs to accumulate failures instead of allocating
+        # one fresh limiter key per submitted code.
+        digest = hmac.digest(
+            self._fallback_rate_salt,
+            supplied.encode("utf-8"),
+            "sha256",
+        )
+        bucket = int.from_bytes(digest[:4], "big") % _FALLBACK_RATE_BUCKETS
+        return f"{bucket:04x}"
 
     def _validate_pairing_proof(
         self,
@@ -413,13 +439,29 @@ class MobilePairingService:
         supplied_verifier = secret_verifier(supplied)
         match: MobilePairingChallenge | None = None
         for candidate in self.store.mobile_pairings.values():
-            # Compare every candidate so the fallback-code lookup does not early-exit on secrets.
+            if not candidate.active(now=now):
+                continue
+            # Compare every active candidate so fallback lookup does not early-exit on secrets.
             equal = hmac.compare_digest(supplied_verifier, candidate.secret_verifier)
-            if equal and candidate.active(now=now):
+            if equal:
                 if match is not None:
                     return None
                 match = candidate
         return match
+
+    def _prune_expired_challenges(
+        self,
+        now: datetime,
+        *,
+        preserve_pairing_id: str | None = None,
+    ) -> None:
+        expired = [
+            pairing_id
+            for pairing_id, challenge in self.store.mobile_pairings.items()
+            if pairing_id != preserve_pairing_id and now >= challenge.expires_at
+        ]
+        for pairing_id in expired:
+            del self.store.mobile_pairings[pairing_id]
 
     def _owned_challenge(self, user_id: str, pairing_id: str) -> MobilePairingChallenge:
         challenge = self.store.mobile_pairings.get(pairing_id)

@@ -337,6 +337,7 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             query=request.query,
             body=request.body,
             trusted_actor=trusted_actor,
+            transport_peer=request.transport_peer,
         )
 
 

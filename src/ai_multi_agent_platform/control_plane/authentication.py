@@ -571,6 +571,7 @@ def _with_request_ids(
         headers=headers,
         query=request.query,
         body=request.body,
+        transport_peer=request.transport_peer,
     )
 
 
@@ -609,6 +610,7 @@ def _with_authenticated_actor(
         headers=headers,
         query=request.query,
         body=request.body,
+        transport_peer=request.transport_peer,
     )
 
 
