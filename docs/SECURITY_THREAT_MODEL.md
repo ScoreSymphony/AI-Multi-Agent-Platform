@@ -309,7 +309,7 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 - direct adapter calls bypassing canonical policy;
 - approval replay against a different action.
 
-**Required mitigations for #15/#36**
+**Required authentication and authorization mitigations**
 
 - canonical identity with revocation semantics;
 - authorization at backend enforcement points;
@@ -372,7 +372,7 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 - over-broad secret delivery;
 - malicious/fabricated results.
 
-**Required model for #14/#36**
+**Required remote Worker security model**
 
 - canonical worker/service identity;
 - authenticated registration and dispatch;
@@ -395,7 +395,7 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 - provider/webhook payloads, credentials or secrets leak into coordinator persistence or telemetry;
 - a future external durable-workflow adapter is treated as an authority source rather than a replaceable runtime mechanism.
 
-**Required mitigations for #384**
+**Required durable-coordination mitigations**
 
 - durable waits bind to canonical Task/Plan/Step identity plus exact owner/project scope;
 - Approval waits bind to the exact Approval ID, subject type, subject ID and action;
@@ -457,26 +457,27 @@ Review this threat model when any of the following changes:
 - new persistence boundary or multi-tenant deployment model;
 - discovered vulnerability, near miss or security regression.
 
-## 14. Required downstream extensions
+## 14. Required subsystem extensions
 
-The following issues must revisit this document and add subsystem-specific tests/controls:
+Every security-sensitive subsystem must keep this threat model and its own tests/controls aligned.
+Current extension areas include:
 
-- #12 capability/tool invocation threats;
-- #14 remote Worker/Node threats;
-- #15 authorization/approval enforcement;
-- #20 plugin isolation and supply chain;
-- #34 secret/config handling;
-- #35 transport/replay/message security;
-- #36 authentication/session/service identity;
-- #37 workspace/materialization isolation;
-- #42 update/upstream integrity;
-- #44 connectors/external events;
-- #74 browser/network/web-content threats;
-- #79 import/export package threats;
-- #81 registry/distribution trust;
-- #82 repository/Git side effects;
-- #384 durable Plan/Step coordination, replay, repair and fencing threats;
-- #46 end-to-end conformance of the accumulated security invariants.
+- capability/tool invocation threats;
+- remote Worker/Node threats;
+- authorization/approval enforcement;
+- plugin isolation and supply chain;
+- secret/config handling;
+- transport/replay/message security;
+- authentication/session/service identity;
+- workspace/materialization isolation;
+- update/upstream integrity;
+- connectors/external events;
+- browser/network/web-content threats;
+- import/export package threats;
+- registry/distribution trust;
+- repository/Git side effects;
+- durable Plan/Step coordination, replay, repair and fencing threats;
+- end-to-end conformance of the accumulated security invariants.
 
 Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for every security-sensitive subsystem.
 
@@ -493,14 +494,14 @@ Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for eve
 - adapter-private metadata cannot grant authority;
 - optional adapter absence does not alter canonical security ownership.
 
-Issue #384 extends the same regression baseline with coordinator-specific coverage for foreign-scope Event/wait resolution, exact Approval subject/action binding, duplicate/replayed wakeups, stale fencing tokens, conservative reconciliation and safe coordinator persistence/telemetry descriptors.
+The durable-coordination regression baseline adds coverage for foreign-scope Event/wait resolution, exact Approval subject/action binding, duplicate/replayed wakeups, stale fencing tokens, conservative reconciliation and safe coordinator persistence/telemetry descriptors.
 
 Future subsystem tests should extend this baseline rather than create separate, incompatible security rules.
 
 
 ## 16. Production side-effect boundary conformance
 
-Issue #1233 reconciles the maintained threat model against every claimed V1 mutation and
+The production side-effect conformance matrix reconciles the maintained threat model against every claimed V1 mutation and
 side-effect surface. The executable inventory is
 [`production_boundary_matrix.toml`](../conformance/security/production_boundary_matrix.toml),
 validated by [`security_boundary_conformance.py`](../scripts/ci/security_boundary_conformance.py),
