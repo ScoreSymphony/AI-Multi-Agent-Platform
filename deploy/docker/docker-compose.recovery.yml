@@ -12,7 +12,6 @@ services:
       - type: volume
         source: platform-data
         target: /var/lib/ai-multi-agent-platform
-        read_only: true
         volume:
           subpath: restored-data
       - type: bind
