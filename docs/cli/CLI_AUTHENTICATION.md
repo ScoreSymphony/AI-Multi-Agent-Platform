@@ -1,6 +1,6 @@
 # CLI authentication and credential handling
 
-Issue #214 consumes the canonical #36 authentication/session/credential HTTP contracts. The CLI remains a northbound client and never reads the authentication store or other backend state directly.
+The authentication CLI consumes the canonical authentication/session/credential HTTP contracts. The CLI remains a northbound client and never reads the authentication store or other backend state directly.
 
 ## Commands
 
@@ -50,7 +50,7 @@ CLI profile
                               /api/v1 Control Plane
                                       |
                                       v
-                          #36 authentication boundary
+                          authentication boundary
 ```
 
 Browser sessions use the canonical `HttpOnly` session cookie returned by `/auth/login`; mutating session requests also send the canonical CSRF token. Renew rotates both values. Logout revokes the active browser session before clearing local state.
@@ -63,7 +63,7 @@ Bearer credentials use `Authorization: Bearer ...`. `AI_PLATFORM_TOKEN` may prov
 
 Ordinary CLI profiles remain explicitly non-secret. Session cookies, CSRF tokens and bearer secrets are stored separately in `cli.credentials.json` beside the selected profile configuration by default. `AI_PLATFORM_CREDENTIAL_STORE` can select another path. The CLI writes the file atomically and requests mode `0600` on platforms that support POSIX permissions.
 
-Passwords and tokens can be read from hidden input or stdin and are never copied into normal profile configuration. Login output excludes the session cookie and CSRF token. Personal credential creation consumes the #36 one-time secret into the credential store and removes that secret from rendered output. `auth status` reports only safe local metadata such as mode, expiry and credential ID.
+Passwords and tokens can be read from hidden input or stdin and are never copied into normal profile configuration. Login output excludes the session cookie and CSRF token. Personal credential creation consumes the one-time authentication secret into the credential store and removes that secret from rendered output. `auth status` reports only safe local metadata such as mode, expiry and credential ID.
 
 The existing renderer continues to apply the platform redaction layer to all machine and human output.
 

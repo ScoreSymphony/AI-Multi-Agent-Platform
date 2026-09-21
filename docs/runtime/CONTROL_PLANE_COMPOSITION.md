@@ -1,13 +1,10 @@
 # Explicit Control Plane composition
 
-Issue: #982  
-Builds on: #723, #32
-
 The canonical Control Plane has one extension mechanism for later platform domains: explicit module registration. Domain behavior remains in the domain service or an adapter around that service; Python inheritance is not a domain-ownership mechanism.
 
 ## Boundary
 
-The focused service decomposition introduced by #723 remains unchanged. `control_plane.service.ControlPlane` continues to own the stable foundation façade and delegates to its focused Task/Run, scope, event, health, authorization and model components.
+The focused service decomposition remains unchanged. `control_plane.service.ControlPlane` continues to own the stable foundation façade and delegates to its focused Task/Run, scope, event, health, authorization and model components.
 
 Later domains expose northbound behavior through `ControlPlaneModule`:
 
@@ -88,9 +85,9 @@ Architecture tests reject every new or changed multiple-inheritance stack on a `
 
 ## Migration inventory
 
-The #982 ownership audit found several places where independent later domains or domain registration were accumulated through the Control Plane inheritance graph.
+The ownership audit found several places where independent domains or domain registration had accumulated through the Control Plane inheritance graph.
 
-| Pre-#982 composition | Risk | #982 state |
+| Previous composition | Risk | Maintained state |
 | --- | --- | --- |
 | `ApprovalControlPlane + PortabilityControlPlane` in the single-node product composition | two domain parents; MRO decided initialization and registration order | Portability is an explicit `portability` module; canonical composition has one Control Plane base |
 | `PluginControlPlane + TerminalControlPlane` | two domain parents; plugin/terminal behavior coupled through MRO | Plugin lifecycle is an explicit `plugins` module and Terminal is an explicit `terminal` module; canonical plugin/terminal composition has one Control Plane base |
@@ -104,7 +101,7 @@ The #982 ownership audit found several places where independent later domains or
 | Goals, Decision Records and Governance in the product constructor | direct registrations had anonymous/manual ownership rather than domain ownership | named `goals`, `decision-records` and `governance` modules |
 | `portability_api.ControlPlane` | commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `portability_module.py` |
 | `plugin_api.ControlPlane` | lifecycle commands/resources and conflict guards lived in a subclass | compatibility façade only; domain behavior lives in `plugin_module.py` |
-| focused #723 service façade | ordinary implementation façade, not a later-domain composition mechanism | preserved |
+| focused service façade | ordinary implementation façade, not a later-domain composition mechanism | preserved |
 
 Reviewed historical implementation classes may still exist for compatibility or focused tests, but they are no longer imported as canonical ownership boundaries. The architecture guard records their exact shape and rejects new domain-composition stacks.
 
@@ -136,7 +133,7 @@ The `TaskProjectReassignmentService` remains the lifecycle/relationship owner, a
 
 Organization command authorizers preserve the existing organization/team scope checks and explicit cross-organization share permission. `CanonicalOwnershipMirror` remains an integration service; it observes successful commands and mirrors canonical owners without becoming a second command bus.
 
-Optional Accounting projections are installed through the independent `accounting` module. The same `AccountingService` instance continues to serve the existing threshold/evaluation integrations; #982 changes only northbound ownership, not accounting authority.
+Optional Accounting projections are installed through the independent `accounting` module. The same `AccountingService` instance continues to serve the existing threshold/evaluation integrations; the composition change affects only northbound ownership, not accounting authority.
 
 `organization-audit` declares an explicit dependency on `organizations`, owns `organization-audit-events`, and records successful Organization mutations as a post-success projection.
 

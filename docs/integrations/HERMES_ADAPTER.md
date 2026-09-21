@@ -1,6 +1,6 @@
 # Hermes orchestrator adapter
 
-Issue #8 integrates Hermes Agent as the first production-oriented **optional orchestrator adapter**. Hermes remains a separately deployed service and does not become the source of truth for Tasks, Runs, Agents, Teams, Plans, Steps, approvals, model assignments, capabilities, artifacts, results or lifecycle state.
+Hermes Agent is an optional production-oriented orchestrator adapter. Hermes remains a separately deployed service and does not become the source of truth for Tasks, Runs, Agents, Teams, Plans, Steps, approvals, model assignments, capabilities, artifacts, results or lifecycle state.
 
 ## Integration boundary
 
@@ -60,7 +60,7 @@ Retry behavior is also explicit: the adapter performs **no hidden automatic requ
 
 Supported behavior is advertised through `ProviderDescriptor`: the adapter publishes its canonical operations/capabilities, availability/health, transport mode, retry/bridge/diagnostic modes, compatibility status and expected upstream revision. Features not listed there or in the supported-behavior section below are not implied by the presence of a Hermes deployment.
 
-Baseline diagnostics are intentionally bounded: the adapter propagates `X-Correlation-Id`, exposes health, and preserves backend identity/status details only in the `hermes` adapter-metadata namespace. Secret values are resolved only when sending a request and are not copied into canonical metadata. The baseline adapter does not log request/response payloads or credentials. Cross-layer logs, traces and metrics belong to the platform observability work in #16 rather than to a Hermes-private logging model.
+Baseline diagnostics are intentionally bounded: the adapter propagates `X-Correlation-Id`, exposes health, and preserves backend identity/status details only in the `hermes` adapter-metadata namespace. Secret values are resolved only when sending a request and are not copied into canonical metadata. The baseline adapter does not log request/response payloads or credentials. Cross-layer logs, traces and metrics belong to the platform Observability domain rather than to a Hermes-private logging model.
 
 `pinned_revision` is the **expected compatibility target**, not a claim that an arbitrary remote service has cryptographically attested its running source revision. The repository treats a revision as verified only after the pinned compatibility fixture and full CI pass for that revision. Pointing `base_url` at another Hermes revision therefore requires `compatibility_status=unverified_pin` until the pin, provenance record and compatibility tests are updated together.
 
@@ -116,7 +116,7 @@ Malformed or structurally invalid Hermes output becomes `INVALID_PROVIDER_RESPON
 
 ## Exact Agent revision mapping
 
-`HermesAgentMapper` implements the #33 `AgentOrchestratorMapper` seam. It consumes the exact `AgentExecutionSpec` that was already resolved and pinned by `AgentRuntime`.
+`HermesAgentMapper` implements the `AgentOrchestratorMapper` seam. It consumes the exact `AgentExecutionSpec` that was already resolved and pinned by `AgentRuntime`.
 
 The adapter-private mapping records:
 
@@ -136,7 +136,7 @@ Hermes may accept a provider/model selector, but provider-native names are not c
 
 When `AgentExecutionSpec.selected_model_config_id` is set, `HermesAgentMapper` requires an explicit entry in `model_bridge`. Missing mappings fail with `INVALID_CONFIGURATION`; the adapter never silently selects a different model.
 
-This keeps model ownership in #10:
+This keeps model ownership in the Model domain:
 
 ```text
 canonical ModelRegistry / ModelRouter
@@ -155,7 +155,7 @@ The bridge entry is a translation target, not approval authority. Canonical perm
 
 ## Team mapping
 
-The exact #33 Team revision maps into adapter-private coordination metadata:
+The exact Team revision maps into adapter-private coordination metadata:
 
 - Team ID/revision/name;
 - exact member Agent IDs/revisions and roles;

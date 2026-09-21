@@ -1,6 +1,6 @@
 # Model System
 
-Issue #10 defines the platform-owned model system as three separate responsibilities:
+The platform-owned model system separates three responsibilities:
 
 ```text
 ModelProvider -> ModelRegistry -> ModelRouter -> Agents / Tasks / Orchestrators
@@ -51,7 +51,7 @@ The router exposes its decision reason and candidate IDs through namespaced adap
 
 ## Current request compatibility
 
-Issue #5 introduced the baseline `ModelRequest.requirements` mapping before the richer #10 model system existed. The router currently parses the following canonical requirement keys into typed `RoutingRequirements`:
+The baseline `ModelRequest.requirements` mapping predates the richer typed model-routing layer. The router currently parses the following canonical requirement keys into typed `RoutingRequirements`:
 
 - `model_config_id`
 - `min_context_window`
@@ -63,7 +63,7 @@ Issue #5 introduced the baseline `ModelRequest.requirements` mapping before the 
 - `local_only`
 - `self_hosted_only`
 
-This keeps the stable #5 request envelope compatible with the richer #10 canonical model request/response layer.
+This keeps the stable request envelope compatible with the richer canonical model request/response layer.
 
 ## Durable routing profiles and default policy
 

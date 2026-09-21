@@ -1,6 +1,6 @@
 # Platform Security Threat Model
 
-Status: normative baseline for issue #43. This document is intentionally living and must be extended as security-sensitive subsystems land.
+Status: normative security baseline. This document is intentionally living and must be extended as security-sensitive subsystems land.
 
 ## 1. Purpose and scope
 
@@ -166,7 +166,7 @@ The initial reusable type is `ai_multi_agent_platform.security.SecurityContext`.
 
 ### 9.2 Secure-default decisions
 
-The baseline decision model is explicit `ALLOW`, `DENY` or `REQUIRE_APPROVAL`. `baseline_decision(...)` is deny-by-default and deliberately ignores adapter metadata. Issue #15 will supply the final authorization/approval engine while preserving these semantics.
+The baseline decision model is explicit `ALLOW`, `DENY` or `REQUIRE_APPROVAL`. `baseline_decision(...)` is deny-by-default and deliberately ignores adapter metadata. The canonical authorization/approval engine preserves these semantics.
 
 ### 9.3 Input validation
 
@@ -193,7 +193,7 @@ Plaintext secret material must not be part of normal canonical objects. Use scop
 
 Before logs, traces, events, diagnostics or exports, sensitive mappings must pass reusable redaction. `redact_sensitive(...)` recursively redacts common password/token/key fields and serializes secret references without resolving them.
 
-Issue #34 must integrate real secret storage/config resolution and expand classification/redaction coverage.
+Secret storage/configuration uses the canonical secret-resolution boundary and centralized classification/redaction coverage.
 
 ### 9.6 Network and SSRF hooks
 
@@ -209,11 +209,11 @@ Future network/browser/connector implementations must have a policy seam before 
 - explicit classification of external side effects;
 - cookie/session isolation per provider/user/project scope.
 
-Issue #74 extends these requirements for browser/web content.
+The browser/network security boundary extends these requirements to web content.
 
 ### 9.7 Replay and deduplication hooks
 
-External/distributed messages must carry stable identities/idempotency keys where repeated delivery can cause side effects. Consumers must distinguish duplicate delivery from a new authorized action. Issue #35 owns transport semantics; #14/#36 extend worker identity and dispatch security; #44 extends webhook/connector verification.
+External/distributed messages must carry stable identities/idempotency keys where repeated delivery can cause side effects. Consumers must distinguish duplicate delivery from a new authorized action. Canonical messaging owns transport semantics; distributed compute and authentication own Worker identity and dispatch security; Connector security owns webhook/connector verification.
 
 ### 9.8 Resource limits
 

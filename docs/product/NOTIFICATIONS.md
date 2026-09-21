@@ -1,6 +1,6 @@
 # Notifications and user attention
 
-Issue #75 defines the platform-owned notification and user-attention subsystem.
+The Notifications domain defines the platform-owned notification and user-attention subsystem.
 
 Notifications are **projections over canonical source state**. They are not the source of truth
 for Tasks, Runs, Approvals, Verifications, Automations, memberships, accounting/resource state,
@@ -63,7 +63,7 @@ existence is not leaked.
 
 Two separate checks intentionally exist:
 
-1. `RecipientEligibilityGuard` is evaluated before **new** attention is created. A #15/#87-aware
+1. `RecipientEligibilityGuard` is evaluated before **new** attention is created. A Authorization/Organization-aware
    deployment can stop new delivery to a removed, suspended or otherwise ineligible recipient.
 2. The public Notification Control Plane rechecks the **current source-resource authorization** on
    every list/get/count/mutation request using the actual authenticated `RequestContext`. The
@@ -109,8 +109,8 @@ condition returns the existing active notification without incrementing occurren
 without redelivering external channels. Dismissed or archived notifications are no longer active,
 so a later evaluation may surface a still-relevant source condition again.
 
-Issue #88 integration derives assignment, dependency, approaching-deadline, and overdue attention
-from `TaskManagementView`. #75 does not parse Task planning metadata into a competing truth. The
+Task-management integration derives assignment, dependency, approaching-deadline, and overdue attention
+from `TaskManagementView`. Notifications does not parse Task planning metadata into a competing truth. The
 autonomous `NotificationRuntime` runs reminder evaluation on its normal poll tick and applies each
 recipient's configured lead time.
 
@@ -125,36 +125,36 @@ never rolled back or reported as failed merely because notification projection f
 
 ## Completed source-domain wiring
 
-The completed source domains requested by the #75 hardening audit are connected to
+The completed source domains requested by the hardening audit are connected to
 `NotificationService`, not left as unused candidate helpers:
 
-- **#15 Approval:** `AuthorizationGate` exposes a best-effort Approval lifecycle observer.
+- **Approval:** `AuthorizationGate` exposes a best-effort Approval lifecycle observer.
   Newly-created pending approvals emit `required`; approved/rejected/cancelled decisions emit
   `resolved`. The Notification composition consumes those events through
   `approval_required_candidate(...)` / `approval_resolved_candidate(...)`. Required-approval
-  recipients are resolved by an explicit `ApprovalRecipientResolver`; #75 never assumes that the
+  recipients are resolved by an explicit `ApprovalRecipientResolver`; Notifications never assumes that the
   requester is also the approver. Observer failures cannot change authoritative Approval state.
-- **#76 Accounting:** the Notification composition fans out the existing synchronous budget
+- **Accounting:** the Notification composition fans out the existing synchronous budget
   threshold sink. Thresholds with an explicit canonical budget owner are queued and drained by the
   autonomous Notification runtime into warning/exceeded resource attention. Missing/invalid owner
   metadata is skipped rather than guessed, and Accounting ingestion remains authoritative.
-- **#18 Automation:** Automation delivery `failed`/`rejected` audit events are projected directly
+- **Automation:** Automation delivery `failed`/`rejected` audit events are projected directly
   to canonical Automation notifications with stable per-delivery aggregation identity. Automation
   lifecycle success/failure remains authoritative if attention projection fails.
-- **#44 Connectors:** `register_connector_control_plane()` discovers the optional provider-neutral
+- **Connectors:** `register_connector_control_plane()` discovers the optional provider-neutral
   `connector_health_event_sink` on the Notification Control Plane. A real `connection.health`
-  transition to `degraded` or `error` projects Connector attention. #44 commits the Connection
+  transition to `degraded` or `error` projects Connector attention. Connector lifecycle commits the Connection
   health/status first; a Notification failure cannot change the health-check result.
 
-Issue #88 Task-management change projections remain directly integrated as well.
+Task-management change projections remain directly integrated as well.
 
 ## Follow-up-domain seams
 
 Implemented seams that deliberately remain opaque until their owning domains define final
 vocabulary include:
 
-- #86 Verification keyed by canonical `verification_*` ID plus an attention label;
-- #87 membership/invitation keyed by canonical `membership_*` ID plus canonical recipient scope;
+- Verification keyed by canonical `verification_*` ID plus an attention label;
+- membership/invitation keyed by canonical `membership_*` ID plus canonical recipient scope;
 - provider-neutral agent-input, Node/Worker and similar attention through
   `canonical_attention_candidate(...)`.
 
@@ -279,17 +279,17 @@ directly.
 
 ## Testing boundary
 
-Issue #75 hardening coverage includes:
+Notification hardening coverage includes:
 
 - production-shaped Task -> Event -> Notification -> restart projection;
 - runtime cursor replay/dedupe after restart;
 - Approval required/resolved through the real `AuthorizationGate` observer path;
 - explicit Approval-recipient resolution without requester/approver inference;
-- #76 budget threshold -> runtime tick -> Notification projection;
-- #18 Automation failure event -> Notification projection;
-- #44 real Connector health transition -> Notification projection;
+- Accounting budget threshold -> runtime tick -> Notification projection;
+- Automation failure event -> Notification projection;
+- real Connector health transition -> Notification projection;
 - source-domain observer failure isolation from authoritative Approval/Automation/Connector state;
-- #88 assignment/dependency/deadline projections and autonomous reminder idempotence;
+- Task-management assignment/dependency/deadline projections and autonomous reminder idempotence;
 - reminder preference and quiet-hours behavior;
 - preference backward compatibility across SQLite restart;
 - current source-authorization revocation across inbox list/get/count/actions/mark-all-read;

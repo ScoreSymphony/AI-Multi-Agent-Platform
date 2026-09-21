@@ -1,13 +1,12 @@
-# Issue #591 strict external-profile follow-up
+# Strict external egress profiles
 
 ## Purpose
 
-The original #591 implementation retained a compatibility path for known external targets that did
-not expose an `EgressProfile`. That path preserved historical behavior, but it also meant the
-production-shaped durable runtime could not prove the baseline "no paid/unknown external route"
-policy when cost and trust metadata were absent entirely.
+The lower-level egress policy retains a compatibility path for known external targets that do
+not expose an `EgressProfile`. The production-shaped durable runtime applies a stricter baseline so
+"no paid/unknown external route" remains enforceable even when cost and trust metadata are absent.
 
-This follow-up closes that gap without removing the lower-level compatibility seam. The material
+The durable production profile closes that gap without removing the lower-level compatibility seam. The material
 security-boundary decision is normative in
 [ADR 0011](../adr/0011-require-explicit-external-egress-profiles.md) and is reflected in
 `docs/ARCHITECTURE_PRINCIPLES.md` and `docs/security/DATA_CLASSIFICATION_AND_EGRESS.md`.

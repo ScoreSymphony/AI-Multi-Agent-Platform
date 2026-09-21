@@ -42,7 +42,7 @@ An Automation that was `enabled` on the source installation is materialized as `
 
 A source Automation that is already `paused`, `disabled` or `invalid` remains non-running. Invalid Automations preserve their categorical invalidation metadata because that metadata is part of the canonical lifecycle contract.
 
-When a paused imported Automation is later resumed, the ordinary #18 lifecycle computes destination scheduler state. The import never restores the source `next_evaluation_at` value.
+When a paused imported Automation is later resumed, the ordinary Automation lifecycle computes destination scheduler state. The import never restores the source `next_evaluation_at` value.
 
 ## Identity and privacy
 
@@ -67,4 +67,4 @@ Automation portability does not:
 - transfer plaintext webhook secrets;
 - transfer scheduler implementation state;
 - bypass canonical Task creation, authorization, deduplication or observability;
-- redefine the normal pause/resume/disable/invalid lifecycle from issue #18/#241.
+- redefine the normal Automation pause/resume/disable/invalid lifecycle.

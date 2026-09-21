@@ -1,7 +1,5 @@
 # Connector and External Integration Framework
 
-Issue: #44
-
 ## Purpose
 
 The connector domain represents configured relationships with externally owned systems without
@@ -35,8 +33,8 @@ For durable external-resource wrappers, the repository treats `(connection_id, r
 native_reference.namespace, native_reference.native_id)` as the provider-native identity key. Once
 that key has a canonical `external_resource_*` wrapper, later synchronization results reuse the
 existing canonical ID even when a recreated adapter proposes a different temporary ID. Provider IDs
-therefore cannot fork one remote object into multiple canonical wrapper identities. A future durable
-ConnectorRepository implementation must persist this same mapping rather than weakening the
+therefore cannot fork one remote object into multiple canonical wrapper identities. Any durable
+`ConnectorRepository` implementation must persist this same mapping rather than weakening the
 invariant.
 
 The external system continues to own repositories, messages, calendar events, files, records,
@@ -75,8 +73,7 @@ Operations are capability declarations, not assumptions. Callers must not infer 
 connector supports mutation, subscriptions, webhooks, synchronization, file transfer or knowledge
 ingestion. Unsupported operations fail canonically.
 
-The connector domain is independent from the plugin runtime. A provider may be registered directly
-today and packaged by #20 later without changing any connector resource contract.
+The connector domain is independent from the plugin runtime. A provider may be registered directly or supplied through plugin packaging without changing any connector resource contract.
 
 ## Connections and credentials
 
@@ -87,7 +84,7 @@ not a Connection field and must not be copied into Agent definitions, Tasks, eve
 The reference provider demonstrates the intended flow:
 
 1. the Connection contains a `SecretReference`;
-2. connector validation resolves that reference through the replaceable #34 `SecretProvider`;
+2. connector validation resolves that reference through the replaceable `SecretProvider`;
 3. resolution supplies a narrow `SecretAccessContext` for that connector operation;
 4. only the adapter receives short-lived resolved material;
 5. canonical serialization exposes the reference, never the material;
@@ -95,14 +92,13 @@ The reference provider demonstrates the intended flow:
 
 OAuth/OIDC tokens, API tokens, service-account credentials, local credentials and webhook-signing
 secrets can all use this same reference boundary. Authentication flow implementations remain
-adapter-specific; configured authenticated actor context comes from #36 and authorization remains
-owned by #15.
+adapter-specific; configured authenticated actor context comes from Authentication and authorization remains owned by the canonical Authorization domain.
 
 ## Authorization and approvals
 
 `ConnectorService` is the canonical lifecycle/security boundary. When composed with an
 `AuthorizationGate`, connection creation, enable/disable, deletion, health/read operations,
-external resource reads, synchronization, subscription management and external actions produce #15
+external resource reads, synchronization, subscription management and external actions produce canonical
 authorization requests.
 
 Authorization is evaluated with the Connection's actual owner, project and organization scope, not
@@ -115,12 +111,12 @@ binds its Connection, capability/action name, invocation identifier and argument
 one action payload cannot authorize a different payload.
 
 The service can run without a gate only for deterministic reference/contract tests or deliberately
-minimal internal composition. Production/northbound composition must supply the normal #15
-server-side enforcement path rather than treating a client check as authority.
+minimal internal composition. Production/northbound composition must supply the normal
+server-side authorization enforcement path rather than treating a client check as authority.
 
 ## Canonical capability bridge
 
-Connector actions use the existing #12 capability system:
+Connector actions use the existing Capability system:
 
 ```text
 CapabilityInvocation
@@ -165,9 +161,7 @@ into a provider-neutral `ConnectorEvent` containing:
 - provenance and normalized payload.
 
 An external event is evidence/input, not execution authority. Receiving, subscribing to or verifying
-a connector event must never directly perform privileged work. #18 may consume verified events as
-automation triggers later, and #35 may transport them across processes, without changing the
-connector event contract.
+a connector event must never directly perform privileged work. Automation may consume verified events as triggers, and MessageTransport may carry them across processes, without changing the connector event contract.
 
 ## Synchronization and recovery
 
@@ -219,7 +213,7 @@ It exists for tests and development, not as a production SaaS integration.
 
 ## Control Plane extension
 
-`register_connector_control_plane()` uses the registration seam from #32 instead of modifying the
+`register_connector_control_plane()` uses the canonical Control Plane registration seam instead of modifying the
 Control Plane foundation. It registers:
 
 Resources:
@@ -253,12 +247,12 @@ response.
 `external-resource.detach` removes only the platform-owned wrapper and never mutates the
 provider-native object.
 
-Connector actions are deliberately absent from this command list and remain behind #12. Event
+Connector actions are deliberately absent from this command list and remain behind the Capability invocation boundary. Event
 subscription hooks are provider/service contracts rather than a generic northbound execution bypass.
 
 ## File and knowledge boundaries
 
-A connector may later bridge an external object into the #13 `FileProvider` or `KnowledgeProvider`,
+A connector may later bridge an external object into the canonical `FileProvider` or `KnowledgeProvider`,
 but the connector contract does not redefine either resource. The integration should preserve both
 identities and provenance:
 

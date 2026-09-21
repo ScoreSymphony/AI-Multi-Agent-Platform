@@ -1,10 +1,7 @@
 # Authorization, Permissions and Approvals
 
-Issue: #15
-
 This document defines the platform-owned authorization boundary for the general-purpose
-AI Multi-Agent Platform. Authentication (#36) may establish an identity later, but
-authorization must not depend on one login provider, one deployment topology, one agent
+AI Multi-Agent Platform. Authentication establishes identity, but authorization must not depend on one login provider, one deployment topology, one agent
 framework, or one policy engine.
 
 ## 1. Security invariants
@@ -31,7 +28,7 @@ Authorization distinguishes execution identity from ownership/scope.
 
 | Actor type | Meaning |
 | --- | --- |
-| `human` | Human user established by a future authentication/session layer |
+| `human` | Human user established by the authentication/session layer |
 | `service` | Internal or external service identity |
 | `agent` | Agent execution identity; never automatically inherits unrestricted user authority |
 | `worker` | Node/worker service identity |
@@ -96,7 +93,7 @@ where appropriate.
 - namespaced adapter metadata.
 
 The original `allowed=True/False` constructor remains accepted as a compatibility shim for
-older issue-#5 fake/adapters, but new code should use the tri-state outcome.
+older provider fakes/adapters, but new code should use the tri-state outcome.
 
 ## 6. Reference policy provider
 
@@ -187,7 +184,7 @@ The current repository exposes explicit server-side wrappers in
 | Knowledge provider | `AuthorizedKnowledgeProvider` | index/query/get |
 | Secret provider | `AuthorizedSecretProvider` | create/resolve/rotate/revoke/delete/metadata |
 
-Issue #13's refined storage contracts are protected separately in
+The refined data-storage contracts are protected separately in
 `security/data_enforcement.py`:
 
 | Boundary | Wrapper | Protected refined operations |
@@ -199,12 +196,12 @@ Issue #13's refined storage contracts are protected separately in
 The refined wrappers deliberately protect their inherited core methods too. A caller
 cannot bypass policy by switching from a refined API method to the older provider method.
 
-The issue-#12 capability registry keeps its canonical governance hooks.
+The Capability Registry keeps its canonical governance hooks.
 `CapabilityAuthorizationBridge` maps capability metadata and invocation arguments to the
-same #15 policy/approval gate. Restricted/sensitive, external, destructive, or
+same canonical policy/approval gate. Restricted/sensitive, external, destructive, or
 credential-bearing capabilities are mapped to the sensitive action.
 
-The existing versioned v1 Control Plane predates the #15 action vocabulary and exposes
+The stable versioned v1 Control Plane exposes
 stable commands such as `task:start` and `project:create`. `ControlPlaneAuthorizationBridge`
 is the migration boundary: it maps those northbound strings into canonical
 `AuthorizationAction`/`ResourceType` values before policy evaluation, while keeping the
@@ -214,8 +211,7 @@ enrichment, such as a platform-generated `task_id`, does not alter that binding.
 the same approved request therefore resumes through the same gate, while any changed
 northbound payload produces a different proposed-action digest and requires a new approval.
 
-Future node/worker dispatch, connectors, automation, plugin management, and admin APIs
-must use this same gate rather than inventing a second permission model.
+Node/Worker dispatch, connectors, automation, plugin management, and admin APIs use this same gate rather than inventing a second permission model.
 
 ## 10. Secret handling
 
@@ -242,16 +238,16 @@ secret backend only after authorization.
 - approval ID;
 - requested-action digest.
 
-This is intentionally suitable for issue #16 observability sinks without making
+This is intentionally suitable for observability sinks without making
 observability the authority for policy.
 
 ## 12. Multi-user readiness
 
-The contract is ready for later authentication and multi-tenant policy because actor
+The contract supports authentication and multi-tenant policy because actor
 identity, organization/team/project/workspace scope, service identities, approval
 authority and resource permissions are explicit. The local provider intentionally does
 not pretend to be a complete enterprise IAM system.
 
-Authentication (#36) should create/resolve principals and sessions, then feed the
-canonical identity context into this authorization layer. It must not redefine the
+Authentication creates/resolves principals and sessions, then feeds the
+canonical identity context into this authorization layer. It does not redefine the
 authorization vocabulary.

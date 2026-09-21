@@ -1,6 +1,5 @@
 # Capability Registry and Tool Invocation
 
-Issue: #12
 
 ## Architectural rule
 
@@ -165,7 +164,7 @@ The repository includes a real stdio integration test that launches an MCP serve
 
 ## Policy and approval hooks
 
-Issue #12 defines integration hooks only. Issue #15 remains responsible for the final authorization/approval backend.
+The Capability domain defines integration hooks only. The Authorization domain remains responsible for the final authorization/approval backend.
 
 The capability contract distinguishes:
 
@@ -220,7 +219,7 @@ repository = SqliteKernelRepository("platform.db")
 observer = EventRepositoryInvocationObserver(repository)
 ```
 
-The default audit event deliberately excludes raw tool arguments and outputs. It stores IDs, status, provider metadata, approval decision, placement and errors. This is the default redaction boundary for #12; richer sensitive-data policy remains the responsibility of the authorization/observability layers.
+The default audit event deliberately excludes raw tool arguments and outputs. It stores IDs, status, provider metadata, approval decision, placement and errors. This is the default redaction boundary for capability execution; richer sensitive-data policy remains the responsibility of the authorization/observability layers.
 
 ## Optionality and replacement
 

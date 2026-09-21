@@ -1,6 +1,6 @@
 # Connector discovery in global Search
 
-This document defines the canonical Search integration for the Connector framework from issue #44, including durable `ExternalResourceReference` discovery from issue #292.
+This document defines the canonical Search integration for Connector Definitions, Connections and durable `ExternalResourceReference` discovery.
 
 ## Canonical source boundary
 
@@ -38,7 +38,7 @@ The rebuild projection intentionally excludes:
 - credential material;
 - provider-private payloads.
 
-Organization-scoped Connections participate in Search only through the live Organization visibility seam from #87. Suspended or removed Memberships therefore lose future discovery visibility without rewriting canonical Connection ownership.
+Organization-scoped Connections participate in Search only through the live Organization visibility seam. Suspended or removed Memberships therefore lose future discovery visibility without rewriting canonical Connection ownership.
 
 ## Durable External Resource References
 
@@ -87,7 +87,7 @@ For External Resource References this includes:
 
 - owning Connection visibility;
 - owner/Project authorization through the canonical Control Plane authorization provider;
-- live Organization membership/visibility from #87 when `organization_id` is present.
+- live Organization membership/visibility when `organization_id` is present.
 
 An unauthorized canonical wrapper therefore does not appear in list totals, exact reads or Search results. Search's actor-independent rebuild enumerator is an indexing seam only; it does not grant access.
 

@@ -1,6 +1,6 @@
 # Single-node persistence topology
 
-Issue #891 re-evaluates the physical SQLite topology of the supported single-node profile. This document records the current durable-store inventory, the operations that cross those physical boundaries, the operational trade-offs, and the evidence used by ADR 0012.
+This document re-evaluates the physical SQLite topology of the supported single-node profile. This document records the current durable-store inventory, the operations that cross those physical boundaries, the operational trade-offs, and the evidence used by ADR 0012.
 
 The important distinction is:
 
@@ -97,7 +97,7 @@ The current multi-file topology therefore has a real operational cost, but one-f
 
 The repository already contains `PersistenceContentionBenchmarkHarness`, which drives synchronized concurrent canonical Task mutations through independent `SqliteKernelRepository` instances sharing one SQLite database. It records mutation latency, throughput, peak in-flight work, SQLite busy/locked failures, canonical conflicts, resource use and reopen correctness.
 
-That harness establishes an important boundary for #891: shared-file SQLite writer contention is measurable through the canonical path and must not be dismissed by assumption. It does **not** compare the complete 26-file topology with a hypothetical consolidated schema, and the repository currently contains no retained representative benchmark proving that either physical topology is faster for the platform-wide workload.
+That harness establishes an important boundary for this topology review: shared-file SQLite writer contention is measurable through the canonical path and must not be dismissed by assumption. It does **not** compare the complete 26-file topology with a hypothetical consolidated schema, and the repository currently contains no retained representative benchmark proving that either physical topology is faster for the platform-wide workload.
 
 Accordingly ADR 0012 does not use an unmeasured performance claim to justify either consolidation or retention. The v1 decision is based on transaction semantics, failure/blast-radius properties, backup scope, migration cost and provider neutrality. A future proposal to consolidate on performance grounds must add a topology-comparative workload rather than extrapolating from the kernel-only contention benchmark.
 
@@ -168,7 +168,7 @@ A re-evaluation must compare at least current multi-file, consolidated SQLite, a
 
 ## Requirements for any future consolidation migration
 
-If a later ADR changes the topology, implementation must be an explicit #41 upgrade transition and must coordinate with #40 backup/restore. At minimum it must:
+If a later ADR changes the topology, implementation must be an explicit Upgrade transition and must coordinate with Backup/Restore. At minimum it must:
 
 1. introduce an explicit target schema version and table ownership map;
 2. detect the exact source durable-store contract/schema state before writes;

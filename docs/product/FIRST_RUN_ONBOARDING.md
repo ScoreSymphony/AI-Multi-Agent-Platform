@@ -1,6 +1,6 @@
 # First-run onboarding and local-model golden path
 
-This document describes the issue #250 onboarding composition. The onboarding layer is a thin
+This document describes the first-run onboarding composition. The onboarding layer is a thin
 orchestration surface over existing canonical platform domains; it does not replace Project,
 Workspace, Agent, Model or Task/Run lifecycle APIs.
 
@@ -8,15 +8,15 @@ Workspace, Agent, Model or Task/Run lifecycle APIs.
 
 The first-run path follows these invariants:
 
-- the supported runtime is the ordinary self-hosted single-node profile from #39;
-- authentication and authorization remain the #36/#15 boundaries;
-- Projects and Workspaces remain canonical #32/#37 resources;
-- models remain #10 `ModelConfiguration` resources behind `ModelProvider` adapters;
-- starter Agents remain ordinary, editable #77 `AgentDefinition` resources;
+- the supported runtime is the ordinary self-hosted single-node profile;
+- authentication and authorization remain the Authentication/Authorization boundaries;
+- Projects and Workspaces remain canonical Project/Workspace resources;
+- models remain `ModelConfiguration` resources behind `ModelProvider` adapters;
+- starter Agents remain ordinary, editable `AgentDefinition` resources;
 - no provider, model vendor or paid service is selected silently;
 - no prompt is transmitted to a remote endpoint merely because onboarding is opened;
 - plaintext credentials are not accepted by onboarding configuration;
-- credential-bearing endpoints use canonical #34 `SecretReference` objects and resolve secret
+- credential-bearing endpoints use canonical `SecretReference` objects and resolve secret
   material only at the concrete adapter boundary;
 - provider-native model names remain adapter metadata rather than canonical model identity;
 - core onboarding code depends on the provider-neutral `OnboardingModelAdapter` protocol; concrete
@@ -41,7 +41,7 @@ The returned `onboarding_status.state` is one of:
 | `needs_model` | No currently routable, text-capable local/self-hosted model is available | configure a model or revalidate its provider health |
 | `needs_project` | A model is routable, but the current actor owns no Project | create a Project |
 | `needs_workspace` | Exactly one Project is selected implicitly, but it has no compatible owned Workspace | create a Workspace |
-| `needs_general_assistant` | The selected scope has no enabled execution-compatible General Assistant | bootstrap/clone #77 starter or repair its editable execution policy |
+| `needs_general_assistant` | The selected scope has no enabled execution-compatible General Assistant | bootstrap/clone starter or repair its editable execution policy |
 | `needs_selection` | More than one Project, Workspace or General Assistant could be selected | pass explicit canonical IDs to `onboarding.run-first-task` |
 | `ready_for_task` | The ID-less first-Task path is unambiguous and its selected General Assistant passes execution preflight | `onboarding.run-first-task` or the canonical Chat surface |
 
@@ -122,7 +122,7 @@ uses its `/models` route.
 ## Secrets
 
 Credential-free endpoints require no secret configuration. Credential-bearing endpoints pass a
-canonical #34 reference rather than secret material:
+canonical SecretReference rather than secret material:
 
 ```json
 {
@@ -140,7 +140,7 @@ request and injects the resulting short-lived material into that request. The se
 copied into `ModelConfiguration`, provider setup JSON, command replay JSON or Control Plane
 responses.
 
-The shipped minimal single-node composition currently uses #34 `LocalSecretProvider`, whose secret
+The shipped minimal single-node composition currently uses `LocalSecretProvider`, whose secret
 material is intentionally memory-only. Its reference metadata survives in onboarding configuration,
 but the secret value itself must be reprovisioned after process restart. A durable SecretProvider can
 replace this backend without changing the canonical references or onboarding contract.
@@ -165,7 +165,7 @@ This replay state is restored across single-node process restart.
 
 ## General Assistant
 
-Onboarding does not invent a second Agent lifecycle. Use the existing #77 commands:
+Onboarding does not invent a second Agent lifecycle. Use the existing Agent commands:
 
 ```text
 POST /api/v1/commands/standard-agent.bootstrap
@@ -213,7 +213,7 @@ AgentRun, writes the Run output, attaches a canonical Result and returns the vis
 identifiers/output. The Task, Run, AgentRun and Result remain readable after restart.
 
 This Task path is independent of Chat. The conversational entrypoint consumes the same canonical
-runtime without #250 introducing a private chat backend.
+runtime without onboarding introducing a private chat backend.
 
 ## CLI
 
@@ -236,7 +236,7 @@ platform model-provider refresh-health <provider-id> --idempotency-key <unique-k
 ```
 
 The local authorization vocabulary recognizes this canonical action, so the bootstrapped first
-administrator can perform the revalidation without bypassing #15.
+administrator can perform the revalidation without bypassing Authorization.
 
 ## Restart behavior
 
@@ -272,16 +272,16 @@ Execution compatibility itself is not duplicated there: both readiness and the l
 shared side-effect-free first-run Agent preflight, which delegates model/capability policy to
 `AgentRuntime.prepare_agent()`.
 
-## Issue #250 boundary
+## Onboarding boundary
 
-The #250 slice covers:
+The onboarding composition covers:
 
 1. understandable fresh-install/no-model status;
 2. provider-neutral local/self-hosted model configuration and validation;
 3. execution-compatible effective-health and text-capability readiness;
 4. explicit zero-paid-service reference behavior with no remote fallback;
-5. canonical #34 `SecretReference` integration without plaintext persistence;
-6. reuse of canonical Project/Workspace and an editable #77 General Assistant;
+5. canonical `SecretReference` integration without plaintext persistence;
+6. reuse of canonical Project/Workspace and an editable General Assistant;
 7. side-effect-free execution preflight for the current edited General Assistant revision;
 8. explicit selection guidance when multiple Project/Workspace/Agent paths exist;
 9. a real Agent-driven first Task producing a canonical visible Result;
@@ -291,5 +291,5 @@ The #250 slice covers:
 13. one authoritative first-run readiness implementation.
 
 The broader guided Web experience and the reproducible single-node product acceptance gate remain
-separate integration/acceptance work. #250 is complete only when the full branch CI, fresh-install
+separate integration/acceptance work. The onboarding acceptance path is complete only when the full branch CI, fresh-install
 smoke and the execution-preflight/selection/restart regression coverage are green.

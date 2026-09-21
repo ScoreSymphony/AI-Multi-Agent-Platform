@@ -1,12 +1,12 @@
 # Usage and Resource Discovery in Global Search
 
-This document records the Issue #45 integration of the completed Issue #76 accounting domain into the platform-wide Search layer.
+This document defines how canonical Usage and resource-accounting state participates in the platform-wide Search layer.
 
 The general Search invariants in `docs/search/SEARCH.md` continue to apply: Search is derived and non-authoritative, canonical IDs remain primary identity, provider/private storage is not queried directly by Search, and authorization is applied before caller-visible counts, snippets, cursors or exact-ID results are calculated.
 
 ## Searchable accounting resources
 
-The canonical #76 Control Plane exposes three accounting collections:
+The canonical Accounting Control Plane exposes three accounting collections:
 
 - `usage-records` — attributable raw measurements;
 - `usage-aggregates` — current metric/unit aggregate views;
@@ -19,7 +19,7 @@ Global Search intentionally indexes only:
 
 Raw `usage-record` resources opt out of global Search with `search_indexable = False`.
 
-Raw measurements can be high-volume and can carry operationally sensitive provider/source/provenance information. They remain inspectable through their owning canonical #76 API when authorized, but are not promoted into the global discovery index.
+Raw measurements can be high-volume and can carry operationally sensitive provider/source/provenance information. They remain inspectable through their owning canonical Accounting API when authorized, but are not promoted into the global discovery index.
 
 ## Canonical rebuild enumeration
 
@@ -74,7 +74,7 @@ The canonical API references remain:
 
 ## Data deliberately excluded from Search text
 
-Global Search does not promote the following accounting values into keywords or snippets merely because they exist on the richer #76 resource:
+Global Search does not promote the following accounting values into keywords or snippets merely because they exist on the richer Accounting resource:
 
 - raw measurement quantity;
 - aggregate total;
@@ -104,11 +104,11 @@ The candidate's canonical owner and Project scope are supplied to the authorizat
 
 A rebuild may therefore contain resources for multiple owners while a caller still sees only the resources permitted by canonical authorization. Knowing another owner's metric name, Project ID or Budget ID must not reveal that resource through Search.
 
-## Accounting authority remains in #76
+## Accounting remains authoritative
 
 Search does not calculate accounting truth, enforce budgets, emit thresholds or mutate usage state.
 
-The owning #76 accounting layer remains authoritative for:
+The owning Accounting layer remains authoritative for:
 
 - UsageRecord persistence;
 - aggregation semantics;
@@ -122,11 +122,11 @@ Search only provides an authorization-safe discovery path to the canonical aggre
 
 ## Baseline and cost constraints
 
-This integration uses the existing local/replaceable SearchProvider boundary and canonical #76 services. It requires no vector database, embeddings, paid search API or other recurring external service.
+This integration uses the existing local/replaceable SearchProvider boundary and canonical Accounting services. It requires no vector database, embeddings, paid search API or other recurring external service.
 
 ## Tests
 
-The Issue #45/#76 integration tests prove:
+The Search/Accounting integration tests prove:
 
 - aggregate and budget discovery by safe metadata;
 - Project filtering and exact canonical Budget ID lookup;

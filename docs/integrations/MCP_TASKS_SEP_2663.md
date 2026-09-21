@@ -1,6 +1,5 @@
 # MCP Tasks (SEP-2663) interoperability
 
-Issue: #964
 
 ## Decision
 
@@ -46,7 +45,7 @@ The `2025-11-25` experimental Tasks feature is explicitly **not** treated as wir
 this extension. In particular, this implementation does not use the legacy `task` parameter,
 `tasks/result`, `tasks/list`, or legacy method-level task capability declarations.
 
-At the time of #964 implementation, the repository-pinned official Python SDK line does not provide
+At the time this interoperability profile was implemented, the repository-pinned official Python SDK line does not provide
 client support for the finalized `io.modelcontextprotocol/tasks` extension. The 2.2.0 release still
 lists SEP-2663 Tasks as a known gap, so Tasks remain only behind the existing experimental
 `2026-07-28` stateless HTTP compatibility client. No MCP Tasks code is imported by the platform core
@@ -95,7 +94,7 @@ leading/trailing whitespace or literal Base64-sentinel-shaped values, use the pr
 Request-scoped SSE responses are accepted: progress/log notifications preceding the final JSON-RPC
 response are validated as notification-shaped messages and do not become canonical lifecycle
 transitions. The current compatibility path does not project those transient SSE notification
-payloads into a separate platform progress stream; durable external status/observability for #964 is
+payloads into a separate platform progress stream; durable external status/observability for this profile is
 provided by task polling and binding evidence. Optional `notifications/tasks` subscriptions are not
 required for lifecycle correctness and are not yet claimed as supported.
 
@@ -181,7 +180,7 @@ newer external terminal observation or mutate canonical Run lifecycle state.
 ## Authorization and input requests
 
 Authorization/Approval remains upstream of `MCPToolProvider.invoke` in the normal
-`CapabilityInvoker` pipeline. Enabling Tasks cannot grant a capability or bypass #15.
+`CapabilityInvoker` pipeline. Enabling Tasks cannot grant a capability or bypass canonical Authorization.
 
 Every persisted binding records and re-validates the canonical Task, Run, owner, Project,
 causation, correlation and idempotency context before recovery. Knowing an external task ID is
@@ -273,14 +272,14 @@ response and therefore is not treated as an ambiguous successful task creation.
 ## Progress and observability
 
 MCP progress/status is evidence, not lifecycle truth. The binding records the latest external status
-and timestamp, while canonical `InvocationRecord` remains owned by #12/#16. Polling does not emit
+and timestamp, while canonical `InvocationRecord` remains owned by the canonical Capability and Observability domains. Polling does not emit
 synthetic canonical Task/Run state transitions. Terminal tool output returns through the existing
 `ToolResult -> CapabilityInvocationResult` path and remains subject to ordinary schema validation,
 artifact/result handling and any downstream Verification policy.
 
 ## Security properties
 
-The #964 profile enforces these boundaries:
+This interoperability profile enforces these boundaries:
 
 - no caller-facing API accepts an arbitrary external task ID for lookup/cancellation;
 - exact canonical Task/Run/actor/Project/causation/correlation/idempotency context is checked on

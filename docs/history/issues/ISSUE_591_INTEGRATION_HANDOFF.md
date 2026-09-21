@@ -1,3 +1,5 @@
+> Historical integration handoff. Superseded after Issue #591 was completed and closed on 2026-09-09. The deferred-validation, integration-branch, and keep-open instructions below are retained only as historical provenance and do not describe current repository work or operator requirements.
+
 # Issue #591 integration handoff
 
 This document records the intended final integration of the prepared #591 implementation. The

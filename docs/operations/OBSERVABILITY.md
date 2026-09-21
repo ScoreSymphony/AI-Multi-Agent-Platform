@@ -51,7 +51,7 @@ Instrumentation propagates existing identifiers rather than manufacturing unrela
 
 Normal synchronous nesting uses parent/child spans through `TraceHierarchy`.
 
-Remote propagation uses `TraceCarrier`, which preserves trace parentage plus Task/Run/Step/Project and correlation/causation identifiers. `inject_trace_carrier()` and `extract_trace_carrier()` bridge that carrier to the replaceable #35 `TransportEnvelope.trace_context`. `observe_remote()` creates the remote child span.
+Remote propagation uses `TraceCarrier`, which preserves trace parentage plus Task/Run/Step/Project and correlation/causation identifiers. `inject_trace_carrier()` and `extract_trace_carrier()` bridge that carrier to the replaceable `TransportEnvelope.trace_context`. `observe_remote()` creates the remote child span.
 
 Detached asynchronous or fan-in work where direct parentage would be false uses `SpanLink` and `TraceHierarchy.observe_linked()`. Linked work starts independently and references one or more prior spans without pretending one of them is the sole parent.
 
@@ -160,7 +160,7 @@ The Control Plane exposes the backend-neutral `readiness_state` plus structured 
 
 ## Usage/accounting boundary
 
-`AccountingBridgeExporter` forwards `MetricRecord` measurements to a `MeasurementSink` while observability retains ownership of telemetry and #76 retains ownership of durable UsageRecords, normalization, aggregation, budgets, thresholds and costs.
+`AccountingBridgeExporter` forwards `MetricRecord` measurements to a `MeasurementSink` while observability retains ownership of telemetry and Accounting retains ownership of durable UsageRecords, normalization, aggregation, budgets, thresholds and costs.
 
 Missing measurements are not fabricated.
 

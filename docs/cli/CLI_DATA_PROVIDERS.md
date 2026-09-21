@@ -1,7 +1,6 @@
 # CLI data-provider inventory
 
-Issue: #38  
-Owning domain: #13
+File, Memory and Knowledge provider contracts remain the canonical data-provider boundaries.
 
 The File, Memory and Knowledge boundaries remain separate replaceable provider contracts. For administrative diagnostics the Control Plane can register a single read-only `data-providers` collection containing only public provider health and capability metadata.
 
@@ -20,7 +19,7 @@ Backend-private `adapter_metadata` is deliberately omitted, including from neste
 
 The path is:
 
-`CLI -> /api/v1/openapi.json -> /api/v1/data-providers -> #13 provider contracts`
+`CLI -> /api/v1/openapi.json -> /api/v1/data-providers -> canonical data-provider contracts`
 
 The CLI never opens the local file store, memory database, knowledge index or provider implementation directly. If the collection is not registered in the target Control Plane, extension discovery fails and no provider/backend fallback occurs.
 

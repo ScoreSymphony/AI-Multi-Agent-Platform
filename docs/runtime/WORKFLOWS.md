@@ -1,8 +1,6 @@
 # Canonical reusable workflows
 
-Issue #364 adds a platform-owned reusable workflow-definition domain. A Workflow stores
-durable execution intent that can be referenced by Templates, portability and later runtime
-admission without making one orchestrator, provider or Template subsystem authoritative.
+The platform-owned reusable Workflow domain stores durable execution intent that can be referenced by Templates, portability and runtime admission without making one orchestrator, provider or Template subsystem authoritative.
 
 ## Boundary
 
@@ -12,7 +10,7 @@ A reusable `WorkflowDefinition` is **not** a task-bound `Plan`.
   `WorkflowRevision`.
 - `WorkflowRevision` stores reusable stages, parameters, requirements, scope, provenance and
   compatibility metadata.
-- canonical `Plan` and `Step` objects remain #6 runtime state tied to one canonical Task.
+- canonical `Plan` and `Step` objects remain task-bound runtime state tied to one canonical Task.
 - orchestrator-private plans, sessions and handles never become reusable workflow identity.
 - Templates may package workflows, but Template identity is not workflow identity.
 - Automation triggers may start work later, but trigger/delivery state is not workflow state.
@@ -47,7 +45,7 @@ acyclic dependency graph.
 
 ## Security and scope
 
-`AuthorizedWorkflowService` is the #15 enforcement boundary for workflow management and
+`AuthorizedWorkflowService` is the canonical authorization enforcement boundary for workflow management and
 admission. Existing resource checks derive Project and Organization scope from the stored
 `WorkflowDefinition`; caller-supplied `OperationContext.project_id` cannot replace that stored
 scope. Create, read, revise and execute/admission operations are evaluated through the canonical
@@ -79,11 +77,8 @@ WorkflowDefinition @ exact revision
 Task -> Plan -> Steps -> Runs
 ```
 
-The reusable definition describes intent; #6 remains authoritative for execution lifecycle.
+The reusable definition describes intent; the canonical Task/Run kernel remains authoritative for execution lifecycle.
 
 ## Integration boundary
 
-This domain is the canonical owner required by the `workflow_plan` Template type in #78 and by
-workflow portability in #79. Those systems should call this repository/service boundary rather
-than create Template-private or portability-private workflow persistence. Distribution through
-#81 can reference exact workflow revisions later without changing workflow identity semantics.
+This domain is the canonical owner used by the `workflow_plan` Template type and by workflow portability. Those systems call this repository/service boundary rather than create Template-private or portability-private workflow persistence. Registry/Marketplace distribution can reference exact workflow revisions without changing workflow identity semantics.

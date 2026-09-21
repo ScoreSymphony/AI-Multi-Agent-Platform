@@ -1,12 +1,12 @@
 # Canonical Agent matching
 
-Issue #903 introduces one provider-neutral eligibility and selection boundary for canonical Agent and AgentTeam revisions.
+Agent Matching provides one provider-neutral eligibility and selection boundary for canonical Agent and AgentTeam revisions.
 
 ## Responsibility
 
 `AgentMatcher` answers one question: which canonical Agent or AgentTeam revision is eligible and best suited for supplied work requirements?
 
-It does not own Worker/Node placement (#14), model-provider routing (#10), capability-provider selection (#12), authorization authority (#15), planning/decomposition (#439), or runtime execution. Matching consumes canonical metadata and may call a narrow policy filter, but a discovered or selected Agent never gains permission merely by being matched.
+It does not own Worker/Node placement, model-provider routing, capability-provider selection, authorization authority, planning/decomposition, or runtime execution. Matching consumes canonical metadata and may call a narrow policy filter, but a discovered or selected Agent never gains permission merely by being matched.
 
 `AgentResolver` is the repository-backed application service. It materializes current canonical Agent/Team revisions and delegates eligibility/ranking to `AgentMatcher`. Exact Agent/Team pins bypass unrelated candidate discovery and ranking while still being validated for eligibility.
 
@@ -37,23 +37,23 @@ Eligible candidates are ranked by explicit preferred ID, preferred-role fit, con
 
 ## Integrations
 
-### Planning (#439)
+### Planning
 
 Planning translates its already server-resolved/authorized inventory to the shared matcher. Role-only Step assignments are resolved to an exact Agent revision before proposal persistence when exactly one eligible Agent exists. No match or ambiguity remains explicit and is rejected by proposal validation. The current reference execution seam is single-Agent-per-Step, so it does not silently reinterpret a Team as an executable Agent.
 
-### Handoffs (#651)
+### Handoffs
 
 `CanonicalConsumerRequirementEvaluator` parses late-bound consumer requirements and evaluates the concrete consuming Agent/Team revision through the shared resolver as an exact pin. It does not maintain separate role/capability matching logic and does not scan unrelated Agents when the consumer is already known.
 
-### Reference multi-agent path (#889)
+### Reference multi-agent path
 
 The reference path inherits the same planning resolution and Handoff consumer evaluation boundaries. Future runtime delegation that is not already pinned should call `AgentResolver` rather than introducing provider- or orchestrator-specific selection branches.
 
 ## Capability and model boundaries
 
-Capability matching uses canonical capability inventory/version/features. It decides whether the candidate can satisfy the requested capability contract; invocation/provider selection remains with #12.
+Capability matching uses canonical capability inventory/version/features. It decides whether the candidate can satisfy the requested capability contract; invocation/provider selection remains with the Capability domain.
 
-Model matching tests whether the Agent's model policy and the work requirements have at least one feasible canonical model configuration. It never chooses or invokes a model provider; actual routing remains with #10.
+Model matching tests whether the Agent's model policy and the work requirements have at least one feasible canonical model configuration. It never chooses or invokes a model provider; actual routing remains with the Model domain.
 
 ## Authorization
 

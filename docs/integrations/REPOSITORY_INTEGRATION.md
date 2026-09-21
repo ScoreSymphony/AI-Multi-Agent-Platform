@@ -1,6 +1,5 @@
 # Repository and Git Integration
 
-Issue: #82
 
 ## Purpose
 
@@ -25,13 +24,13 @@ A repository is represented by `RepositoryReference`, which wraps the connector-
 Two provider paths are available:
 
 1. `LocalGitRepositoryProvider` uses the system Git executable and works without an external service or additional Python Git dependency.
-2. `ConnectorRepositoryProvider` adapts the generic #44 `ConnectorProvider` contract for hosted or self-hosted repository services. Connector-native resource/action payloads are validated and projected back into canonical repository models before crossing the repository boundary.
+2. `ConnectorRepositoryProvider` adapts the generic `ConnectorProvider` contract for hosted or self-hosted repository services. Connector-native resource/action payloads are validated and projected back into canonical repository models before crossing the repository boundary.
 
 The bridge is intentionally forge-neutral. Adding a GitHub, GitLab, Gitea or another connector does not change Agent, Task, Run or Workspace contracts.
 
 ## Capability model and Agent runtime
 
-`RepositoryOperation` and `repository_capability_specs()` define #12-compatible capability contracts for:
+`RepositoryOperation` and `repository_capability_specs()` define Capability-compatible contracts for:
 
 - discovery/read/materialization;
 - fetch and ref inspection;
@@ -55,9 +54,9 @@ Side effects are classified independently of provider identity:
 
 `RepositoryService` is the policy-enforced facade. Callers do not invoke Git/provider binaries or APIs directly through this repository surface.
 
-The shipped Single-Node Control Plane is composed through `ControlPlaneAuthorizationBridge(approval_gate)`. Stable northbound operations such as `task:create` are therefore translated into canonical #15 `AuthorizationAction`/`ResourceType` values before the local policy provider evaluates them. Repository-triggered Automations create canonical Tasks through the same authorization boundary as other Control Plane callers rather than bypassing or misrouting local policy.
+The shipped Single-Node Control Plane is composed through `ControlPlaneAuthorizationBridge(approval_gate)`. Stable northbound operations such as `task:create` are therefore translated into canonical `AuthorizationAction`/`ResourceType` values before the local policy provider evaluates them. Repository-triggered Automations create canonical Tasks through the same authorization boundary as other Control Plane callers rather than bypassing or misrouting local policy.
 
-The service maps operations onto #15 authorization/approval semantics:
+The service maps operations onto canonical authorization/approval semantics:
 
 - read/status/diff: standard read;
 - fetch: external read plus local write;
@@ -78,7 +77,7 @@ The resolution path is:
 1. resolve the canonical `RepositoryReference` through `RepositoryRegistry`;
 2. resolve the requested branch/tag/ref to an immutable Git commit SHA;
 3. read that exact tree through `RepositoryProvider`;
-4. store each file through the canonical #13 `FileProvider`;
+4. store each file through the canonical `FileProvider`;
 5. return canonical `WorkspaceFile` objects to #37 Workspace management;
 6. persist the resolver-returned source reference so the Workspace records the immutable SHA rather than the originally requested moving ref.
 
@@ -101,7 +100,7 @@ The Local Git adapter rejects symlink/non-blob tree entries during canonical mat
 
 `RepositoryRunProvenanceMixin` can be configured on the composed Control Plane. For workspace-aware task start/retry it records the exact repository input after the immutable `RunWorkspaceBinding` is established and before execution dispatch. Repeated/retried runs therefore retain their actual input SHA even when a symbolic branch later moves.
 
-`RepositoryRunIntegration` consumes the existing #37 execution materialization/change-set boundary. It creates deterministic changed-file Artifacts plus a canonical JSON change-manifest Artifact, upserts those artifact references into Run provenance, and can record the resulting commit SHA as output revision. Recording a commit does not imply that a push occurred.
+`RepositoryRunIntegration` consumes the existing Workspace execution materialization/change-set boundary. It creates deterministic changed-file Artifacts plus a canonical JSON change-manifest Artifact, upserts those artifact references into Run provenance, and can record the resulting commit SHA as output revision. Recording a commit does not imply that a push occurred.
 
 `SqliteRepositoryProvenanceStore` provides restart-safe provenance persistence. It stores canonical IDs, immutable revisions and artifact/resource references only; provider instances, clone paths and credentials are not serialized.
 
@@ -118,9 +117,9 @@ The Local Git bootstrap factory keeps its checkout root in adapter-private confi
 
 ## Events and automations
 
-`RepositoryEventBridge` remains the direct provider-neutral normalization seam for verified #44 `ConnectorEvent` evidence. `repository_platform_event(...)` centralizes Connection binding, project scoping, verification and canonical event projection.
+`RepositoryEventBridge` remains the direct provider-neutral normalization seam for verified `ConnectorEvent` evidence. `repository_platform_event(...)` centralizes Connection binding, project scoping, verification and canonical event projection.
 
-For the normal Single-Node automation path, `RepositoryEventRuntimeIngress` resolves the registered canonical Repository binding and commits the resulting `PlatformEvent` to the same durable kernel `EventRepository` consumed by #18 `AutomationRuntime`.
+For the normal Single-Node automation path, `RepositoryEventRuntimeIngress` resolves the registered canonical Repository binding and commits the resulting `PlatformEvent` to the same durable kernel `EventRepository` consumed by `AutomationRuntime`.
 
 The operational path is therefore:
 
@@ -187,7 +186,7 @@ The deterministic repository coverage includes:
 
 The connector-backed conformance fixture proves that repository discovery, metadata, exact revisions, tree content, branches/tags and status can be supplied through a generic `ConnectorProvider` without introducing forge-specific canonical types. Unsupported operations fail closed before invocation when they are not advertised.
 
-Issue/PR/MR support remains capability-driven: a forge connector may implement the provider-neutral issue/change-request capability contracts without altering core domain models. Implementing every forge and every optional collaboration operation is intentionally outside #82.
+Issue/PR/MR support remains capability-driven: a forge connector may implement the provider-neutral issue/change-request capability contracts without altering core domain models. Implementing every forge and every optional collaboration operation is intentionally outside this integration boundary.
 
 ## Security and portability invariants
 

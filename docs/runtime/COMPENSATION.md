@@ -1,6 +1,6 @@
 # Compensation and reversibility
 
-Issue #596 adds provider-neutral compensation semantics for completed external side effects. It does
+The Compensation domain provides provider-neutral compensation semantics for completed external side effects. It does
 not add transactional rollback and it does not mutate historical Task, Plan, Step, Run or
 ToolInvocation records.
 
@@ -10,12 +10,12 @@ The compensation subsystem is deliberately narrow:
 
 - the capability registry and `CapabilityInvoker` remain the only execution path for compensating
   capabilities;
-- the #15 authorization/Approval hooks attached to `CapabilityInvoker` remain the security
+- the Authorization/Approval hooks attached to `CapabilityInvoker` remain the security
   authority;
-- the durable #384 Plan/Step coordinator remains the lifecycle authority;
+- the durable durable Plan/Step coordinator remains the lifecycle authority;
 - connector/provider-native resource identifiers remain evidence references rather than canonical
   platform entity types;
-- optional #86 verification runs after the compensating invocation and does not redefine its
+- optional Verification runs after the compensating invocation and does not redefine its
   result.
 
 `PlanCompensationHooks` is therefore called only after a canonical failure or cancellation has
@@ -70,7 +70,7 @@ may provide a stronger external key where needed. Reusing one key for a differen
 compensation target is rejected with `conflict` instead of silently aliasing the requests.
 
 The hardened coordinator also recognizes the trigger-suffixed default keys written by the initial
-#596 implementation. An upgraded durable store therefore reuses the historical request rather than
+Compensation implementation. An upgraded durable store therefore reuses the historical request rather than
 creating a second external undo. If more than one legacy request already exists for the same
 immutable target, recovery fails closed with `conflict` and requires manual reconciliation instead
 of guessing which historical side effect is authoritative.
@@ -117,14 +117,14 @@ ordinary `CapabilityInvoker` Approval path. They do not create a compensation-pr
 mechanism and cannot weaken `CapabilitySpec.required_approvals` or a policy decision that already
 requires Approval.
 
-If #15 requires Approval, the invocation is not sent to the provider. The compensation result is
+If Authorization requires Approval, the invocation is not sent to the provider. The compensation result is
 `approval_required` and retains the canonical compensating ToolInvocation linkage exposed by the
-invoker. A later retry of the same compensation request may proceed only when the ordinary #15
+invoker. A later retry of the same compensation request may proceed only when the ordinary Authorization
 Approval hook accepts that exact action. Policy denial is persisted separately as `denied`.
 
 ## Verification
 
-`CompensationVerificationHook` is a narrow optional seam for #86. It runs only after a successful
+`CompensationVerificationHook` is a narrow optional seam for Verification. It runs only after a successful
 compensating invocation and may attach a verification reference. Verification is intentionally
 separate from provider execution so it cannot turn an external side effect into hidden adapter
 cleanup.

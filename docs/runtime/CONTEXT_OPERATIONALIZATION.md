@@ -1,9 +1,6 @@
 # Canonical Context Bundle operationalization
 
-Issue #650 makes the canonical Context Bundle boundary introduced by #590 part of the normal
-single-node Agent execution path. #590 remains the sole authority for Context identity, resolution,
-budgeting, rendering invariants and persistence semantics; this integration layer only composes
-existing source owners, routing, egress, execution, inspection and restart recovery around it.
+The canonical Context Bundle boundary is part of the normal single-node Agent execution path. The Context domain remains the sole authority for Context identity, resolution, budgeting, rendering invariants and persistence semantics; this integration layer only composes existing source owners, routing, egress, execution, inspection and restart recovery around it.
 
 ## Production-shaped execution path
 
@@ -16,10 +13,10 @@ therefore follow this path:
    Research Evidence, completed Verification findings, Repository state, File/Artifact/Result
    references, Memory and Knowledge;
 3. `OperationalContextAssemblyService` converts source-provider absence/failure into explicit
-   `UNAVAILABLE` observations and delegates selection truth to the #590 `ContextResolver`;
+   `UNAVAILABLE` observations and delegates selection truth to the canonical `ContextResolver`;
 4. the immutable Bundle is persisted before execution;
 5. Bundle token usage plus the explicit output reserve becomes a server-owned
-   `runtime_model_requirements.min_context_window` constraint for #10 routing;
+   `runtime_model_requirements.min_context_window` constraint for canonical model routing;
 6. the selected model location determines whether rendering stays local or crosses the canonical
    Context egress boundary;
 7. the exact rendered Bundle becomes the real model system/user input; legacy adapter-private
@@ -44,7 +41,7 @@ normal deployment database directory:
 - `research.sqlite3` — canonical Research Evidence state.
 
 File, Task/Run, Agent, Coordination/Planning, Verification and Repository state continue to use their
-existing canonical owners. In particular, Verification remains in the existing #86 durable service;
+existing canonical owners. In particular, Verification remains in the existing canonical Verification service;
 the Context adapter only projects completed result/findings evidence and never creates a shadow
 Verification store. Context adapters do not create shadow copies of those lifecycles.
 
@@ -59,7 +56,7 @@ source identity and mandatory/optional semantics.
 - `NOT_FOUND` is recorded as missing-source evidence rather than being confused with a transient
   provider failure;
 - authorization, project/workspace scope, freshness, trust, conflict and budget rules remain owned
-  by the #590 resolver;
+  by the Context resolver;
 - untrusted retrieved content remains Context/Evidence and cannot acquire Security/Instruction
   authority;
 - completed Verification findings are optional `VERIFICATION` / `EVIDENCE` candidates and reviewer
@@ -103,7 +100,7 @@ revisions/digests where authorized, omissions, budget/usage, resolver/policy ver
 reproducibility-limited flag. Inline Context content is never returned by the ordinary northbound
 inspection route.
 
-Entry provenance is re-authorized against the underlying source through #15. A caller that can read
+Entry provenance is re-authorized against the underlying source through the canonical authorization boundary. A caller that can read
 the Bundle but not the source receives a redacted entry without source ID, revision, locator or
 digest. Omission detail text is also suppressed on the northbound route.
 
@@ -140,7 +137,7 @@ new binding. Existing correct bindings are preserved unchanged.
 
 ## Acceptance coverage
 
-The combined #650/#680 operational regression evidence is:
+The maintained operational regression evidence is:
 
 - `tests/integration/context/test_operational_context.py`
   - optional vs mandatory source unavailability;
@@ -156,7 +153,7 @@ The combined #650/#680 operational regression evidence is:
   - File/Artifact/Result reference-oriented projection;
   - scoped Memory and Agent-allowlisted Knowledge retrieval;
 - `tests/integration/context/test_routing_and_rendering.py`
-  - Context-derived `min_context_window` causes #10 routing to reject an undersized model;
+  - Context-derived `min_context_window` causes canonical model routing to reject an undersized model;
   - local/reference rendering preserves Bundle identity without an egress dependency;
   - canonical Context mapping rejects legacy task/project context mixing;
 - `tests/e2e/context/test_single_node_agent_context.py`

@@ -1,6 +1,6 @@
 # Governed Feedback and Learning Promotion
 
-Issue #595 adds a governed improvement pipeline around existing canonical owner domains. Learning Candidates are proposals plus evidence. They never become authority merely because they were generated automatically or because a model/user expressed a preference.
+The Governed Learning domain adds a governed improvement pipeline around existing canonical owner domains. Learning Candidates are proposals plus evidence. They never become authority merely because they were generated automatically or because a model/user expressed a preference.
 
 ## Canonical flow
 
@@ -18,7 +18,7 @@ Accepted proposal
         |
         +--> deployment-owned governance floor
         |
-        +--> #15 Approval when required
+        +--> Approval when required
         |
         v
 Owning canonical service creates a NEW revision
@@ -84,7 +84,7 @@ Free-form conversation text is not learned automatically. It may be stored only 
 
 ## Candidate quality gate
 
-`LearningQualityGate` reads canonical #19 Evaluation and #86 Verification evidence. It does not create substitute quality results.
+`LearningQualityGate` reads canonical Evaluation and Verification evidence. It does not create substitute quality results.
 
 Evaluation acceptance fails closed when:
 
@@ -118,7 +118,7 @@ Promotion is allowed only for an accepted candidate. Before invoking an owner ad
 1. validates the deployment-owned platform governance floor;
 2. re-runs the candidate quality gate;
 3. resolves the explicit owner adapter;
-4. constructs a canonical #15 `ProposedAction` bound to candidate ID, candidate revision, candidate digest and exact target revision;
+4. constructs a canonical `ProposedAction` bound to candidate ID, candidate revision, candidate digest and exact target revision;
 5. requires exact-action Approval whenever either the platform policy or Candidate policy requires it;
 6. enforces authorization;
 7. asks the owner service to create the next canonical revision.
@@ -140,7 +140,7 @@ Telemetry carries IDs, revisions, digests, target identity, risk and gate-policy
 
 ## Optional post-promotion Evaluation
 
-`EvaluationPostPromotionEvaluator` can run configured #19 suites against a snapshot representing the newly promoted owner revision. The last matching pre-promotion Evaluation run is used as a baseline when available.
+`EvaluationPostPromotionEvaluator` can run configured Evaluation suites against a snapshot representing the newly promoted owner revision. The last matching pre-promotion Evaluation run is used as a baseline when available.
 
 Post-promotion results are derived evidence. They do not rewrite the PromotionReceipt or the owner revision. `learning-post-promotion-evaluations` exposes the recorded outcome and canonical Evaluation run IDs. A regression can therefore be surfaced and acted upon by a new Learning Candidate or rollback workflow without rewriting history.
 
@@ -256,13 +256,13 @@ This means the production path uses the same canonical services for Learning pro
 
 ## Completion and regression coverage
 
-Issue #595's product path is covered at several layers:
+The Governed Learning product path is covered at several layers:
 
 - `tests/integration/evaluation/test_governed_learning.py` — core governed candidate, gate, promotion, persistence and recovery behavior;
-- `tests/regression/task_management/test_integration_review.py` — #594 Evaluation/Learning integration and exact evidence binding;
+- `tests/regression/task_management/test_integration_review.py` — Evaluation/Learning integration and exact evidence binding;
 - `tests/integration/cli/test_cli_entrypoint.py` — public `platform learning` dispatch, promotion confirmation and generic-executor bypass prevention;
 - `tests/integration/cli/test_product_surfaces.py` — public Shell/navigation/CLI wiring plus pagination-boundary regression;
 - `frontend/src/app/navigation.test.ts` — Learning navigation registration;
 - `frontend/src/app/learningManifest.test.ts` — required-resource, read-only and manifest-command gating.
 
-The backend, Control Plane and durable Single-Node composition were integrated into `main` by #679. The remaining product-surface wiring is intentionally additive: it exposes the already-governed canonical Learning service through the public CLI and Web shell without changing its authority, persistence or promotion semantics.
+The backend, Control Plane and durable Single-Node composition were integrated into the standard runtime. The remaining product-surface wiring is intentionally additive: it exposes the already-governed canonical Learning service through the public CLI and Web shell without changing its authority, persistence or promotion semantics.

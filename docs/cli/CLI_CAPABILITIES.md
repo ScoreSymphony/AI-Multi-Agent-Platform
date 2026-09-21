@@ -1,7 +1,6 @@
 # CLI capability inventory
 
-Issue: #38
-Owning domain: #12
+The Capability domain is the canonical owner of capability inventory and invocation contracts.
 
 The capability CLI is a read-only client of explicitly registered versioned Control Plane resources. It never reads `CapabilityRegistry` internals, invokes MCP directly, or treats administrative inventory as an authorization grant.
 
@@ -27,7 +26,7 @@ Administrative inventory and caller-facing discovery intentionally have differen
 
 `CapabilityRegistry.list_capabilities()` and policy-aware discovery answer whether a capability is statically usable for a supplied permission/worker context. The new `inventory_capabilities()` method answers which canonical capability versions are registered, including permission-restricted and unavailable versions.
 
-This distinction prevents an administrator from losing visibility into a restricted or unhealthy capability without weakening invocation authorization. Actual capability use continues through the canonical #12 invocation and policy pipeline.
+This distinction prevents an administrator from losing visibility into a restricted or unhealthy capability without weakening invocation authorization. Actual capability use continues through the canonical capability invocation and policy pipeline.
 
 A capability resource is grouped by its canonical `capability_id`; the `versions` array retains the version-specific schema, safety, side-effect, permission, approval, worker, health, availability, feature and credential-requirement metadata.
 

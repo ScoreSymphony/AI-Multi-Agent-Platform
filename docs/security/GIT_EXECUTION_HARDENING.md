@@ -1,6 +1,5 @@
 # Git execution hardening and GitSpawn regression coverage
 
-Issue: #1220
 
 ## Security boundary
 
@@ -179,7 +178,7 @@ less-hardened Git subprocess path.
 
 The repository also contains developer, CI, benchmark, evidence and test utilities that invoke
 Git, including scripts under `scripts/ci/`, benchmark capture scripts and test fixture setup.
-These are not runtime repository authorities. #1220 does not globally rewrite developer Git
+These are not runtime repository authorities. This hardening does not globally rewrite developer Git
 configuration and the regression suite itself uses temporary repositories/config roots only.
 
 CI/developer Git helpers remain subject to their own trust model. Any helper later reused with
@@ -268,7 +267,7 @@ on failure.
 
 ## Regression-suite isolation
 
-The #1220 tests:
+The hardening tests:
 
 - create only temporary repositories and temporary config files;
 - never run `git config --global` or `git config --system`;

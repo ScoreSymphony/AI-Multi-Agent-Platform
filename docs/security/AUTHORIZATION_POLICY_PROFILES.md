@@ -1,9 +1,8 @@
 # Authorization Policy Profiles
 
-Issue: #310
 
 Authorization policy profiles are the platform-owned, provider-neutral representation of
-reusable permission configuration. They sit above the issue-#15 authorization boundary and
+reusable permission configuration. They sit above the canonical Authorization boundary and
 must not be confused with a concrete policy engine's configuration.
 
 ## 1. Ownership boundary
@@ -96,7 +95,7 @@ owns:
 - narrowly-scoped import compensation for package rollback.
 
 The service is constructed with the existing `AuthorizationGate`, so user-visible profile
-management and import application use the normal issue-#15 decision and approval path
+management and import application use the normal canonical Authorization decision and approval path
 rather than a policy-profile-specific decision engine.
 
 Authorization is evaluated against the canonical policy resource scope. Caller-supplied
@@ -122,7 +121,7 @@ Permission-bearing mutations are bound to the exact proposed change:
 - assignment fingerprints the exact profile revision, destination principal and actor types;
 - enable/disable bind to the current exact profile revision.
 
-The fingerprints are calculated by the canonical service and carried through the #15
+The fingerprints are calculated by the canonical service and carried through canonical Authorization
 `ProposedAction` binding. Reusing an approval after changing policy content, an assignment
 target or the current lifecycle revision therefore produces a different action digest and
 requires a new authorization/approval decision.
@@ -178,9 +177,9 @@ objects and compiled provider policy state are excluded. Repository restoration 
 contiguous revision history and profile/revision identity consistency before accepting the
 stored state.
 
-## 9. Portability boundary (#79)
+## 9. Portability boundary
 
-Cross-deployment transport uses the existing issue-#79 package, validation, preview,
+Cross-deployment transport uses the existing canonical Portability package, validation, preview,
 remapping and rollback infrastructure.
 
 `AuthorizationPolicyProfilePortableCodec` serializes:
@@ -193,7 +192,7 @@ remapping and rollback infrastructure.
 It never serializes assignments, effective provider grants, provider-native policy objects
 or credentials.
 
-The normal #79 `IdPolicy` supports preserving or regenerating the profile identity.
+The normal Portability `IdPolicy` supports preserving or regenerating the profile identity.
 Canonical typed scope references are remapped through `ImportContext`. Opaque exact
 resource IDs are preserved rather than guessed into a resource type.
 
@@ -212,7 +211,7 @@ supplied, unknown resource dependencies remain unavailable and preview fails clo
 
 ### Preview security inspection
 
-The generic #79 preview supports resource-specific `ImportSecurityFinding` values. Policy
+The generic Portability preview supports resource-specific `ImportSecurityFinding` values. Policy
 profiles report:
 
 - `untrusted_configuration` to make the dormant/untrusted import state explicit;
@@ -264,10 +263,10 @@ portable package -> effective authority
 
 ## 10. Related domains
 
-- #15 owns authorization semantics, enforcement and approval binding.
-- #34 owns secret references and secret handling.
-- #79 owns package export/import, validation, preview, remapping and rollback.
-- #78 Templates may reference exact policy-profile revisions but do not own profile
+- Authorization owns authorization semantics, enforcement and approval binding.
+- Secrets and configuration own secret references and secret handling.
+- Portability owns package export/import, validation, preview, remapping and rollback.
+- Templates may reference exact policy-profile revisions but do not own profile
   identity/history.
-- #87 Organization/Team membership configuration may reference policy profiles without
+- Organization/Team membership configuration may reference policy profiles without
   redefining authorization semantics.

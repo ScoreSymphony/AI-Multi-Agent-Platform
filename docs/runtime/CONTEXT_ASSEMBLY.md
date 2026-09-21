@@ -1,6 +1,6 @@
 # Canonical Context Assembly
 
-Issue #590 introduces a platform-owned boundary for deciding exactly which authorized, versioned information reaches an Agent/Model Run. The context subsystem is intentionally separate from source-domain lifecycle ownership and from provider/orchestrator prompt rendering.
+The Context Assembly domain provides a platform-owned boundary for deciding exactly which authorized, versioned information reaches an Agent/Model Run. The context subsystem is intentionally separate from source-domain lifecycle ownership and from provider/orchestrator prompt rendering.
 
 ## Ownership boundary
 
@@ -77,7 +77,7 @@ The source vocabulary includes Task, Plan/Step, Agent, Skill, Memory, Knowledge,
 The operational path deliberately maps source vocabulary to existing canonical owners rather than requiring one adapter class per enum value:
 
 - explicit human/user task intent and constraints remain owned by the canonical Task/Specification path. `TaskContextSourceAdapter` projects the exact Task revision, including its user-provided objective, so Context assembly does not create a second user-message truth store or adapter-private prompt channel;
-- completed #86 Verification results/findings are projected by `VerificationContextSourceAdapter` as `VERIFICATION` / `EVIDENCE` candidates. The projection binds the canonical Verification request/result IDs, policy/stage, exact subject revision/digest, outcome and findings. Reviewer-authored prose remains `UNTRUSTED` evidence and cannot acquire `INSTRUCTION` authority merely by entering Context;
+- completed Verification results/findings are projected by `VerificationContextSourceAdapter` as `VERIFICATION` / `EVIDENCE` candidates. The projection binds the canonical Verification request/result IDs, policy/stage, exact subject revision/digest, outcome and findings. Reviewer-authored prose remains `UNTRUSTED` evidence and cannot acquire `INSTRUCTION` authority merely by entering Context;
 - pending Verification requests are not treated as findings/evidence;
 - arbitrary Verification result metadata is not copied into Context. The Verification subsystem remains the only owner of its full canonical record.
 
@@ -132,11 +132,11 @@ platform extension show context-bundles <context_bundle_id>
 
 ## Evaluation integration
 
-The #19 evaluation framework remains the canonical evaluation owner. Context assembly contributes deterministic cases through the existing `EvaluationRunner`/evaluator contracts rather than creating a parallel context-specific evaluation store. The #590 integration fixtures cover stable bundle identity, policy filtering/budget behavior, renderer replacement, no privilege escalation and paired `context_quality`/`task_success` metrics for full versus degraded optional context.
+The Evaluation framework remains the canonical evaluation owner. Context assembly contributes deterministic cases through the existing `EvaluationRunner`/evaluator contracts rather than creating a parallel context-specific evaluation store. The Context Assembly integration fixtures cover stable bundle identity, policy filtering/budget behavior, renderer replacement, no privilege escalation and paired `context_quality`/`task_success` metrics for full versus degraded optional context.
 
 ## Required regression evidence
 
-`tests/integration/context/test_context_bundles.py` is the focused #590 regression/acceptance suite. It proves:
+`tests/integration/context/test_context_bundles.py` is the focused Context Assembly regression/acceptance suite. It proves:
 
 - deterministic digest assembly and idempotent storage;
 - changed source revision -> changed bundle digest;
@@ -152,8 +152,8 @@ The #19 evaluation framework remains the canonical evaluation owner. Context ass
 - absence of secret values from canonical serialization;
 - rejection of untrusted retrieved content as instruction authority.
 
-`tests/unit/context/test_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/integration/context/test_agent_run_binding.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/integration/context/test_context_evaluation.py` runs the context scenarios through the canonical #19 evaluation framework.
+`tests/unit/context/test_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/integration/context/test_agent_run_binding.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/integration/context/test_context_evaluation.py` runs the context scenarios through the canonical Evaluation framework.
 
 The operational completion coverage additionally uses `tests/e2e/context/test_single_node_agent_context.py` for the public AgentRun/restart path, `tests/integration/context/test_verification_evidence_projection.py` for Verification projection, `tests/integration/context/test_task_context_ownership.py` for explicit user-intent ownership, and `tests/e2e/context/test_source_revision_persistence.py` for real single-node source-adapter composition and historical Bundle stability across a changed Task revision.
 
-All #590/#650/#680 Context tests use local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.
+All Context Assembly tests use local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.

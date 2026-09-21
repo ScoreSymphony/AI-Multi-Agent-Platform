@@ -1,6 +1,6 @@
-# Organization, Team and Membership Domain (#87)
+# Organization, Team and Membership Domain
 
-This document records the canonical organization, team and membership foundation for issue #87.
+This document records the canonical organization, team and membership foundation.
 
 ## Boundaries
 
@@ -14,7 +14,7 @@ The organization domain owns durable organizational relationships and resource c
 - ownership mirrors and explicit sharing records;
 - external identity-provider group mappings.
 
-It does **not** authenticate actors, store credentials, or make final permission decisions. Authentication remains owned by #36 and effective permission decisions remain owned by #15. Membership roles and policy references are inputs to authorization, not a replacement authorization engine.
+It does **not** authenticate actors, store credentials, or make final permission decisions. Authentication remains owned by Authentication and effective permission decisions remain owned by Authorization. Membership roles and policy references are inputs to authorization, not a replacement authorization engine.
 
 ## Personal scope
 
@@ -26,7 +26,7 @@ An Organization has one canonical `owner_actor_id` plus zero or more administrat
 
 `organization.owner.transfer` provides the explicit transfer required before the current owner can leave the Organization. The command:
 
-- is Organization-scoped and still passes through #15;
+- is Organization-scoped and still passes through Authorization;
 - additionally requires the authenticated acting principal to be the current `owner_actor_id`;
 - requires the target actor to already hold an active Membership in the Organization;
 - changes only the canonical Organization owner reference and timestamp;
@@ -56,11 +56,11 @@ Invitation persistence keeps any internal `token_ref` outside northbound project
 
 ## Authorization bridge
 
-`membership_authorization_scope` projects active team IDs plus role/policy references for a selected Organization. `actor_identity_for_scope` can construct the existing #15 `ActorIdentity` for that Organization.
+`membership_authorization_scope` projects active team IDs plus role/policy references for a selected Organization. `actor_identity_for_scope` can construct the existing Authorization `ActorIdentity` for that Organization.
 
-`MembershipAuthorizationProvider` is a deny-only guard that can wrap any canonical #15 `AuthorizationProvider`. For Organization/Team-scoped requests it rechecks current Organization, Team and Membership state before delegating to #15. It also understands existing Control Plane `owner_type`/`owner_id` scope, including deriving an Organization from a Team owner scope.
+`MembershipAuthorizationProvider` is a deny-only guard that can wrap any canonical Authorization `AuthorizationProvider`. For Organization/Team-scoped requests it rechecks current Organization, Team and Membership state before delegating to Authorization. It also understands existing Control Plane `owner_type`/`owner_id` scope, including deriving an Organization from a Team owner scope.
 
-Active Membership role/policy references are projected into the #15 request `trust_context` under `organization_membership`. Caller-supplied values under that key are overwritten with repository-backed values. The wrapped #15 provider remains responsible for the final allow/deny/approval decision.
+Active Membership role/policy references are projected into the Authorization request `trust_context` under `organization_membership`. Caller-supplied values under that key are overwritten with repository-backed values. The wrapped Authorization provider remains responsible for the final allow/deny/approval decision.
 
 This prevents stale Membership identity from retaining future access after suspension/removal while preserving the original actor referenced by historical Tasks, Runs and Events.
 
@@ -68,16 +68,16 @@ This prevents stale Membership identity from retaining future access after suspe
 
 `ResourceOwnership` uses platform-owned `OwnerRef`, so collaboration metadata can represent personal, Organization, Team or service ownership. `ResourceShare` records explicit grants and revocation.
 
-Cross-Organization sharing is denied by default. `allow_cross_organization=True` expresses caller intent but is not permission: the Control Plane additionally requires a dedicated #15 `resource-share.cross-organization` authorization decision before mutation.
+Cross-Organization sharing is denied by default. `allow_cross_organization=True` expresses caller intent but is not permission: the Control Plane additionally requires a dedicated Authorization `resource-share.cross-organization` authorization decision before mutation.
 
-For resources that already have a canonical owner, that resource remains the ownership source of truth. #87 mirrors that identity and adds collaboration/share metadata; it must not create a second independently mutable owner.
+For resources that already have a canonical owner, that resource remains the ownership source of truth. the Organization domain mirrors that identity and adds collaboration/share metadata; it must not create a second independently mutable owner.
 
 ### Canonical ownership integration matrix
 
-| Resource | Canonical ownership state | #87 behavior |
+| Resource | Canonical ownership state | the Organization domain behavior |
 | --- | --- | --- |
-| Project | canonical `OwnerRef` in project scope store | strict mirror on canonical creation; direct generic #87 owner mutation rejected |
-| Workspace | canonical owner in workspace scope store | strict mirror on canonical creation; direct generic #87 owner mutation rejected |
+| Project | canonical `OwnerRef` in project scope store | strict mirror on canonical creation; direct generic the Organization domain owner mutation rejected |
+| Workspace | canonical owner in workspace scope store | strict mirror on canonical creation; direct generic the Organization domain owner mutation rejected |
 | Agent | canonical `OwnerRef` | authoritative mirror across create/update/clone/rollback |
 | Agent Team | canonical `OwnerRef` | authoritative mirror across create/update/clone/rollback |
 | Automation | canonical identity owner | authoritative mirror across create/update/pause/resume/disable |
@@ -86,13 +86,13 @@ For resources that already have a canonical owner, that resource remains the own
 | Connection | canonical `owner_type`/`owner_id` plus optional Organization/Project scope | strict mirror on create/enable/disable/health; current Connection API has no canonical owner-transfer command |
 | File | canonical `FileRecord.owner_ref` | `OrganizationOwnershipFileProvider` mirrors File ownership on write/create without read-side effects |
 | Artifact | artifact IDs linked from canonical File records | ownership is mirrored from the backing File when the artifact link is created; no independent second owner is invented |
-| Evaluation Suite/Run | current Control Plane projection has no owner or Organization/Project owner contract | no separate #87 owner is created until the Evaluation domain defines one |
+| Evaluation Suite/Run | current Control Plane projection has no owner or Organization/Project owner contract | no separate the Organization domain owner is created until the Evaluation domain defines one |
 | Template | no standalone canonical owner-bearing Template resource currently exposed | not separately applicable yet |
-| Plugin/configuration | current canonical plugin resources are platform installation/configuration resources without per-user/team owner contract | not separately applicable yet; secret/config authorization remains outside #87 |
+| Plugin/configuration | current canonical plugin resources are platform installation/configuration resources without per-user/team owner contract | not separately applicable yet; secret/config authorization remains outside the Organization domain |
 
-Resources without a canonical owner contract are intentionally **not** assigned a synthetic #87 owner merely to satisfy a checklist. When those domains gain canonical scope/owner semantics, they should add the same mirror integration rather than mutate `ResourceOwnership` independently.
+Resources without a canonical owner contract are intentionally **not** assigned a synthetic the Organization domain owner merely to satisfy a checklist. When those domains gain canonical scope/owner semantics, they should add the same mirror integration rather than mutate `ResourceOwnership` independently.
 
-Project and Workspace ownership are a deliberate authority boundary: their Scope domain is the canonical owner source, and the current Scope API has no owner-transfer operation. The generic #87 `resource-ownership.transfer` command therefore rejects Project/Workspace mutations instead of creating split-brain ownership. A future canonical Scope owner-transfer operation should update the same mirror; #87 does not bypass that domain boundary.
+Project and Workspace ownership are a deliberate authority boundary: their Scope domain is the canonical owner source, and the current Scope API has no owner-transfer operation. The generic the Organization domain `resource-ownership.transfer` command therefore rejects Project/Workspace mutations instead of creating split-brain ownership. A future canonical Scope owner-transfer operation should update the same mirror; the Organization domain does not bypass that domain boundary.
 
 ## Persistence
 
@@ -126,11 +126,11 @@ Mutation commands include:
 - share create/revoke;
 - external group mapping create/deactivate.
 
-Organization-sensitive mutations receive an owner-scoped #15 check. Scope-aware resource services filter individual records before caller-visible pagination/counts, so another Organization cannot be inferred from counts or exact hidden IDs.
+Organization-sensitive mutations receive an owner-scoped Authorization check. Scope-aware resource services filter individual records before caller-visible pagination/counts, so another Organization cannot be inferred from counts or exact hidden IDs.
 
-`invitation.accept` is usable before Membership exists only for an authenticated principal matching `intended_identity_ref`; the invited actor gains Membership when acceptance succeeds. Email-only records require a future canonical one-time credential flow before they can be redeemable. Authentication and the generic #15 command boundary still apply.
+`invitation.accept` is usable before Membership exists only for an authenticated principal matching `intended_identity_ref`; the invited actor gains Membership when acceptance succeeds. Email-only records require a future canonical one-time credential flow before they can be redeemable. Authentication and the generic Authorization command boundary still apply.
 
-Global Search indexes privacy-minimal Organization, Team and Membership projections only. Live Organization visibility is rechecked before results, totals or exact-ID existence are returned, then the canonical #15 authorization provider still makes the final action decision. The same visibility hook enables organization-scoped Connection discovery without changing canonical Connection ownership. Invitations, ownership/share records, IdP mappings and Organization audit events remain outside global Search.
+Global Search indexes privacy-minimal Organization, Team and Membership projections only. Live Organization visibility is rechecked before results, totals or exact-ID existence are returned, then the canonical Authorization authorization provider still makes the final action decision. The same visibility hook enables organization-scoped Connection discovery without changing canonical Connection ownership. Invitations, ownership/share records, IdP mappings and Organization audit events remain outside global Search.
 
 ## Frontend
 
@@ -171,16 +171,16 @@ Removing a Membership never mutates historical Task/Run/Event records. Regressio
 
 ## Acceptance coverage
 
-Issue #87 is covered by dedicated domain, Control Plane, persistence, authorization, ownership-integration, audit, provenance and frontend-client tests. The regression matrix includes:
+The Organization domain is covered by dedicated domain, Control Plane, persistence, authorization, ownership-integration, audit, provenance and frontend-client tests. The regression matrix includes:
 
 - personal-only operation without an Organization;
 - Organization create/update/archive and explicit owner transfer;
 - Team create/update/configuration;
 - invitation accept/expire/revoke;
 - Membership add/assignment/suspend/remove/leave and authentication-identity changes;
-- role/policy projection into the canonical #15 authorization path;
+- role/policy projection into the canonical Authorization authorization path;
 - ownership/share/revoke behavior and default cross-Organization isolation;
-- explicit #15 authorization for requested cross-Organization sharing;
+- explicit Authorization authorization for requested cross-Organization sharing;
 - historical Task/Event provenance after Membership removal;
 - service and automation Membership identities;
 - reversible external IdP group mappings;
@@ -192,4 +192,4 @@ Issue #87 is covered by dedicated domain, Control Plane, persistence, authorizat
 - organization-scoped Connection Search guarded by the same live Organization visibility hook;
 - identity-bound invitation redemption without browser-generated secret references.
 
-The Organization runtime is composed above the current Conversation-aware Control Plane rather than an obsolete intermediate stack, so later platform domains remain intact when #87 is enabled.
+The Organization runtime is composed above the current Conversation-aware Control Plane rather than an obsolete intermediate stack, so later platform domains remain intact when the Organization domain is enabled.

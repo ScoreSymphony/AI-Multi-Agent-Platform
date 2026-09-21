@@ -1,6 +1,6 @@
 # Autonomous planning and bounded replanning
 
-Issue #439 adds a platform-owned planning layer between canonical Task intent and the existing durable Plan/Step runtime.
+The Planning domain adds a platform-owned planning layer between canonical Task intent and the existing durable Plan/Step runtime.
 
 The ownership direction is:
 
@@ -9,11 +9,11 @@ Goal / Task intent
     -> Planning proposal
     -> validation / preview / approval
     -> canonical Plan + Steps
-    -> durable #384 coordinator
+    -> durable Plan/Step coordinator
     -> canonical Runs
-    -> executor / #14 Worker placement
+    -> executor / Node/Worker placement
     -> Results / Artifacts
-    -> #86 Verification
+    -> Verification
 ```
 
 Planning owns **proposal generation, validation, revision intent and provenance**. It does not own Step execution, retries, waits, fan-out/fan-in state, capability invocation, model-provider execution, Worker scheduling or verification authority.
@@ -23,9 +23,9 @@ Planning owns **proposal generation, validation, revision intent and provenance*
 The planner consumes platform-owned references only:
 
 - canonical Task identity and revision;
-- exact Agent or Agent-Team revisions from #33, or a role requirement resolvable against that inventory;
-- canonical Capability IDs and requirements from #12;
-- canonical model configuration requirements from #10;
+- exact Agent or Agent-Team revisions from the Agent domain, or a role requirement resolvable against that inventory;
+- canonical Capability IDs and requirements from the Capability domain;
+- canonical model configuration requirements from the Model domain;
 - Workspace and Project scope references;
 - prior Plan/Run/Result/Artifact evidence;
 - policy and verification references.
@@ -76,7 +76,7 @@ Before activation the platform validates at least:
 
 Invalid proposals remain visible as proposal history but cannot activate.
 
-## Activation and #384 handoff
+## Activation and coordinator handoff
 
 Activation is an explicit command. `PlanningOrchestratorAdapter` temporarily exposes exactly one `ACTIVATING` proposal through the existing `Orchestrator.plan(...)` seam so `PlatformKernel.plan_task(...)` remains the sole allocator of canonical Plan and Step IDs.
 
@@ -88,10 +88,10 @@ This separation is intentional:
 - the planner never starts a Step;
 - the planner never dispatches a Worker;
 - the planner never invokes a capability;
-- #384 determines runnable Steps and dependency progression;
-- #14 remains responsible for Worker/Node placement when distributed execution is enabled.
+- The durable coordinator determines runnable Steps and dependency progression;
+- Node/Worker scheduling remains responsible for Worker/Node placement when distributed execution is enabled.
 
-The handoff is restart-safe. If the process stops after `plan.created` but before the proposal record is marked `ACTIVATED`, a retry discovers the exact proposal provenance in canonical event history, replays the idempotent #384 registration and then repairs proposal state.
+The handoff is restart-safe. If the process stops after `plan.created` but before the proposal record is marked `ACTIVATED`, a retry discovers the exact proposal provenance in canonical event history, replays the idempotent coordinator registration and then repairs proposal state.
 
 ## Replanning
 
@@ -112,16 +112,16 @@ A replacement proposal may refer to previous Steps through `reuse_step_ids`, but
 
 Planning does not grant permissions. Control Plane clients cannot claim `granted_permissions` through the planning command payload.
 
-Sensitive capability requirements mark a proposal as approval-gated. Activation fails closed if an approval authority is required but unavailable. When #15 is configured, activation binds authorization/approval to the exact proposal digest and Plan-revision action. Capability execution later still passes through the normal #12/#15 invocation gates; approving a Plan does not bypass capability authorization.
+Sensitive capability requirements mark a proposal as approval-gated. Activation fails closed if an approval authority is required but unavailable. When Authorization is configured, activation binds authorization/approval to the exact proposal digest and Plan-revision action. Capability execution later still passes through the normal Capability/Authorization invocation gates; approving a Plan does not bypass capability authorization.
 
 ## Planner implementations
 
 Two reference planners are available:
 
 - `DeterministicReferencePlanner`: no LLM or paid service required; useful for local operation and contract tests.
-- `ModelBackedPlanner`: routes through the canonical #10 `ModelRouter` and `ModelRegistry`, then records only the selected canonical model configuration ID in proposal provenance.
+- `ModelBackedPlanner`: routes through the canonical `ModelRouter` and `ModelRegistry`, then records only the selected canonical model configuration ID in proposal provenance.
 
-`PlanningOrchestratorAdapter` is not a planner implementation authority of its own. It is only the activation bridge from a validated proposal into the existing kernel planning seam and can retain an ordinary fallback Orchestrator for pre-#439 callers.
+`PlanningOrchestratorAdapter` is not a planner implementation authority of its own. It is only the activation bridge from a validated proposal into the existing kernel planning seam and can retain an ordinary fallback Orchestrator for callers using the pre-planning path.
 
 ## Control Plane
 
@@ -135,7 +135,7 @@ Proposal resources expose status, digest, planner provenance, assumptions, const
 
 ## Standard single-node composition
 
-The public `build_single_node_deployment(...)` path composes #439 as a normal durable platform service:
+The public `build_single_node_deployment(...)` path composes Planning as a normal durable platform service:
 
 - `JsonPlanningRepository` persists proposal/replanning state in `db/planning.json`;
 - a dedicated `PlatformKernel` shares the canonical kernel event store solely for Task/Plan mutation and history;
@@ -144,10 +144,10 @@ The public `build_single_node_deployment(...)` path composes #439 as a normal du
 - `planning-proposals` and the three planning commands are registered on the authenticated Control Plane;
 - safe planning transition evidence is projected into the normal observability timeline.
 
-The separate planning kernel is an enforcement boundary, not a second Task/Run authority: it uses the same canonical event repository, but its lifecycle dependency makes direct Run execution impossible. The normal deployment kernel remains the execution path used by #384 and, when enabled, #14 distributed scheduling.
+The separate planning kernel is an enforcement boundary, not a second Task/Run authority: it uses the same canonical event repository, but its lifecycle dependency makes direct Run execution impossible. The normal deployment kernel remains the execution path used by the durable coordinator and, when enabled, distributed scheduling.
 
 ## Observability and evaluation
 
 Planning emits safe proposal/validation/activation/handoff events through its event sink. Canonical `plan.created` history additionally carries the `platform-planning` adapter namespace with proposal digest, planner/version, canonical model configuration, trigger, constraints, evidence and reused/superseded Plan references.
 
-Issue-specific tests exercise deterministic and model-backed planning, DAG validation, satisfiability failures, stale and duplicate proposals, approval fail-closed behavior, restart recovery, #384 handoff, completed-work reuse, bounded replanning and the standard single-node composition. These behaviors are suitable as deterministic #19 evaluation subjects without making the evaluator or planner a lifecycle authority.
+Issue-specific tests exercise deterministic and model-backed planning, DAG validation, satisfiability failures, stale and duplicate proposals, approval fail-closed behavior, restart recovery, coordinator handoff, completed-work reuse, bounded replanning and the standard single-node composition. These behaviors are suitable as deterministic Evaluation subjects without making the evaluator or planner a lifecycle authority.

@@ -1,7 +1,5 @@
 # Platform Control Plane and versioned API
 
-Issue: #32
-
 The Control Plane is the stable northbound transport and foundation boundary for web, CLI, automations and external clients. It exposes platform-owned canonical resources and explicit commands only. The stability of each domain/resource contract composed behind that boundary is classified separately. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
 
 ## Ownership boundary
@@ -19,9 +17,9 @@ Web / CLI / Automation / External Client
 
 The Control Plane does not create a second Task/Run/Event domain model. Existing canonical services remain authoritative. The API serializes platform-owned state and delegates lifecycle actions back to those services.
 
-## Issue #32 foundation scope
+## Foundation scope
 
-The foundation owned by #32 is intentionally small and contains only the resources available at that stage:
+The stable Control Plane foundation is intentionally small and contains only its canonical foundation resources:
 
 - projects;
 - workspaces at identity/ownership baseline level;
@@ -37,22 +35,22 @@ The foundation owned by #32 is intentionally small and contains only the resourc
 - SSE task/run lifecycle updates;
 - generated OpenAPI and common API conventions.
 
-#32 does **not** predeclare APIs or command vocabularies for future domains such as Agents, Tools, Workers, Approvals, Automations, Evaluations, Plugins, Search or other later subsystems. Those domains extend the same Control Plane only after their canonical contracts exist.
+The Control Plane foundation does **not** predeclare APIs or command vocabularies for independent domains such as Agents, Tools, Workers, Approvals, Automations, Evaluations, Plugins or Search. Those domains extend the same Control Plane only through their canonical contracts.
 
 ## Current later-domain integrations
 
-The repository can contain APIs added after #32. They are not retroactively part of the #32 foundation.
+Registered domain APIs beyond this foundation are not retroactively part of the foundation contract.
 
-Work under #10 has already added the canonical Model Registry/Provider API, including:
+The Model domain adds the canonical Model Registry/Provider API, including:
 
 - `/api/v1/models`;
 - `/api/v1/model-providers`;
 - their read and supported enable/disable/health commands.
 
-These routes are legitimate because the Model domain and its Control Plane integration now exist, regardless of whether every remaining #10 deliverable is already closed. The distinction is therefore:
+These routes are legitimate because the Model domain and its Control Plane integration exist. The distinction is therefore:
 
 ```text
-#32 foundation contract
+Control Plane foundation contract
         +
 implemented later-domain APIs
         +
@@ -67,7 +65,7 @@ This prevents the foundation from guessing future schemas while allowing the API
 
 The first stable major for the shared Control Plane foundation/protocol is `/api/v1`.
 
-The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The `control-plane-v1` classification is **Core + Stable**, but that classification covers the shared `v1` protocol/foundation conventions and #32-owned stable behavior rather than automatically promoting every registered domain resource to Stable. Each later-domain public contract keeps the stability level declared for its own feature entry.
+The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The `control-plane-v1` classification is **Core + Stable**, but that classification covers the shared `v1` protocol/foundation conventions and stable foundation behavior rather than automatically promoting every registered domain resource to Stable. Each later-domain public contract keeps the stability level declared for its own feature entry.
 
 A later domain can therefore expose a Beta or Experimental resource through the same composed `/api/v1` Control Plane without downgrading the Stable foundation and without acquiring Stable compatibility by namespace inheritance. API-major stability and feature maturity are related but non-overlapping concepts. ADR 0003 still governs the northbound wire contract: a breaking canonical Control Plane contract change requires a new major namespace regardless of the feature's maturity label.
 
@@ -91,7 +89,7 @@ Kernel-owned task/run commands include:
 - `POST /api/v1/tasks/{task_id}:retry`
 - `POST /api/v1/tasks/{task_id}/runs/{run_id}:cancel`
 
-These commands delegate to canonical kernel behavior. #32 does not reserve approval, worker, plugin, automation or evaluation commands before those domains define them.
+These commands delegate to canonical kernel behavior. The foundation does not reserve approval, worker, plugin, automation or evaluation commands before those domains define them.
 
 ## Extension contract for later domains
 
@@ -115,7 +113,7 @@ A registered collection receives the common Control Plane read conventions:
 - recursive backend-private payload rejection;
 - generated OpenAPI entries, including the common `filter[field]` convention.
 
-The collection name comes from the owning canonical domain. An unregistered future collection is neither advertised nor treated as a #32 resource.
+The collection name comes from the owning canonical domain. An unregistered collection is neither advertised nor treated as a foundation resource.
 
 A new public registered resource or command must also declare its canonical owner, architectural role and stability under [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). Registration proves composition into the Control Plane; it does not by itself create a Stable compatibility promise.
 
@@ -144,13 +142,13 @@ The request must use `Content-Type: application/json`, requires an `Idempotency-
 
 The request identifies the canonical `resource_ref`. Mutating extension commands receive the same `RequestContext` used elsewhere by the Control Plane. Generated OpenAPI documents the JSON request body and required `resource_ref` field.
 
-The owning later-domain issue may also implement dedicated canonical routes once its own contract exists, as #10 does for Models. #32 itself does not guess those routes.
+The owning domain may also implement dedicated canonical routes once its own contract exists, as the Model domain does. The Control Plane foundation does not guess those routes.
 
 ### Manifest and OpenAPI
 
 `GET /api/v1` reports the current composed surface:
 
-- #32 foundation resources;
+- foundation resources;
 - APIs implemented by later-domain work;
 - explicitly registered extension resources and commands;
 - the OpenAPI URL;
@@ -269,5 +267,5 @@ Health/readiness use canonical provider contracts and remain extensible for late
 - Task/Run lifecycle authority remains in the canonical kernel.
 - Direct database mutations do not bypass application services.
 - Backend-private IDs/types remain implementation metadata and are rejected even when nested inside registered extension payloads.
-- Future resource schemas are defined by their owning domain issues, not speculatively by #32.
+- Additional resource schemas are defined by their owning domains, not speculatively by the Control Plane foundation.
 - Missing future optional domains do not affect foundation startup.

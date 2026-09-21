@@ -1,6 +1,6 @@
 # Search index checkpoints and stale recovery
 
-This document extends the issue #45 Search contract with synchronization metadata for larger or event-driven deployments.
+This document extends the Search contract with synchronization metadata for larger or event-driven deployments.
 
 ## Invariants
 
@@ -48,7 +48,7 @@ This prevents one later incremental event from accidentally hiding the fact that
 
 ### Correctness-first default
 
-Rebuild-before-query is the default and preserves the original #45 baseline. Every query rebuilds from canonical sources before provider candidate discovery.
+Rebuild-before-query is the default and preserves the original Search baseline. Every query rebuilds from canonical sources before provider candidate discovery.
 
 This remains appropriate for the in-memory baseline and for deployments that do not have a durable event-driven indexing pipeline.
 

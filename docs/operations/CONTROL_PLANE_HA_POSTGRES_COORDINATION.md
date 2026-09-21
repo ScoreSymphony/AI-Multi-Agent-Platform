@@ -1,9 +1,9 @@
 # PostgreSQL coordination for multi-instance Control Plane HA
 
-Issue #566 productionizes the active/passive semantics established by #89. This document covers the
+The optional Control Plane HA profile productionizes the established active/passive semantics. This document covers the
 first production-shaped boundary only: a real `CoordinationProvider` shared by independent processes
-or hosts. It does **not** claim that the full #566 HA profile is complete. Shared canonical durable
-state remains owned by prerequisite #956.
+or hosts. It does **not** claim that the full HA profile is complete. Shared canonical durable
+state remains owned by the shared durable-state prerequisite.
 
 ## Scope and architecture boundary
 
@@ -21,10 +21,10 @@ Control Plane B ----/
 
 The provider owns only lease/fencing coordination. Canonical Task, Run, Event, Agent, Workspace,
 security, Automation and Worker state remains owned by the existing platform repositories/providers.
-A deployment must not claim safe HA until #956 supplies or validates a shared/replicated durable-state
+A deployment must not claim safe HA until shared durable-state composition supplies or validates a shared/replicated durable-state
 composition for every subsystem required by its failover claim.
 
-The ordinary #39 single-node profile does not import or instantiate this adapter and requires neither
+The ordinary single-node profile does not import or instantiate this adapter and requires neither
 PostgreSQL nor Psycopg.
 
 ## Optional dependency
@@ -64,7 +64,7 @@ Task/Run lifecycle state merely because the same service is used for coordinatio
 
 Do not commit DSNs or credentials. Resolve them from the platform's normal secret/configuration
 boundary. Non-loopback database traffic must use private/authenticated networking and TLS/service
-identity according to the existing #36/#43 rules.
+identity according to the existing Authentication/Security rules.
 
 ## Stored state
 
@@ -110,7 +110,7 @@ acquisition receives a strictly newer generation.
 ### Fence validation
 
 `assert_fence()` reads current backend state and rejects a token when instance, epoch or backend-owned
-expiry no longer matches. This is the operation used by the existing #89 fail-closed authority checks
+expiry no longer matches. This is the operation used by the existing fail-closed authority checks
 immediately before authority-bearing work.
 
 ### Inspect and backend outage
@@ -136,7 +136,7 @@ instance cannot take authority until release/expiry. This is fail-closed rather 
 
 ## Readiness and deployment use
 
-This adapter does not change #89 readiness semantics:
+This adapter does not change HA readiness semantics:
 
 - standby can be healthy while not write-ready;
 - `PROMOTING` is not write-ready;
@@ -168,14 +168,13 @@ When configured with the `ha-postgres` extra, the test bootstraps a unique lease
 independent Python processes, proves exactly one wins acquisition, lets that process disappear without
 release, promotes the other process after backend-observed expiry, and proves the old epoch is fenced.
 
-This evidence proves real cross-process coordination only. It must not be reported as complete #566
-multi-process/multi-host platform HA until #956 and the remaining #566 acceptance scenarios are green.
+This evidence proves real cross-process coordination only. It must not be reported as complete multi-process/multi-host platform HA until shared durable-state composition and the remaining HA acceptance scenarios are green.
 
-## Remaining #566 work
+## Remaining HA work
 
 The following remain deliberately outside this first slice:
 
-- shared/replicated canonical durable-state composition (#956);
+- shared/replicated canonical durable-state composition;
 - full two-Control-Plane composition and client routing;
 - duplicate command replay against shared kernel persistence;
 - authentication/session/revocation continuity against shared persistence;

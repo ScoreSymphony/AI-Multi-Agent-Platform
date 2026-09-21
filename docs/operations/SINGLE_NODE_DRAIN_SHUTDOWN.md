@@ -1,16 +1,14 @@
 # Single-node graceful drain and shutdown recovery
 
-Issue: #1152  
-Recovery authority: #707  
-Deployment baseline: #39
-
+Recovery authority: canonical startup reconciliation
+Deployment baseline: canonical single-server deployment
 ## Invariant
 
 Graceful drain is a **process-local admission policy**, not a persisted lifecycle.
 
 Canonical Task, Plan, Step, Run, Event, Workspace, Artifact, Approval and Verification state
 continues to be owned by the normal platform subsystems. If the process exits before work settles,
-the next `platform-server serve` invocation runs the existing #707 startup reconciliation before
+the next `platform-server serve` invocation runs the existing startup reconciliation before
 authoritative serving begins.
 
 The shutdown path therefore never invents a terminal Task/Run/Step outcome simply because the
@@ -28,7 +26,7 @@ For a normal service-manager stop or `Ctrl+C`:
 6. already-admitted mutations may settle only before the shared drain deadline;
 7. Uvicorn connection/task settlement and ASGI lifespan teardown use the same configured bound;
 8. if the deadline expires, remaining process-local teardown is cancelled and the process exits;
-9. the next startup reconciles canonical durable state through #707 before becoming ready.
+9. the next startup reconciles canonical durable state through canonical startup reconciliation before becoming ready.
 
 The default bound is 30 seconds. Configure it explicitly with:
 
@@ -42,7 +40,7 @@ A first SIGTERM/SIGINT requests the normal bounded drain. A second termination s
 server is already exiting escalates to Uvicorn force-exit semantics: connection/task settlement and
 application lifespan cleanup may be skipped. The drain is then recorded as forced with
 `force_reason="operator_force_signal"`; canonical Task/Run/Step/Approval/Verification state is
-still not rewritten. The next startup must reconcile the same durable data root through #707.
+still not rewritten. The next startup must reconcile the same durable data root through canonical startup reconciliation.
 
 ## Health and readiness during drain
 
@@ -62,7 +60,7 @@ the normal serving path.
 
 | State at drain entry | Shutdown disposition | Restart authority |
 | --- | --- | --- |
-| mutation admitted but not yet dispatched | may finish only inside the shared deadline; otherwise uncommitted process work disappears and durable state is reconciled | owning canonical subsystem / #707 |
+| mutation admitted but not yet dispatched | may finish only inside the shared deadline; otherwise uncommitted process work disappears and durable state is reconciled | owning canonical subsystem / startup reconciliation |
 | dispatched but not acknowledged | do not guess success/failure and do not blindly redispatch during shutdown | distributed/runtime ownership reconciliation; uncertain ownership may block startup |
 | running local/reference Run | allow bounded completion; otherwise preserve last durable Run state | `PlatformKernel.recover_all()` |
 | running remote Worker execution | do not cancel merely because the Control Plane drains; Worker/job evidence remains authoritative | `DistributedRuntime.reconcile()` before kernel recovery |
@@ -96,7 +94,7 @@ a correctness prerequisite or a second lifecycle authority.
 
 ## Observability
 
-The single-node drain projects structured #16 telemetry/timeline evidence:
+The single-node drain projects structured telemetry/timeline evidence:
 
 - `platform.single_node.drain.requested`
 - `platform.single_node.drain.entered`
@@ -106,7 +104,7 @@ The single-node drain projects structured #16 telemetry/timeline evidence:
 - `platform.single_node.drain.teardown_failed`
 - `platform.single_node.drain.completed`
 - metric `platform.single_node.drain.in_flight` with a disposition attribute
-- `platform.single_node.restart.reconciliation` after the #707 startup pass
+- `platform.single_node.restart.reconciliation` after the startup reconciliation pass
 
 The restart event records readiness, unresolved Run count, blocked Verification count,
 Plan reconciliation count, distributed-job reconciliation count and the resulting disposition.
@@ -125,7 +123,7 @@ platform-server serve
 `serve` runs the same recovery automatically. Use the explicit `recover-startup` command first
 when you want to inspect the recovery result without opening the HTTP listener.
 
-If recovery reports an orphaned running Run, follow the existing #707 runbook in
+If recovery reports an orphaned running Run, follow the existing recovery runbook in
 `SINGLE_NODE_RELIABILITY.md`. Do not manually edit SQLite or the startup report.
 
 ## What drain does not do

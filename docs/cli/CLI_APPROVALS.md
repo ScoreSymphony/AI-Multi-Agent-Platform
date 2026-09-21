@@ -1,6 +1,6 @@
 # CLI approval inspection and decisions
 
-Issue #38 introduced read-only #15 Approval inspection. Issue #214 completes the canonical decision workflow without giving the CLI access to Approval storage or lifecycle mutation primitives.
+The CLI provides read-only Approval inspection and the canonical decision workflow without access to Approval storage or lifecycle mutation primitives.
 
 ## Commands
 
@@ -45,12 +45,12 @@ AuthorizationGate.decide_approval()
 ApprovalService._decide_authorized()
 ```
 
-The CLI never imports or calls `ApprovalService.decide()` or `_decide_authorized()`. The Control Plane does not expose a generic ApprovalService mutation primitive; it invokes the #15 `AuthorizationGate.decide_approval()` application boundary after exact-digest validation.
+The CLI never imports or calls `ApprovalService.decide()` or `_decide_authorized()`. The Control Plane does not expose a generic ApprovalService mutation primitive; it invokes the canonical `AuthorizationGate.decide_approval()` application boundary after exact-digest validation.
 
-A changed digest is rejected before decision. An unauthorized approver is rejected by #15. Expired or otherwise non-pending Approvals conflict deterministically. A repeated identical Control Plane mutation with the same idempotency key returns the recorded safe result, while reusing that key for a different decision conflicts.
+A changed digest is rejected before decision. An unauthorized approver is rejected by the canonical authorization policy. Expired or otherwise non-pending Approvals conflict deterministically. A repeated identical Control Plane mutation with the same idempotency key returns the recorded safe result, while reusing that key for a different decision conflicts.
 
 ## Secret safety
 
 The proposed action payload is never serialized by the Approval resource or decision response. The digest and an optional safe `payload_ref` are the only payload-related Approval fields. Confirmation text contains only safe canonical action/resource/risk/policy/digest metadata.
 
-This keeps CLI and future Web clients on the same shared northbound contract; Web consumption remains owned by #313.
+This keeps CLI and Web clients on the same shared northbound contract.

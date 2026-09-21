@@ -1,6 +1,6 @@
 # Platform-wide Search
 
-Issue #45 introduces Search as a progressive, derived discovery layer over canonical platform resources.
+Search is a progressive, derived discovery layer over canonical platform resources.
 
 ## Invariants
 
@@ -44,7 +44,7 @@ These resources use their existing canonical list/discovery authorization action
 
 ### Task-management projection and filters
 
-Tasks are indexed from the same managed northbound Task projection used by `/api/v1/tasks`, not from a Search-owned copy of Task planning state. Search therefore consumes the canonical #88 Task-management metadata and derived queue state directly while the platform-owned Task lifecycle remains authoritative.
+Tasks are indexed from the same managed northbound Task projection used by `/api/v1/tasks`, not from a Search-owned copy of Task planning state. Search therefore consumes the canonical Task-management metadata and derived queue state directly while the platform-owned Task lifecycle remains authoritative.
 
 The Task Search projection supports:
 
@@ -54,7 +54,7 @@ The Task Search projection supports:
 - exact `responsible_id` filtering;
 - exact canonical `agent_assignment_id` filtering;
 - `blocked=true|false` using the canonical effective Task-management/lifecycle projection;
-- `overdue=true|false` using the canonical #88 derived overdue state;
+- `overdue=true|false` using the canonical derived overdue state;
 - exact dependency Task discovery through `dependency_id`;
 - labels through the existing Search `tag` filter.
 
@@ -124,7 +124,7 @@ A registered `ResourceService` may opt out of global Search by exposing `search_
 
 ### Files
 
-Issue #13 exposes a canonical `FileProvider` with project-scoped metadata enumeration. The Control Plane adds a read-only `files` ResourceService that projects `FileRecord` metadata into the same registered-domain seam used by global Search. Search does not read provider databases or filesystem paths directly and never indexes File bytes.
+The canonical `FileProvider` exposes project-scoped metadata enumeration. The Control Plane adds a read-only `files` ResourceService that projects `FileRecord` metadata into the same registered-domain seam used by global Search. Search does not read provider databases or filesystem paths directly and never indexes File bytes.
 
 The File projection exposes safe canonical metadata including:
 
@@ -138,17 +138,17 @@ The File projection exposes safe canonical metadata including:
 
 Global Search deliberately limits searchable File text to safe discovery fields such as canonical identity, Project/owner scope, lifecycle state, content type and Artifact IDs. Arbitrary `FileRecord.metadata` values are not promoted into Search keywords or snippets, so provider/application metadata does not silently become globally discoverable text.
 
-A complete rebuild enumerates the unscoped File namespace plus the canonical Project IDs supplied by the composition root. The underlying `FileProvider` remains responsible for its #13 scope semantics, while Search applies the normal per-result `file:list` authorization check with the candidate owner and Project context before a result, count or exact-ID match becomes caller-visible.
+A complete rebuild enumerates the unscoped File namespace plus the canonical Project IDs supplied by the composition root. The underlying `FileProvider` remains responsible for its canonical scope semantics, while Search applies the normal per-result `file:list` authorization check with the candidate owner and Project context before a result, count or exact-ID match becomes caller-visible.
 
 The canonical `/files` read surface uses the same scope principle. The File ResourceService opts into per-resource authorization so an unscoped list is filtered by each candidate's canonical owner/Project context before pagination and counts are calculated. Direct reads re-check `file:read` with the resolved File scope; a scope-denied read is returned as neutral `not_found` rather than revealing that the File exists in another Project.
 
 Tombstoned Files are excluded by the canonical FileProvider. Because the correctness-first Search path rebuilds from canonical sources before a query, a deleted/tombstoned File disappears from Search without a Search-owned deletion state or second lifecycle.
 
-Memory and Knowledge discovery is derived only from the privacy-aware canonical northbound resources introduced by #251/#13. Search can index safe discovery metadata for Memory, Knowledge Sources and Knowledge Documents without reading provider-private vector/index state or raw private content. The normal per-resource authorization checks run before counts, snippets or exact-ID results become caller-visible.
+Memory and Knowledge discovery is derived only from the privacy-aware canonical northbound Memory and Knowledge resources. Search can index safe discovery metadata for Memory, Knowledge Sources and Knowledge Documents without reading provider-private vector/index state or raw private content. The normal per-resource authorization checks run before counts, snippets or exact-ID results become caller-visible.
 
 ### Plugins and Plugin Candidates
 
-Issue #20 exposes canonical installed Plugin lifecycle state through the registered `plugins` ResourceService and discovery candidates through `plugin-candidates`. Global Search consumes those existing northbound resources through the progressive registration seam; it does not create another Plugin registry, catalog, persistence layer, installation source or Plugin identity.
+The Plugin domain exposes canonical installed Plugin lifecycle state through the registered `plugins` ResourceService and discovery candidates through `plugin-candidates`. Global Search consumes those existing northbound resources through the progressive registration seam; it does not create another Plugin registry, catalog, persistence layer, installation source or Plugin identity.
 
 The Search projection keeps useful flat discovery metadata searchable, including:
 
@@ -165,11 +165,11 @@ The Search projection keeps useful flat discovery metadata searchable, including
 
 The generic Search result `version` uses canonical `plugin_version` when a conventional revision field is not available. Candidate results retain `/api/v1/plugin-candidates/{id}` as their canonical reference; installed Plugins retain `/api/v1/plugins/{id}`.
 
-The nested Plugin Manifest is deliberately not flattened into global Search. Runtime entrypoints, source-repository URLs, configuration schemas, extension metadata and other nested manifest structures therefore do not become Search keywords merely because they are inspectable through the richer canonical #20 Plugin API. Search indexes only the explicitly permitted flat discovery projection.
+The nested Plugin Manifest is deliberately not flattened into global Search. Runtime entrypoints, source-repository URLs, configuration schemas, extension metadata and other nested manifest structures therefore do not become Search keywords merely because they are inspectable through the richer canonical Plugin API. Search indexes only the explicitly permitted flat discovery projection.
 
 Plugin Candidates reuse `plugin-candidate:list`; installed Plugins reuse `plugin:list`. Denied candidates and Plugins are removed before caller-visible counts, snippets, cursors and exact-ID results are calculated, so knowing a hidden Plugin ID or name does not make its existence observable through Search.
 
-Search remains discovery-only. Finding a Plugin or Candidate never installs, configures, enables, disables, updates or removes it; those lifecycle transitions continue to require the canonical #20 command surface and its authorization/approval rules.
+Search remains discovery-only. Finding a Plugin or Candidate never installs, configures, enables, disables, updates or removes it; those lifecycle transitions continue to require the canonical Plugin command surface and its authorization/approval rules.
 
 ### Models and Model Providers
 
@@ -192,11 +192,11 @@ Model Search supports safe inventory metadata such as:
 
 Model results are authorized with `model:list`; Model Provider results use `model-provider:list`. Provider-native model identifiers and `adapter_metadata` are deliberately not indexed. They therefore cannot become Search identities, keywords, snippets or caller-visible Search provenance.
 
-Capability inventory follows the registered-domain path. `capability_resource_services(...)` exposes the canonical #12 `capabilities` and `capability-providers` collections, so those resources use the same progressive rebuild and authorization flow without Search depending directly on the Capability Registry implementation.
+Capability inventory follows the registered-domain path. `capability_resource_services(...)` exposes the canonical `capabilities` and `capability-providers` collections, so those resources use the same progressive rebuild and authorization flow without Search depending directly on the Capability Registry implementation.
 
 ### Automations and Automation Deliveries
 
-Issue #18 registers canonical `automations` and `automation-deliveries` resources through the same progressive `ResourceService` seam. Search therefore does not need a second Automation repository, Automation-specific index provider or separate identity model.
+The Automation domain registers canonical `automations` and `automation-deliveries` resources through the same progressive `ResourceService` seam. Search therefore does not need a second Automation repository, Automation-specific index provider or separate identity model.
 
 The hardened Automation Control Plane adds owner and Project/Workspace scope to the northbound resources before they enter Search. The derived Search projection supports safe Automation metadata including:
 
@@ -212,7 +212,7 @@ Automation Search reuses the canonical registered-domain authorization actions `
 
 ### Approvals
 
-The #15 security domain exposes canonical Approval inspection through the registered `approvals` ResourceService. Search consumes that safe northbound projection rather than reading Approval storage or proposed-action payloads directly.
+The Authorization/Approval domain exposes canonical Approval inspection through the registered `approvals` ResourceService. Search consumes that safe northbound projection rather than reading Approval storage or proposed-action payloads directly.
 
 Approval Search includes only discovery metadata needed to locate an authorized lifecycle record:
 
@@ -231,7 +231,7 @@ Search is discovery-only: an Approval Search result or its displayed status neve
 
 ### Usage Aggregates and Budgets
 
-Issue #76 exposes canonical accounting state through registered `usage-records`, `usage-aggregates` and `usage-budgets` ResourceServices. Global Search intentionally does **not** index raw `usage-records`: they are high-cardinality accounting records and remain available through the owning accounting API instead of turning global Search into a telemetry query engine.
+The Accounting domain exposes canonical accounting state through registered `usage-records`, `usage-aggregates` and `usage-budgets` ResourceServices. Global Search intentionally does **not** index raw `usage-records`: they are high-cardinality accounting records and remain available through the owning accounting API instead of turning global Search into a telemetry query engine.
 
 The `usage-aggregates` and `usage-budgets` services provide complete Search rebuild enumerators while their normal northbound reads remain owner-isolated. Searchable metadata is limited to safe flat discovery vocabulary such as:
 
@@ -246,7 +246,7 @@ Nested trend points, quality-count structures, raw quantities/cost evidence and 
 
 ### Evaluation Suites and Runs
 
-Issue #19 exposes canonical `evaluation-suites` and `evaluation-runs` through registered Control Plane ResourceServices. Search consumes those northbound shapes only; it does not query Evaluation repositories, runners, evaluators or provider internals directly.
+The Evaluation domain exposes canonical `evaluation-suites` and `evaluation-runs` through registered Control Plane ResourceServices. Search consumes those northbound shapes only; it does not query Evaluation repositories, runners, evaluators or provider internals directly.
 
 The safe discovery projection includes:
 
@@ -265,7 +265,7 @@ Search is discovery-only and does not determine Evaluation outcomes. See `docs/S
 
 ### Connector Definitions and Connections
 
-Issue #44 exposes canonical Connector Definitions and Connections through the existing `register_connector_control_plane(...)` ResourceService registration path. Search does not create a parallel connector catalog or query adapters/remote services directly.
+The Connector domain exposes canonical Connector Definitions and Connections through the existing `register_connector_control_plane(...)` ResourceService registration path. Search does not create a parallel connector catalog or query adapters/remote services directly.
 
 The northbound resources carry explicit canonical types:
 
@@ -284,7 +284,7 @@ Connection Search uses a dedicated complete rebuild projection because ordinary 
 
 Per-result `connection:list` authorization still occurs above the derived index before caller-visible counts or exact-ID matches. The rebuild enumerator therefore reconstructs candidate state but is not an authorization bypass.
 
-Organization-scoped Connections are intentionally excluded from global Search until #87 supplies stable membership/removal/suspension visibility semantics that Search can enforce. `ExternalResourceReference` objects are also not indexed yet because #44 currently does not expose them through a durable, listable canonical ResourceService; Search does not crawl sync responses or adapter state to invent such an index.
+Organization-scoped Connections participate in global Search through the live Organization visibility seam, so suspended or removed Memberships lose discovery visibility immediately. Durable `ExternalResourceReference` objects are discovered through the canonical Connector resource surface; Search does not crawl transient synchronization responses or adapter state to invent an index.
 
 See `docs/SEARCH_CONNECTORS.md` for the focused integration contract.
 

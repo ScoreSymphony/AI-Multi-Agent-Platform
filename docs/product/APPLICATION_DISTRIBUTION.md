@@ -67,7 +67,7 @@ Dispatch is idempotent around the canonical Run: the Worker job identity is dete
 
 `release_manifest()` generates deterministic machine-readable content. Artifacts include canonical Artifact/File IDs, target, package/media type, SHA-256, build Task/Run provenance, evidence references and, after publication, provider-returned download URLs. Deterministic JSON bytes and a manifest SHA-256 are available for publication or future update-discovery clients.
 
-The versioned schema lives in `docs/schemas/application-release-manifest.schema.json`. It contains enough version/channel/target/digest information for a later explicit updater without implementing automatic application updates in this issue. Build environment values and SecretReferences are intentionally not copied into the public release manifest; only the build specification identity/revision is exposed there.
+The versioned schema lives in `docs/schemas/application-release-manifest.schema.json`. It contains enough version/channel/target/digest information for a later explicit updater without implementing automatic application updates in this distribution boundary. Build environment values and SecretReferences are intentionally not copied into the public release manifest; only the build specification identity/revision is exposed there.
 
 ## Release gates and maintained conformance
 

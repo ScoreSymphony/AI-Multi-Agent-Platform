@@ -1,7 +1,6 @@
 # Standard Agents and Starter Agent Teams
 
-Issue #77 provides an optional starter catalog on top of the canonical Agent contracts from
-issue #33. The catalog is convenience configuration, not a second runtime architecture.
+The platform provides an optional starter catalog on top of the canonical Agent contracts. The catalog is convenience configuration, not a second runtime architecture.
 Every installed starter is a normal `AgentProfile` or `AgentTeamProfile` and therefore uses
 the same model routing, capability, authorization, memory, persistence, revision and
 orchestration boundaries as user-created Agents.
@@ -10,13 +9,13 @@ orchestration boundaries as user-created Agents.
 
 - The catalog is provider-neutral. No starter names or requires a particular LLM vendor,
   model server, orchestrator, executor, host, operating system or memory backend.
-- Model selection is expressed through the canonical issue #10 `RoutingRequirements` and
+- Model selection is expressed through the canonical `RoutingRequirements` and
   remains replaceable by the deployment or user. The initial profiles require only text
   modality and do not require native model tool-calling merely because optional platform
   capabilities exist.
-- Tools are expressed only as canonical issue #12 capability IDs. A starter never calls a
+- Tools are expressed only as canonical capability IDs. A starter never calls a
   provider implementation directly.
-- Authorization and approval remain authoritative in issue #15 and the issue #33 runtime.
+- Authorization and approval remain authoritative in Authorization and the Agent Runtime.
   A starter profile cannot grant itself permissions.
 - Bundled IDs are stable and bootstrap is idempotent. Re-running bootstrap never writes a
   new revision over an existing bundled identity.
@@ -72,7 +71,7 @@ canonical `project_id` or `workspace_id`. `standard-agent-team.clone` applies th
 the Software Development Team. Missing scope fails with `invalid_request` instead of
 silently producing a supposedly workspace-restricted starter with no assigned scope.
 
-This is deliberately starter-specific. The general #33 Agent contracts remain capable of
+This is deliberately starter-specific. The general Agent contracts remain capable of
 representing unscoped custom Agents where a deployment explicitly chooses that design.
 Actual file access is still granted by the canonical capability/authorization/provider path;
 an Agent's requested file capability is not itself a filesystem grant.
@@ -154,11 +153,11 @@ Registered commands:
 - `agent-team.delete` — delete the authenticated owner's unreferenced Team copy.
 
 Bootstrap uses `resource_ref=standard-agent-catalog`. The generic Control Plane still applies
-its normal issue #15 authorization and idempotency boundary before these mutation handlers.
+its normal Authorization and idempotency boundary before these mutation handlers.
 The delete handlers additionally bind deletion to the authenticated owner, so a user-owned
 copy cannot be used to delete the service-owned bundled identity or another user's copy.
 
-The generic #33 `agent.create`, `agent.update`, `agent.clone`, `agent-team.create`,
+The generic `agent.create`, `agent.update`, `agent.clone`, `agent-team.create`,
 `agent-team.update` and related commands remain available. The starter-specific clone
 commands add catalog identity validation and the explicit-scope guard; they do not replace
 the canonical lifecycle.
@@ -166,7 +165,7 @@ the canonical lifecycle.
 ## Single-node deployment
 
 The production-shaped single-node composition now includes a durable `JsonAgentRepository`
-at `db/agents.json`, registers the canonical #33 Agent Control Plane, and registers the
+at `db/agents.json`, registers the canonical Agent Control Plane, and registers the
 standard catalog integration.
 
 It intentionally **does not auto-bootstrap standard Agents on process startup**. A fresh
@@ -194,7 +193,7 @@ copy = clone_standard_agent(
 For file-facing standard roles, prefer the managed Control Plane clone workflow so an explicit
 project/workspace scope is recorded atomically with the clone.
 
-A user-owned copy can use the normal issue #33 update path to change, among other things:
+A user-owned copy can use the normal Agent update path to change, among other things:
 
 - model routing requirements or explicit model selection;
 - allowed/denied/required capabilities;
@@ -235,9 +234,9 @@ The catalog intentionally errs toward least privilege:
 - System Administrator is disabled by default and its privileged shell/write paths carry the
   standard privileged-administration approval reference.
 
-An `approval_ref` is not descriptive metadata: the issue #33 runtime validates it against the
+An `approval_ref` is not descriptive metadata: the Agent Runtime validates it against the
 resolved canonical `CapabilitySpec.required_approvals`. The actual invocation still passes
-through the issue #15 authorization/approval path. Regression coverage includes the disabled
+through the Authorization/Approval path. Regression coverage includes the disabled
 System Administrator profile itself, not only the Developer shell profile.
 
 ## Upgrade and migration policy
@@ -256,7 +255,7 @@ without invoking bootstrap automatically.
 
 ## Future boundaries
 
-Export/import and portable sharing of customized Agents belong to issue #79. Once that
+Export/import and portable sharing of customized Agents belong to Portability. Once that
 portable subsystem exists, these resources require no starter-specific export format because
 installed definitions and user-owned copies are ordinary canonical Agent/Team resources.
 Frontend-specific catalog presentation may be added separately; the generic Control Plane

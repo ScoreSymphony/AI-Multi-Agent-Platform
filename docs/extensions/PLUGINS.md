@@ -1,6 +1,6 @@
 # Plugin runtime and extension SDK
 
-Issue #20 defines the versioned runtime-extension boundary for optional platform integrations.
+The Plugin runtime defines the versioned runtime-extension boundary for optional platform integrations.
 
 ## Architectural rule
 
@@ -10,7 +10,7 @@ The runtime path is:
 
 `explicit discovery source -> manifest/compatibility/security validation -> plugin runtime -> extension binder -> existing platform registry/contract`
 
-The first reference binder proves this with the existing #12 Capability Registry. The bundled reference plugin registers `plugin.echo` as a normal `CapabilityToolProvider`; it does not create a plugin-private tool invocation path.
+The first reference binder proves this with the existing Capability Registry. The bundled reference plugin registers `plugin.echo` as a normal `CapabilityToolProvider`; it does not create a plugin-private tool invocation path.
 
 ## Manifest v1
 
@@ -20,7 +20,7 @@ A manifest declares:
 
 - stable plugin ID independent from a directory name;
 - plugin, manifest and supported platform versions;
-- author and #3 provenance/license metadata;
+- author and provenance/license metadata;
 - provided extension IDs/types/interface versions and descriptive entrypoints;
 - explicit stable capability IDs provided by the plugin;
 - requested permissions;
@@ -72,7 +72,7 @@ Discovery is intentionally separate from a marketplace or package manager.
 
 The Registry records the actual `install_source` separately from manifest provenance. Direct `PluginRegistry.install()` calls default that field to `manifest.provenance.source`.
 
-A future #81 Registry/Marketplace may implement another `PluginSource`; it does not own the runtime lifecycle itself.
+A Registry/Marketplace may implement another `PluginSource`; it does not own the runtime lifecycle itself.
 
 ## Lifecycle
 
@@ -92,11 +92,11 @@ A future #81 Registry/Marketplace may implement another `PluginSource`; it does 
 
 Registry snapshots expose plugin/extension IDs, extension types, dependencies, provenance source/license, actual install source, requested/granted permissions, configuration/state versions, configuration status, compatibility, lifecycle state and health. Canonical northbound plugin resources additionally expose the manifest-declared capability IDs.
 
-Package acquisition/distribution is intentionally not defined by this runtime layer. #81 owns a future optional Registry/Marketplace, while #79 owns portable canonical object import/export.
+Package acquisition/distribution is intentionally not defined by this runtime layer. Registry/Marketplace owns optional package acquisition/distribution, while Portability owns canonical object import/export.
 
 ## Canonical Control Plane lifecycle
 
-When a `PluginRegistry` is composed into the platform Control Plane, #20 exposes plugin administration only through the existing versioned northbound API. Clients do not receive a second direct path to `PluginRegistry` or `PluginCatalog`.
+When a `PluginRegistry` is composed into the platform Control Plane, the Plugin domain exposes plugin administration only through the existing versioned northbound API. Clients do not receive a second direct path to `PluginRegistry` or `PluginCatalog`.
 
 The optional canonical collections are:
 
@@ -121,7 +121,7 @@ Plugin configuration values are intentionally absent from northbound plugin reso
 
 Plugin permission grants are also not supplied by the northbound caller. If a plugin requests permissions, activation requires an authoritative `PluginPermissionResolver` supplied by platform composition. The resolver may grant only permissions the manifest explicitly requested; an attempted over-grant fails closed. `PluginRegistry.enable()` remains the final runtime-side check that every requested permission was actually granted.
 
-The #15 Control Plane authorization bridge maps plugin lifecycle commands and plugin/plugin-candidate reads to canonical `ResourceType.PLUGIN` actions. Mutating commands still pass through the existing exact-payload Approval/Authorization boundary rather than relying on UI or CLI confirmation.
+The Control Plane authorization bridge maps plugin lifecycle commands and plugin/plugin-candidate reads to canonical `ResourceType.PLUGIN` actions. Mutating commands still pass through the existing exact-payload Approval/Authorization boundary rather than relying on UI or CLI confirmation.
 
 If no `PluginRegistry` is composed, plugin collections and commands are not registered. Normal core startup and the existing static API surface therefore remain unchanged.
 
@@ -182,7 +182,7 @@ This architecture does not invent an automatic configuration migration mechanism
 
 The manifest may request privileges such as network, Workspace access, capability registration, secret consumption, Worker execution, administrative APIs and frontend extension registration.
 
-`PluginRegistry.enable()` requires the caller to supply the permissions actually granted by the authoritative security/configuration composition. Requested permissions are metadata, not grants. Runtime operations remain subject to the normal #15/#34 gates after activation.
+`PluginRegistry.enable()` requires the caller to supply the permissions actually granted by the authoritative security/configuration composition. Requested permissions are metadata, not grants. Runtime operations remain subject to the normal Authorization and Secrets gates after activation.
 
 The northbound Control Plane narrows this further: clients cannot self-assert `granted_permissions`; the platform composition resolves them server-side through `PluginPermissionResolver`.
 
@@ -208,16 +208,16 @@ This is logical contract isolation. Process/container sandboxing for untrusted c
 
 Because registration goes through the canonical Capability Registry, enabled plugin capabilities/providers also appear through its administrative capability/provider inventory surfaces; plugins do not maintain a parallel inventory.
 
-## Issue #20 completion boundary and follow-ups
+## Runtime boundary and follow-up domains
 
-The #20 architecture owns the versioned manifest/SDK, discovery contract, lifecycle Registry, compatibility/dependency/permission enforcement, state migration seam, canonical Control Plane lifecycle, first-class CLI, exact Approval binding, failure isolation and deterministic reference plugin.
+The Plugin architecture owns the versioned manifest/SDK, discovery contract, lifecycle Registry, compatibility/dependency/permission enforcement, state migration seam, canonical Control Plane lifecycle, first-class CLI, exact Approval binding, failure isolation and deterministic reference plugin.
 
 Not every reserved extension type has a binder today. A binder is added when the owning canonical domain exposes a stable registry or registration seam; reserving the type now prevents incompatible plugin-private APIs while avoiding premature parallel registries.
 
-The following are independent follow-up domains rather than blockers for the #20 runtime boundary:
+The following are independent follow-up domains rather than blockers for the Plugin runtime boundary:
 
-- #41/#42 upgrade and release orchestration;
-- #78 Templates;
-- #79 Import/Export;
-- #81 Registry/Marketplace and package acquisition/distribution;
+- upgrade and release orchestration;
+- Templates;
+- Portability / Import-Export;
+- Registry/Marketplace and package acquisition/distribution;
 - richer checksum/signature verification once concrete install-source implementations require it.

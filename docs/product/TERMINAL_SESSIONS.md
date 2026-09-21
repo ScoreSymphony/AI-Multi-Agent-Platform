@@ -1,6 +1,6 @@
 # Terminal and execution sessions
 
-Issue #73 introduces a platform-owned terminal/session surface for inspecting execution contexts without turning browser access into raw host shell access.
+The Terminal domain provides a platform-owned terminal/session surface for inspecting execution contexts without turning browser access into raw host shell access.
 
 ## Architectural boundary
 
@@ -75,7 +75,7 @@ Input audit records keep metadata such as byte size, not the raw submitted termi
 
 ## Central redaction boundary
 
-Canonical terminal frames use the platform-wide #34 free-text redaction helper by default. Terminal therefore does not silently fall back to an identity/no-op redactor in the normal service constructor.
+Canonical terminal frames use the platform-wide free-text redaction helper by default. Terminal therefore does not silently fall back to an identity/no-op redactor in the normal service constructor.
 
 The central redaction path provides two layers:
 
@@ -164,7 +164,7 @@ Browser clients must offer the `platform.terminal.v1` WebSocket subprotocol. The
 
 ### Authenticated WebSocket identity
 
-Terminal WebSocket identity uses the same `prepare_stream_request` boundary that protects authenticated Control Plane streams. When the #36 authenticated transport is configured, the WebSocket handshake is authenticated before `TerminalSessionASGI` constructs its actor context.
+Terminal WebSocket identity uses the same `prepare_stream_request` boundary that protects authenticated Control Plane streams. When the authenticated transport is configured, the WebSocket handshake is authenticated before `TerminalSessionASGI` constructs its actor context.
 
 Caller-supplied `X-Principal-Ref`, `X-Owner-Type`, or `X-Owner-Id` values are not an authentication mechanism. The authenticated transport strips/replaces those fields with the canonical identity established by the configured credential or browser session. An anonymous client cannot gain terminal access by spoofing actor headers; rejected authentication is translated into the corresponding WebSocket close before a terminal attachment is created.
 
@@ -216,7 +216,7 @@ The foundation deliberately does not prescribe one database, filesystem or evide
 
 ## Worker and node loss
 
-Adapters can report `lost`. Reconciliation converts that backend state into canonical `SessionStatus.LOST`, sets `ended_at`, and allows a final system frame to explain the loss. Remote worker/node transport and trust integration remains owned by issue #14; the canonical session contract does not depend on that implementation.
+Adapters can report `lost`. Reconciliation converts that backend state into canonical `SessionStatus.LOST`, sets `ended_at`, and allows a final system frame to explain the loss. Remote worker/node transport and trust integration remains owned by the distributed Node/Worker runtime; the canonical session contract does not depend on that implementation.
 
 ## Frontend
 
@@ -234,7 +234,7 @@ The `/terminal` area provides:
 - approval-aware exact-request resume for creation, input and termination;
 - creation of the deterministic reference session for development/testing.
 
-The list does not issue an unscoped terminal query before a project is selected. This keeps the UI aligned with project-scoped #15 policies instead of requiring the backend to weaken its authorization semantics for convenience.
+The list does not issue an unscoped terminal query before a project is selected. This keeps the UI aligned with project-scoped Authorization policies instead of requiring the backend to weaken its authorization semantics for convenience.
 
 When a session is created from the page, its canonical project becomes the active list scope automatically. The frontend derives the WebSocket URL from the configured Control Plane URL and never connects to worker-private terminal ports.
 

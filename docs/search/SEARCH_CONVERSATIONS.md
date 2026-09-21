@@ -1,14 +1,12 @@
 # Conversation and Message Search
 
-Issue: #289  
-Canonical Conversation domain: #72  
-Canonical global Search foundation: #45
+Canonical Conversation state is indexed through the platform-wide Search layer.
 
 ## Purpose
 
 Global Search may discover retained canonical Conversations and Messages, but Search is
 never Conversation history, Memory, or lifecycle/Event authority. Every Search document
-is derived and rebuildable from the canonical #72 repository.
+is derived and rebuildable from the canonical Conversation repository.
 
 ## Indexability policy
 
@@ -50,20 +48,20 @@ state. Provider-native chat/session IDs therefore never become canonical Search 
 
 ## Authorization and non-disclosure
 
-Conversation Search hits are re-authorized against current canonical #72 state before
+Conversation Search hits are re-authorized against current canonical Conversation state before
 they become caller-visible. The implementation reloads the canonical Conversation (and,
 for Message hits, the canonical Message and parent Conversation) instead of trusting
 owner/Project values copied into the derived Search document.
 
-Private Conversations preserve #72's exact owner rule: a private Conversation is visible
+Private Conversations preserve the Conversation domain's exact owner rule: a private Conversation is visible
 only to the principal identified by its canonical `owner_ref`. Project-scoped resources
 then pass through the existing platform authorization boundary. This check occurs before
-Search results or exact-ID existence are returned, preserving the #45 non-disclosure
+Search results or exact-ID existence are returned, preserving the Search non-disclosure
 contract for result items, counts and snippets.
 
 ## Identity and canonical references
 
-Search uses the existing #45 canonical identity rules:
+Search uses the existing canonical Search identity rules:
 
 - `conversation_*` remains the Conversation identity;
 - `message_*` remains the Message identity;
@@ -76,7 +74,7 @@ Search uses the existing #45 canonical identity rules:
 The integration uses the existing registered-resource Search rebuild seam. It does not
 add a chat-specific index, vector database, embedding requirement, or paid service. A
 replacement `SearchProvider` receives the same backend-neutral `SearchDocument` values
-and can rebuild entirely from canonical #72 resources.
+and can rebuild entirely from canonical Conversation resources.
 
 ## Explicit separation from Memory and Events
 

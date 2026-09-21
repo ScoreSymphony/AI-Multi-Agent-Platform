@@ -1,6 +1,6 @@
 # Canonical Event Discovery in Global Search
 
-This document records the Issue #45 integration of canonical lifecycle Events into the platform-wide Search layer.
+This document defines how canonical lifecycle Events participate in the platform-wide Search layer.
 
 The general invariants in `docs/search/SEARCH.md` continue to apply: Search is derived and non-authoritative, canonical IDs remain primary identity, the Search provider is replaceable, and authorization happens before caller-visible totals, snippets, cursors or exact-ID results are calculated.
 
@@ -110,7 +110,7 @@ This preserves the existing rebuild guarantee:
 
 ## Tests
 
-The Issue #45 Event integration proves:
+The Event Search integration proves:
 
 - discovery by canonical Event type;
 - exact canonical Event ID lookup;

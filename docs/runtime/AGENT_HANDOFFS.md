@@ -1,7 +1,7 @@
 # Canonical Agent Handoffs
 
-Issue #592 adds a small platform-owned contract for explicit work transfer between canonical
-Agents and Agent Teams. Issue #651 connects that contract to the normal production-shaped
+The Handoff domain provides a small platform-owned contract for explicit work transfer between canonical
+Agents and Agent Teams. The production composition connects that contract to the normal production-shaped
 single-node runtime. A Handoff records what a producer intentionally passes to the next work
 boundary. It does **not** become a Task, Step, Run, conversation, message bus or workflow
 lifecycle.
@@ -50,7 +50,7 @@ assignment.
 schema version and deterministic SHA-256 content digest. Historical revisions are immutable.
 Large content remains in Files/Artifacts or another owning source domain.
 
-## Production composition (#651)
+## Production composition
 
 The public `deployment.build_single_node_deployment(...)` path exposes one durable
 `deployment.handoffs` composition. It wires existing platform authorities together rather than
@@ -65,7 +65,7 @@ CoordinatedHandoffService ----> canonical CoordinatorRepository
         |
 ProductionHandoffRuntime ------> canonical AgentRepository / AgentRun evidence
         |
-        +--> CanonicalHandoffReferenceGateway --> #15 authorization
+        +--> CanonicalHandoffReferenceGateway --> Authorization
         |                                      --> Verification Artifact/Result evidence
         |                                      --> Research repository
         |                                      --> Skill repository
@@ -94,7 +94,7 @@ No external broker, paid service or provider-private Handoff store is required.
 `ProductionHandoffRuntime.create_handoff(...)` is the production entry point. It first binds the
 producer to canonical AgentRun evidence and replaces caller-supplied creation provenance with
 runtime-owned provenance. Source reads are prepared through `CanonicalHandoffReferenceGateway`
-and #15 before the synchronous #592 service persists anything.
+and Authorization before the synchronous Handoff service persists anything.
 
 `HandoffService.create_handoff(...)` then verifies:
 
@@ -114,8 +114,8 @@ canonical planning/coordinator path.
 
 ## Durable Plan/Step and AgentRun binding
 
-`CoordinatedHandoffService` is the read-only integration seam with the durable #384 coordinator.
-The production runtime additionally checks canonical #33 `AgentRunRecord` evidence.
+`CoordinatedHandoffService` is the read-only integration seam with the durable durable coordinator.
+The production runtime additionally checks canonical canonical `AgentRunRecord` evidence.
 
 Before creation the combined path proves that:
 
@@ -153,7 +153,7 @@ Producer AgentRun
 ```
 
 `ProductionHandoffRuntime.consume_handoff(...)` rechecks the exact consumer and every source
-reference before the #592 service durably records the binding. `start_consumer(...)` then uses a
+reference before the Handoff service durably records the binding. `start_consumer(...)` then uses a
 repository-backed Handoff context adapter, assembles the canonical ContextBundle and refuses to
 start the consumer Agent unless that bundle contains the exact Handoff ID, revision and digest.
 
@@ -162,12 +162,12 @@ The final AgentRun carries the Handoff ID/revision/digest in its verification co
 
 ## Handoff versus Context Bundle
 
-The #590 integration keeps the two lifecycles separate while making the Handoff an actual
+The Context Assembly integration keeps the two lifecycles separate while making the Handoff an actual
 canonical context source:
 
 - `AgentHandoff` remains the semantic work-transfer artifact and canonical source authority.
 - `HandoffContextSource` exposes the exact Handoff ID, revision, digest and execution references.
-- `ContextSourceType.AGENT_HANDOFF` gives #590 a stable source vocabulary without introducing a
+- `ContextSourceType.AGENT_HANDOFF` gives Context Assembly a stable source vocabulary without introducing a
   Handoff-specific resolver or permission system.
 - `ConsumedHandoffContextAdapter` remains useful for already-materialized runtime contexts.
 - `DurableConsumedHandoffContextAdapter` is the production/recovery adapter. It queries exact
@@ -185,14 +185,14 @@ canonical context source:
   this bridge. Their owning domains and normal authorization/verification boundaries remain
   authoritative.
 
-The #590 resolver applies its normal read-authorization gate before including the Handoff.
+The Context Assembly resolver applies its normal read-authorization gate before including the Handoff.
 A denied mandatory Handoff fails closed. Collection is scoped to the exact Task, consuming Run,
 Plan/consumer Step and exact Agent revision; Team consumers additionally require membership in
 the exact Team revision.
 
 `HandoffConsumption.context_bundle_ref` remains available when an exact Context Bundle is
 already known at the consumption boundary. It is not a second ownership mechanism: the final
-#590 `ContextRunBinding` remains the canonical proof of which complete Context Bundle an
+`ContextRunBinding` remains the canonical proof of which complete Context Bundle an
 AgentRun actually used, while Handoff consumption independently proves which exact Handoff
 revision was bound to that Run.
 
@@ -211,7 +211,7 @@ SQLite persistence stores immutable Handoff revisions, idempotency records and e
 Run bindings. Re-opening the repository reconstructs the canonical Handoff through the
 versioned codec and preserves consumption evidence.
 
-The #651 recovery path deliberately does not require an in-memory `HandoffRuntimeContext`.
+The recovery path deliberately does not require an in-memory `HandoffRuntimeContext`.
 `DurableConsumedHandoffContextAdapter` starts from the consuming Run's durable bindings,
 reconstructs each exact `HandoffRuntimeContext`, and contributes the same Handoff source to
 normal Context assembly. Context Bundles and ContextRunBindings are durable independently, so
@@ -228,7 +228,7 @@ prepared-read scope:
 2. compare requested revision/digest when supplied;
 3. preserve the canonical source Project/Workspace scope in the authorization request and reject
    a conflicting caller Project scope;
-4. issue the canonical #15 read decision for the actual Agent actor;
+4. issue the canonical Authorization read decision for the actual Agent actor;
 5. only after an `ALLOW` decision expose that exact reference to synchronous `HandoffService`;
 6. clear the prepared-read scope when the operation ends.
 
@@ -305,7 +305,7 @@ Replacing one `ContextAwareOrchestratorAdapter` with another therefore preserves
 - ContextBundle ID/digest;
 - ContextRunBinding evidence.
 
-The #651 acceptance suite exercises two distinct real Context-aware adapters against the same
+The Handoff acceptance suite exercises two distinct real Context-aware adapters against the same
 canonical Handoff-bearing bundle. Neither adapter owns recovery state.
 
 ## Security invariants
@@ -314,7 +314,7 @@ canonical Handoff-bearing bundle. Neither adapter owns recovery state.
 - Referenced data must pass normal source-resource authorization.
 - Source Project/Workspace scope is preserved at dereference authorization boundaries.
 - ContextBundle inclusion is separately authorization-gated and fail-closed when mandatory.
-- Handoff Control Plane reads remain Task owner/Project scoped after collection-level #15 checks.
+- Handoff Control Plane reads remain Task owner/Project scoped after collection-level Authorization checks.
 - Producer Handoff statements remain untrusted context rather than verification authority.
 - Missing/stale references fail explicitly.
 - Historical Handoff revisions are immutable.

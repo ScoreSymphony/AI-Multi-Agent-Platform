@@ -1,12 +1,11 @@
 # Dependency degradation, bounded retries and readiness
 
-Issue: #1156
 
 ## Purpose
 
-This policy extends the closed #707 single-node recovery work without reopening its lifecycle
+This policy extends the single-node recovery foundation without reopening its lifecycle
 ownership. Provider/dependency failures remain subordinate to canonical platform state and are
-projected through the existing #16 observability and #39 readiness boundaries.
+projected through the existing observability and deployment-readiness boundaries.
 
 ## Failure ownership
 
@@ -92,7 +91,7 @@ Task/Run effects or widen routing/authorization policy.
 
 ## Observability events
 
-The single-node health aggregator is wired to the existing #16 `Telemetry` facade. It emits
+The single-node health aggregator is wired to the existing `Telemetry` facade. It emits
 provider-neutral timeline/metric evidence for:
 
 - each bounded retry decision, including canonical error code and attempt bound;
@@ -117,9 +116,9 @@ failure and cannot make canonical Task/Run work fail.
 - non-destructive guidance.
 
 The guidance never recommends direct database/event-store edits. Operator-required recovery remains
-bound to the supported #707/#40 commands that operate through canonical owners.
+bound to the supported recovery and backup/restore commands that operate through canonical owners.
 
-## Existing domain evidence reused by #1156
+## Existing domain evidence reused
 
 The cross-cutting policy deliberately reuses rather than duplicates existing subsystem tests:
 
@@ -127,12 +126,12 @@ The cross-cutting policy deliberately reuses rather than duplicates existing sub
   healthy recovery phase: `benchmarking/provider_faults.py` and provider-fault CI;
 - executor timeout/cancellation/retry ownership: canonical execution conformance;
 - Worker loss/rejoin and startup blockers: distributed runtime/recovery integration tests;
-- message reconnect/backpressure/cancellation: #35 transport tests;
+- message reconnect/backpressure/cancellation: MessageTransport tests;
 - browser and connector failures: their canonical Capability/Connector boundaries;
-- no-op/exporter failure isolation: #16 observability tests;
+- no-op/exporter failure isolation: observability tests;
 - Registry/Search/Memory/Knowledge optional capability failures: existing provider-neutral
   unavailable paths and reference-provider tests;
-- persistence/startup incompatibility: #39/#40/#707 fail-closed recovery tests.
+- persistence/startup incompatibility: deployment, backup/restore and startup-recovery fail-closed tests.
 
-#1156 adds the missing shared health-probe/readiness/doctor regression coverage on top of those
+This policy adds the missing shared health-probe/readiness/doctor regression coverage on top of those
 domain-owned tests.
