@@ -440,7 +440,7 @@ jobs:
             "ai-map-ci-restored-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             >/dev/null 2>&1 || true
           docker volume rm ai-multi-agent-platform_platform-data >/dev/null 2>&1 || true
-          rm -rf .ci-compose-backups
+          sudo rm -rf .ci-compose-backups
 
   frontend:
     runs-on: ubuntu-latest
