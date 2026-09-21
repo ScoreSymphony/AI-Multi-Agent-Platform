@@ -434,6 +434,9 @@ jobs:
               -f deploy/docker/docker-compose.recovery.yml \
               down -v --remove-orphans || true
           docker compose -f docker-compose.yml down -v --remove-orphans || true
+          docker volume rm \
+            "ai-map-ci-restored-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            >/dev/null 2>&1 || true
           docker volume rm ai-multi-agent-platform_platform-data >/dev/null 2>&1 || true
           rm -rf .ci-compose-backups
 
