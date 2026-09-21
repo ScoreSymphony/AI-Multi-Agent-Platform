@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import pytest
@@ -13,7 +14,7 @@ from ai_multi_agent_platform.control_plane.extensions import (
     ControlPlaneRoute,
     InMemoryResourceService,
 )
-from ai_multi_agent_platform.control_plane.http import HTTPRequest, HTTPResponse
+from ai_multi_agent_platform.control_plane.http import ControlPlaneASGI, HTTPRequest, HTTPResponse
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
@@ -230,7 +231,7 @@ def test_normalized_special_route_ownership_conflict_is_rejected() -> None:
 
     alpha = ControlPlaneModule(
         name="domain.alpha",
-        routes=(ControlPlaneRoute("get", "/api/v1/module-status/", status),),
+        routes=(ControlPlaneRoute("get", "/api/v1//module-status/", status),),
     )
     beta = ControlPlaneModule(
         name="domain.beta",
@@ -281,7 +282,7 @@ def test_special_route_and_openapi_contribution_have_explicit_owner() -> None:
         assert "/api/v1/module-status" in paths
         assert set(paths["/api/v1/module-status"]) == {"get"}
 
-        wrong_method = await http.handle(HTTPRequest(method="POST", path="/api/v1/module-status"))
+        wrong_method = await http.handle(HTTPRequest(method="POST", path="/api/v1//module-status/"))
         assert wrong_method.status == 405
         assert isinstance(wrong_method.body, dict)
         assert wrong_method.body["code"] == "method_not_allowed"
@@ -421,3 +422,89 @@ def test_openapi_contributors_run_in_deterministic_module_order() -> None:
 
     assert first_spec["x-module-order"] == ["alpha", "beta"]
     assert second_spec["x-module-order"] == ["alpha", "beta"]
+
+
+def test_asgi_pre_body_classifier_uses_registered_exact_routes_and_dispatcher_normalization() -> (
+    None
+):
+    async def create_widget(request: HTTPRequest) -> HTTPResponse:
+        del request
+        return HTTPResponse(status=202, body={"status": "accepted"})
+
+    module = ControlPlaneModule(
+        name="domain.widgets",
+        resource_services={
+            "widgets": InMemoryResourceService(
+                ({"id": "widget-1", "type": "widget", "name": "One"},)
+            )
+        },
+        routes=(ControlPlaneRoute("POST", "/api/v1/widgets", create_widget),),
+    )
+    app = ControlPlaneASGI(ControlPlaneHTTP(_control_plane(module)))
+
+    async def invoke(method: str, path: str, body: bytes) -> tuple[int, dict[str, Any]]:
+        sent: list[dict[str, Any]] = []
+        delivered = False
+
+        async def receive() -> dict[str, Any]:
+            nonlocal delivered
+            if delivered:
+                return {"type": "http.disconnect"}
+            delivered = True
+            return {
+                "type": "http.request",
+                "body": body,
+                "more_body": False,
+            }
+
+        async def send(message: dict[str, Any]) -> None:
+            sent.append(message)
+
+        await app(
+            {
+                "type": "http",
+                "method": method,
+                "path": path,
+                "headers": [(b"content-type", b"application/json")],
+                "query_string": b"",
+            },
+            receive,
+            send,
+        )
+
+        start = next(message for message in sent if message["type"] == "http.response.start")
+        body_message = next(message for message in sent if message["type"] == "http.response.body")
+        payload = json.loads(body_message["body"])
+        assert isinstance(payload, dict)
+        return int(start["status"]), payload
+
+    async def scenario() -> None:
+        malformed_status, malformed = await invoke("POST", "/api/v1/widgets", b"{")
+        assert malformed_status == 400
+        assert malformed["code"] == "invalid_json"
+
+        non_object_status, non_object = await invoke("POST", "/api/v1/widgets", b"[]")
+        assert non_object_status == 400
+        assert non_object["code"] == "invalid_request"
+
+        repeated_status, repeated = await invoke("POST", "/api/v1//widgets", b"{")
+        assert repeated_status == 400
+        assert repeated["code"] == "invalid_json"
+
+        accepted_status, accepted = await invoke("POST", "/api/v1//widgets", b"{}")
+        assert accepted_status == 202
+        assert accepted == {"status": "accepted"}
+
+        wrong_method_status, wrong_method = await invoke("DELETE", "/api/v1//widgets", b"{")
+        assert wrong_method_status == 405
+        assert wrong_method["code"] == "method_not_allowed"
+
+        unknown_status, unknown = await invoke(
+            "POST",
+            "/api/v1//does-not-exist/nested",
+            b"{",
+        )
+        assert unknown_status == 404
+        assert unknown["code"] == "not_found"
+
+    asyncio.run(scenario())

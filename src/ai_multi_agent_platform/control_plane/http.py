@@ -569,10 +569,12 @@ class ControlPlaneASGI:
         request_id = headers.get("x-request-id") or f"request_{uuid4()}"
         correlation_id = headers.get("x-correlation-id") or request_id
         try:
-            version, _ = _split_version(path)
+            version, relative = _split_version(path)
             _require_supported_version(version)
         except APIException as exc:
             return self._http._error_response(exc, request_id, correlation_id)
+
+        normalized_path = f"/api/{version}{relative}".rstrip("/") or "/"
 
         openapi = await self._http.handle(
             HTTPRequest(
@@ -587,7 +589,6 @@ class ControlPlaneASGI:
         if not isinstance(paths, dict):
             return None
 
-        normalized_path = path.rstrip("/") or "/"
         foundation_route_error = _foundation_route_error_before_body_validation(
             method,
             normalized_path,
@@ -601,6 +602,15 @@ class ControlPlaneASGI:
 
         allowed_methods: set[str] = set()
         matched = False
+
+        control_plane = getattr(self._http, "_control_plane", None)
+        registered_routes = getattr(control_plane, "registered_routes", ())
+        for route_method, route_path in registered_routes:
+            if route_path != normalized_path:
+                continue
+            matched = True
+            allowed_methods.add(route_method.upper())
+
         for template, operations in paths.items():
             if (
                 not isinstance(template, str)
