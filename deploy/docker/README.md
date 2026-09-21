@@ -96,9 +96,12 @@ docker compose -f docker-compose.yml --profile operations run --rm --no-deps --b
   verify "/backups/$AI_MAP_BACKUP_NAME"
 ```
 
-The data volume is mounted read-only into the backup container. The backup destination is a bind
-mount controlled by the operator, so the verified manifest/payload leaves the platform-data volume.
-Do not restart the Control Plane until backup creation has completed.
+The backup helper keeps its container root filesystem read-only and has no network access. Its
+quiesced data volume retains normal volume filesystem semantics because the canonical SQLite backup
+API may need WAL/SHM sidecar access even though the database connection itself is opened read-only.
+The helper writes the verified backup only to the operator-controlled backup bind mount, so the
+manifest/payload leaves the platform-data volume. Do not restart the Control Plane until backup
+creation has completed.
 
 ### Canonical restore to a replacement named volume
 
