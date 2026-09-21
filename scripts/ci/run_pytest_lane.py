@@ -223,6 +223,7 @@ def main() -> int:
     )
     violations = budget_violations(report)
     report["budget_violations"] = violations
+    report["workflow_run_attempt"] = int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
 
     json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     markdown = render_markdown(report, violations)
