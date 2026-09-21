@@ -27,7 +27,6 @@ def test_compose_keeps_control_plane_private_and_state_durable() -> None:
     assert "stop_grace_period: 40s" in control_plane
 
 
-
 def test_compose_backup_service_exports_quiesced_backup_outside_data_volume() -> None:
     compose = COMPOSE.read_text(encoding="utf-8")
 
@@ -66,6 +65,7 @@ def test_recovery_override_keeps_canonical_data_path_for_replacement_runtime() -
     assert "target: /var/lib/ai-multi-agent-platform" in control_plane
     assert "subpath: restored-data" in control_plane
     assert "AI_MAP_DATA_DIR" not in control_plane
+
 
 def test_container_edge_preserves_api_prefix_and_spa_fallback() -> None:
     caddy = (DOCKER_DIR / "Caddyfile").read_text(encoding="utf-8")
