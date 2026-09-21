@@ -23,9 +23,11 @@ The initial supported platform baseline follows Expo SDK 57: Android 7+ and iOS 
 The mobile client:
 
 1. consumes only public `/api/v1` Control Plane resources/commands;
-2. uses an already-issued bearer credential rather than duplicating the browser cookie/CSRF
-   session mechanism;
-3. validates credentials through `/api/v1/auth/me`;
+2. pairs from a trusted authenticated Web/CLI session through a short-lived single-use QR/code
+   exchange rather than requiring manual durable-token entry or duplicating browser cookie/CSRF
+   authentication;
+3. receives a server-owned, revocable and credential-scoped mobile bearer credential, then
+   validates it through `/api/v1/auth/me`;
 4. persists credential material through `expo-secure-store` (Android Keystore-backed encrypted
    storage / iOS Keychain);
 5. requires HTTPS for non-loopback servers;
@@ -38,8 +40,10 @@ The mobile client:
     already persisted user message and waiting canonical Task;
 11. remains an optional repository client and never becomes a server/runtime dependency.
 
-The first slice does not expose credential issuance, secret management, administrator-only
-configuration, local model hosting or every Web administration surface.
+The mobile client does not expose general credential issuance or secret management. Pairing is a
+narrow first-party exchange that can issue only the canonical mobile-device credential bound to
+the initiating human principal. General administrator-only configuration, local model hosting and
+full Web administration parity remain outside the mobile surface.
 
 ## Consequences
 

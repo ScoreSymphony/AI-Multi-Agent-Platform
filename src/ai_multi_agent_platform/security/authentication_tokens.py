@@ -52,6 +52,7 @@ def validate_credential_kind(actor_type: ActorType, kind: CredentialKind) -> Non
         CredentialKind.WORKER: ActorType.WORKER,
         CredentialKind.AUTOMATION: ActorType.AUTOMATION,
         CredentialKind.INTEGRATION: ActorType.INTEGRATION,
+        CredentialKind.MOBILE: ActorType.HUMAN,
     }[kind]
     if actor_type is not expected:
         raise ValueError(f"credential kind {kind.value!r} requires actor type {expected.value!r}")
@@ -64,6 +65,7 @@ def method_for_kind(kind: CredentialKind) -> AuthenticationMethod:
         CredentialKind.WORKER: AuthenticationMethod.WORKER_TOKEN,
         CredentialKind.AUTOMATION: AuthenticationMethod.AUTOMATION_TOKEN,
         CredentialKind.INTEGRATION: AuthenticationMethod.INTEGRATION_TOKEN,
+        CredentialKind.MOBILE: AuthenticationMethod.MOBILE_DEVICE_TOKEN,
     }[kind]
 
 

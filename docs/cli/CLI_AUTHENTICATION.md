@@ -19,6 +19,13 @@ platform auth credential list
 platform auth credential create --purpose <purpose> [--expires-at ...] [--scope-json ...]
 platform auth credential revoke <credential_id>
 
+platform auth mobile pair [--server-origin https://platform.example]
+platform auth mobile cancel <pairing_id>
+platform auth mobile list
+platform auth mobile rename <device_id> --name <display_name>
+platform auth mobile revoke <device_id>
+platform auth mobile revoke-all
+
 platform auth token activate --token-stdin
 platform auth token clear
 ```
@@ -49,6 +56,8 @@ CLI profile
 Browser sessions use the canonical `HttpOnly` session cookie returned by `/auth/login`; mutating session requests also send the canonical CSRF token. Renew rotates both values. Logout revokes the active browser session before clearing local state.
 
 Bearer credentials use `Authorization: Bearer ...`. `AI_PLATFORM_TOKEN` may provide a process-local bearer credential and takes precedence over the credential store.
+
+`auth mobile pair` creates the same short-lived, single-use pairing challenge used by the Web Settings surface. It prints the server origin, fallback code and `amp-mobile://pair` QR payload but never creates or stores the resulting device bearer credential in the CLI. The Android client consumes that challenge and stores the issued mobile credential through OS secure storage. Device list/rename/revoke commands operate only through the canonical `/api/v1/auth/mobile-*` routes; revocation remains server-side and immediately invalidates the device credential.
 
 ## Secret storage and output
 

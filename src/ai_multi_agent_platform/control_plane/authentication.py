@@ -23,6 +23,11 @@ from ai_multi_agent_platform.security.authentication import (
 )
 
 from .http import HTTPRequest, HTTPResponse, _request_context
+from .mobile_authentication import (
+    handle_authenticated_mobile_auth_route,
+    handle_public_mobile_auth_route,
+    mobile_auth_openapi_paths,
+)
 from .models import API_VERSION, APIError, APIException, api_exception_from_contract
 from .search_contract import ControlPlaneHTTP as _ControlPlaneHTTP
 
@@ -186,6 +191,16 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
                 correlation_id,
             )
 
+        mobile_response = handle_public_mobile_auth_route(
+            self,
+            request,
+            relative,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+        if mobile_response is not None:
+            return mobile_response
+
         if request.method == "POST" and relative == "/auth/login":
             username = _required_string(request.body, "username")
             password = _required_string(request.body, "password")
@@ -276,6 +291,18 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
                 correlation_id=correlation_id,
             )
         user_id = actor.identity.actor_id
+
+        mobile_response = await handle_authenticated_mobile_auth_route(
+            self,
+            request,
+            relative,
+            actor,
+            user_id=user_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+        if mobile_response is not None:
+            return mobile_response
 
         if request.method == "GET" and relative == "/auth/sessions":
             sessions: list[JsonValue] = [
@@ -583,7 +610,11 @@ def _with_authenticated_actor(
 def _public_route(method: str, relative: str) -> bool:
     if method == "GET" and relative in {"", "/", "/health", "/readiness", "/openapi.json"}:
         return True
-    return method == "POST" and relative in {"/auth/login", "/auth/bootstrap-admin"}
+    return method == "POST" and relative in {
+        "/auth/login",
+        "/auth/bootstrap-admin",
+        "/auth/mobile-pairings:consume",
+    }
 
 
 def _relative_path(path: str) -> str:
@@ -698,6 +729,7 @@ def _augment_authentication_openapi(
                 "getAuthenticatedActor", "Return the canonical authenticated actor."
             )
         },
+        **mobile_auth_openapi_paths(csrf_parameter),
         f"/api/{API_VERSION}/auth/logout": {
             "post": _auth_operation(
                 "logoutBrowserSession",

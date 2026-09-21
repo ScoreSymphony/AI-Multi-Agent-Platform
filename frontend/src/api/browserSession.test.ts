@@ -134,6 +134,55 @@ describe("BrowserSessionClient", () => {
     });
   });
 
+  it("uses canonical cookie-authenticated mobile pairing and revocation routes", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("ai-agent-platform.csrf-token", "csrf_stored");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init: init ?? {} });
+      const url = String(input);
+      if (url.endsWith("/auth/mobile-pairings")) {
+        return jsonResponse({
+          id: "pairing_1",
+          server_origin: "https://platform.example",
+          code: "ABCD-EFGH-JKLM",
+          pairing_uri: "amp-mobile://pair?server=https%3A%2F%2Fplatform.example&id=pairing_1&code=ABCD-EFGH-JKLM&v=1",
+          protocol_version: "1",
+          expires_at: "2026-09-21T10:10:00+00:00",
+          secret_display: "one_time",
+        }, 201);
+      }
+      if (url.endsWith("/auth/mobile-devices")) {
+        return jsonResponse({ items: [] });
+      }
+      if (url.endsWith(":revoke")) {
+        return jsonResponse({ id: "mobile_device_1", revoked: true });
+      }
+      return jsonResponse({ id: "pairing_1", cancelled: true });
+    });
+    const session = new BrowserSessionClient({
+      baseUrl: "https://platform.example",
+      fetchImpl,
+      storage,
+    });
+
+    const pairing = await session.createMobilePairing("https://platform.example");
+    await session.cancelMobilePairing(pairing.id);
+    expect(await session.listMobileDevices()).toEqual([]);
+    await session.revokeMobileDevice("mobile_device_1");
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://platform.example/api/v1/auth/mobile-pairings",
+      "https://platform.example/api/v1/auth/mobile-pairings/pairing_1:cancel",
+      "https://platform.example/api/v1/auth/mobile-devices",
+      "https://platform.example/api/v1/auth/mobile-devices/mobile_device_1:revoke",
+    ]);
+    const mutationHeaders = calls
+      .filter((call) => call.init.method === "POST")
+      .map((call) => new Headers(call.init.headers).get("x-csrf-token"));
+    expect(mutationHeaders).toEqual(["csrf_stored", "csrf_stored", "csrf_stored"]);
+  });
+
   it("clears the stored CSRF token after successful logout", async () => {
     const storage = new MemoryStorage();
     storage.setItem("ai-agent-platform.csrf-token", "csrf_stored");

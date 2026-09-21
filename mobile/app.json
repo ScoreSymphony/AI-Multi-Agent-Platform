@@ -6,7 +6,10 @@
     "scheme": "aiagentplatform",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.scoresymphony.aimultiagentplatform"
@@ -16,6 +19,14 @@
       "versionCode": 1
     },
     "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow AI Multi-Agent Platform to scan a trusted mobile pairing QR code.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
       [
         "expo-secure-store",
         {

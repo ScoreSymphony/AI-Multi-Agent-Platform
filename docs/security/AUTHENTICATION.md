@@ -131,8 +131,10 @@ Credential records contain:
 - authoritative credential scope;
 - stored verifier, never retrievable secret material.
 
-Kinds cover personal access, service, worker, automation and integration identities. The
-kind must match its canonical `ActorType`; a token cannot change its actor class.
+Kinds cover personal access, service, worker, automation, integration and mobile-device
+credentials. The kind must match its canonical `ActorType`; a token cannot change its actor
+class. Mobile credentials remain human credentials but use a distinct authentication method and a
+restrictive deny-only scope ceiling for the maintained companion workflows.
 
 ### Credential scopes and #15
 
@@ -257,10 +259,24 @@ POST /api/v1/auth/password:change
 GET  /api/v1/auth/credentials
 POST /api/v1/auth/credentials
 POST /api/v1/auth/credentials/{credential_id}:revoke
+POST /api/v1/auth/mobile-pairings
+POST /api/v1/auth/mobile-pairings/{pairing_id}:cancel
+POST /api/v1/auth/mobile-pairings:consume
+GET  /api/v1/auth/mobile-devices
+POST /api/v1/auth/mobile-devices/{device_id}:rename
+POST /api/v1/auth/mobile-devices/{device_id}:revoke
+POST /api/v1/auth/mobile-devices:revoke-all
 ```
 
 The personal-credential creation response contains the secret exactly once. List/detail
 surfaces expose only safe metadata including the persisted credential scope.
+
+Mobile pairing challenges are short-lived, single-use and bound to the initiating human principal
+and target server origin. Only the unauthenticated consume exchange accepts the one-time proof; it
+returns the durable device credential exactly once. Pairing IDs/codes and device bearer secrets
+are not stored in plaintext, normal device listings never return secret material, remote origins
+must use HTTPS, failed proof attempts are bounded, and device revocation invalidates subsequent
+bearer authentication server-side.
 
 Service/worker/automation/integration credential issuance is available at the application
 service boundary. Administrative APIs that expose those creation operations must first

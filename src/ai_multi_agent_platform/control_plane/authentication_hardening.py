@@ -41,6 +41,7 @@ _TOKEN_METHODS = {
     AuthenticationMethod.WORKER_TOKEN,
     AuthenticationMethod.AUTOMATION_TOKEN,
     AuthenticationMethod.INTEGRATION_TOKEN,
+    AuthenticationMethod.MOBILE_DEVICE_TOKEN,
 }
 
 

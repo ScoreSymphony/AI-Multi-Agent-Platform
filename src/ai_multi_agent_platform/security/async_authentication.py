@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.persistence_offload import SharedPersistenceOffloadRegistry
 
 from .authentication import (
@@ -20,6 +21,8 @@ from .authentication import (
     LocalAuthenticationService,
     LocalUserAccount,
     LoginResult,
+    MobilePairingGrant,
+    PairedMobileDevice,
     SessionGrant,
     StoredCredential,
 )
@@ -133,6 +136,62 @@ class AsyncAuthenticationService(Protocol):
     ) -> IssuedCredential: ...
 
     async def revoke_credential(self, owner_id: str, credential_id: str) -> None: ...
+
+    async def create_mobile_pairing(
+        self,
+        user_id: str,
+        server_origin: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> MobilePairingGrant: ...
+
+    async def consume_mobile_pairing(
+        self,
+        pairing_id: str | None,
+        code: str,
+        *,
+        device_name: str,
+        platform: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
+        protocol_version: str = "1",
+        correlation_id: str | None = None,
+    ) -> tuple[PairedMobileDevice, IssuedCredential]: ...
+
+    async def cancel_mobile_pairing(
+        self,
+        user_id: str,
+        pairing_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None: ...
+
+    async def list_mobile_devices(self, user_id: str) -> tuple[PairedMobileDevice, ...]: ...
+
+    async def safe_mobile_device(self, device: PairedMobileDevice) -> dict[str, JsonValue]: ...
+
+    async def rename_mobile_device(
+        self,
+        user_id: str,
+        device_id: str,
+        display_name: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> PairedMobileDevice: ...
+
+    async def revoke_mobile_device(
+        self,
+        user_id: str,
+        device_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None: ...
+
+    async def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> int: ...
 
 
 class AuthenticationPersistenceOffload:
@@ -442,6 +501,122 @@ class AsyncAuthenticationServiceAdapter:
         await self._run(
             lambda: self._service.revoke_credential(owner_id, credential_id),
             message="failed to persist credential revocation",
+        )
+
+    async def create_mobile_pairing(
+        self,
+        user_id: str,
+        server_origin: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> MobilePairingGrant:
+        return await self._run(
+            lambda: self._service.mobile_pairing.create_challenge(
+                user_id,
+                server_origin,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile pairing challenge",
+        )
+
+    async def consume_mobile_pairing(
+        self,
+        pairing_id: str | None,
+        code: str,
+        *,
+        device_name: str,
+        platform: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
+        protocol_version: str = "1",
+        correlation_id: str | None = None,
+    ) -> tuple[PairedMobileDevice, IssuedCredential]:
+        return await self._run(
+            lambda: self._service.mobile_pairing.consume_challenge(
+                pairing_id,
+                code,
+                device_name=device_name,
+                platform=platform,
+                metadata=metadata,
+                protocol_version=protocol_version,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile pairing consumption",
+        )
+
+    async def cancel_mobile_pairing(
+        self,
+        user_id: str,
+        pairing_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None:
+        await self._run(
+            lambda: self._service.mobile_pairing.cancel_challenge(
+                user_id,
+                pairing_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile pairing cancellation",
+        )
+
+    async def list_mobile_devices(self, user_id: str) -> tuple[PairedMobileDevice, ...]:
+        return await self._run(
+            lambda: self._service.mobile_pairing.list_devices(user_id),
+            message="failed to read paired mobile devices",
+        )
+
+    async def safe_mobile_device(self, device: PairedMobileDevice) -> dict[str, JsonValue]:
+        return await self._run(
+            lambda: self._service.mobile_pairing.safe_device(device),
+            message="failed to read paired mobile device status",
+        )
+
+    async def rename_mobile_device(
+        self,
+        user_id: str,
+        device_id: str,
+        display_name: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> PairedMobileDevice:
+        return await self._run(
+            lambda: self._service.mobile_pairing.rename_device(
+                user_id,
+                device_id,
+                display_name,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile device rename",
+        )
+
+    async def revoke_mobile_device(
+        self,
+        user_id: str,
+        device_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> None:
+        await self._run(
+            lambda: self._service.mobile_pairing.revoke_device(
+                user_id,
+                device_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile device revocation",
+        )
+
+    async def revoke_all_mobile_devices(
+        self,
+        user_id: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> int:
+        return await self._run(
+            lambda: self._service.mobile_pairing.revoke_all_devices(
+                user_id,
+                correlation_id=correlation_id,
+            ),
+            message="failed to persist mobile device revocations",
         )
 
 
