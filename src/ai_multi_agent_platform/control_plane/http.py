@@ -359,7 +359,7 @@ class ControlPlaneHTTP:
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "POST":
             provider_id, separator, command = segments[1].rpartition(":")
-            if not separator or command not in _MODEL_PROVIDER_COMMANDS:
+            if not separator or not provider_id or command not in _MODEL_PROVIDER_COMMANDS:
                 raise APIException(
                     status=405,
                     code="method_not_allowed",
@@ -397,7 +397,7 @@ class ControlPlaneHTTP:
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "POST":
             model_id, separator, command = segments[1].rpartition(":")
-            if not separator or command not in _MODEL_COMMANDS:
+            if not separator or not model_id or command not in _MODEL_COMMANDS:
                 raise APIException(
                     status=405,
                     code="method_not_allowed",
