@@ -24,7 +24,7 @@ Urgency may compress waiting/review time, but it may not skip:
 4. Pin every changed external input immutably; never substitute `latest`.
 5. Run targeted security regression tests immediately, then the mandatory release gates that can be
    affected by the change.
-6. If a migration is required, run issue #41 preflight and establish the permitted rollback mode
+6. If a migration is required, run the maintained upgrade/migration preflight and establish the permitted rollback mode
    before activation.
 7. Generate release artifacts, hashes, SBOM/provenance references and release notes. Public notes may
    defer exploit detail but must not misstate compatibility or migration requirements.
