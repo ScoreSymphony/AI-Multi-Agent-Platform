@@ -1,6 +1,6 @@
 # Guided Web first-run onboarding
 
-Issue #395 adds the browser product journey for the canonical first-run contracts from #250 and the execution-precise selection semantics from #397.
+The browser first-run journey consumes the canonical first-run contracts and execution-precise selection semantics.
 
 ## Architecture boundary
 
@@ -52,9 +52,9 @@ Credential-bearing endpoints accept only canonical SecretReference metadata:
 }
 ```
 
-There is deliberately no field for an API key, bearer token, password or secret value. Resolved secret material remains behind the server-side #34 SecretProvider boundary.
+There is deliberately no field for an API key, bearer token, password or secret value. Resolved secret material remains behind the server-side `SecretProvider` boundary.
 
-After a process restart, persisted model configuration can exist while runtime provider health is `unknown`. The page keeps the canonical `needs_model` state and can invoke the existing ModelProvider health command through the normal Control Plane client. It does not recreate the ModelConfiguration or treat endpoint reachability as proof outside #250's server-side revalidation rules.
+After a process restart, persisted model configuration can exist while runtime provider health is `unknown`. The page keeps the canonical `needs_model` state and can invoke the existing ModelProvider health command through the normal Control Plane client. It does not recreate the ModelConfiguration or treat endpoint reachability as proof outside the server-side revalidation rules.
 
 ## Project and Workspace
 
@@ -67,7 +67,7 @@ Project ownership is derived from the authenticated browser actor returned by `/
 
 ## General Assistant
 
-The guided page does not create a frontend-only Assistant. It uses the existing #77 starter lifecycle:
+The guided page does not create a frontend-only Assistant. It uses the existing starter Agent lifecycle:
 
 ```text
 POST /api/v1/commands/standard-agent.bootstrap
@@ -80,7 +80,7 @@ Existing General Assistant preflight blockers are rendered as server-provided ex
 
 ## Selection and first Task
 
-When #397 reports `needs_selection`, the returned candidate IDs remain authoritative. Every executable first-run path contains a scoped General Assistant, so the browser asks the user to select an explicit canonical Agent candidate rather than independently combining Project, Workspace and Agent IDs from flat candidate lists. The selected Agent identity is passed to:
+When the canonical first-run contract reports `needs_selection`, the returned candidate IDs remain authoritative. Every executable first-run path contains a scoped General Assistant, so the browser asks the user to select an explicit canonical Agent candidate rather than independently combining Project, Workspace and Agent IDs from flat candidate lists. The selected Agent identity is passed to:
 
 ```text
 POST /api/v1/commands/onboarding.run-first-task
@@ -112,7 +112,7 @@ If one of these surfaces is absent, the journey renders an explicit unavailable/
 
 Focused frontend tests verify:
 
-- first-run state mapping for all canonical #250 states and fresh-install `needs_model` rendering;
+- first-run state mapping for all canonical first-run states and fresh-install `needs_model` rendering;
 - canonical `/api/v1/onboarding/first-run` reads;
 - `onboarding.configure-model`, starter and first-Task command URLs;
 - BrowserSession CSRF propagation and idempotency headers;
