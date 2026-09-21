@@ -190,9 +190,11 @@ curl http://127.0.0.1:8000/api/v1/readiness
 platform --endpoint http://127.0.0.1:8000 doctor
 ```
 
-`platform doctor` is the canonical operator diagnostic path. It consumes only the
-Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
-second backend-probing diagnostic authority.
+`platform doctor` is the canonical operator diagnostic path. It stays on the public
+Control Plane boundary: manifest, health and readiness remain foundational inputs, provider and
+dependency diagnostics come from the canonical health payload, and composed compute profiles may
+add canonical Node/Worker and host-pressure reads. Deployment profiles must not add direct
+backend-private probes or a second diagnostic authority.
 
 Required configuration failures block composition/startup. Required persistence is additionally
 a live readiness dependency: the single-node persistence probe verifies required roots, an
@@ -209,7 +211,8 @@ report their degradation through the progressive platform health model.
 
 ## Persistent layout
 
-The default data root is `.data/single-node`. Its current implementation layout is:
+The default data root is `.data/single-node`. Durable stores are domain-owned and the exact
+inventory evolves with the composed product surface. Representative core entries include:
 
 ```text
 .data/single-node/
@@ -219,16 +222,22 @@ The default data root is `.data/single-node`. Its current implementation layout 
 │   ├── authentication.sqlite3
 │   ├── authorization.sqlite3
 │   ├── files.sqlite3
-│   └── workspaces.sqlite3
+│   ├── workspaces.sqlite3
+│   └── ... additional domain-owned durable stores
 ├── files/
 ├── workspaces/
 └── executor/
     └── reference/
 ```
 
+Do not use this illustrative tree as the backup manifest. The authoritative required/optional
+durable-store inventory is owned by the backup inventory contract documented in
+[`BACKUP_RESTORE.md`](BACKUP_RESTORE.md); physical persistence ownership is described in
+[`../runtime/PERSISTENCE_TOPOLOGY.md`](../runtime/PERSISTENCE_TOPOLOGY.md).
+
 These paths are implementation configuration, not canonical resource IDs. Moving the data
-through #40 backup/restore must not require preserving a hostname, machine ID or filesystem
-path as canonical identity.
+through the supported backup/restore path must not require preserving a hostname, machine ID or
+filesystem path as canonical identity.
 
 Authentication SQLite stores password/token verifiers and safe metadata only. Raw passwords,
 browser-session secrets and bearer-token secrets are not persisted.
