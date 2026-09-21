@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from ai_multi_agent_platform.control_plane import (
-    RELEASE_STATUS_PATH,
-    build_openapi as build_public_openapi,
-)
+from ai_multi_agent_platform.control_plane import RELEASE_STATUS_PATH
+from ai_multi_agent_platform.control_plane import build_openapi as build_public_openapi
 from ai_multi_agent_platform.control_plane.extensions import (
     build_openapi as build_extension_openapi,
 )
