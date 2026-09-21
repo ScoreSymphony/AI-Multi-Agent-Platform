@@ -84,6 +84,72 @@ async def handle_authenticated_mobile_auth_route(
     request_id: str,
     correlation_id: str,
 ) -> HTTPResponse | None:
+    if relative.startswith("/auth/mobile-pairings"):
+        return await _handle_pairing_management(
+            owner,
+            request,
+            relative,
+            actor,
+            user_id=user_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+    if relative.startswith("/auth/mobile-devices"):
+        return await _handle_device_management(
+            owner,
+            request,
+            relative,
+            actor,
+            user_id=user_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+    return None
+
+
+async def handle_authenticated_mobile_auth_route_async(
+    owner: Any,
+    request: HTTPRequest,
+    relative: str,
+    actor: AuthenticatedActor,
+    *,
+    user_id: str,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse | None:
+    if relative.startswith("/auth/mobile-pairings"):
+        return await _handle_pairing_management_async(
+            owner,
+            request,
+            relative,
+            actor,
+            user_id=user_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+    if relative.startswith("/auth/mobile-devices"):
+        return await _handle_device_management_async(
+            owner,
+            request,
+            relative,
+            actor,
+            user_id=user_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+    return None
+
+
+async def _handle_pairing_management(
+    owner: Any,
+    request: HTTPRequest,
+    relative: str,
+    actor: AuthenticatedActor,
+    *,
+    user_id: str,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse | None:
     if request.method == "POST" and relative == "/auth/mobile-pairings":
         await _authorize(
             owner,
@@ -100,122 +166,36 @@ async def handle_authenticated_mobile_auth_route(
             _required_string(request.body, "server_origin"),
             correlation_id=correlation_id,
         )
-        return owner._response(
-            201,
-            _pairing_grant(grant),
-            request_id,
-            correlation_id,
-        )
+        return owner._response(201, _pairing_grant(grant), request_id, correlation_id)
 
     if request.method == "POST" and relative.startswith("/auth/mobile-pairings/"):
-        suffix = relative.removeprefix("/auth/mobile-pairings/")
-        if suffix.endswith(":cancel"):
-            pairing_id = suffix.removesuffix(":cancel")
-            await _authorize(
-                owner,
-                request,
-                actor,
-                action="revoke",
-                resource_ref=pairing_id,
-                request_id=request_id,
-                correlation_id=correlation_id,
-            )
-            owner._authentication.mobile_pairing.cancel_challenge(
-                user_id,
-                pairing_id,
-                correlation_id=correlation_id,
-            )
-            return owner._response(
-                200,
-                {"id": pairing_id, "cancelled": True},
-                request_id,
-                correlation_id,
-            )
-
-    if request.method == "GET" and relative == "/auth/mobile-devices":
-        await _authorize(
-            owner,
-            request,
-            actor,
-            action="list",
-            resource_ref=user_id,
-            request_id=request_id,
-            correlation_id=correlation_id,
-        )
-        items: list[JsonValue] = [
-            owner._authentication.mobile_pairing.safe_device(device)
-            for device in owner._authentication.mobile_pairing.list_devices(user_id)
-        ]
-        return owner._response(200, {"items": items}, request_id, correlation_id)
-
-    if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
+        pairing_id = relative.removeprefix("/auth/mobile-pairings/").removesuffix(":cancel")
+        if not relative.endswith(":cancel"):
+            return None
         await _authorize(
             owner,
             request,
             actor,
             action="revoke",
-            resource_ref=user_id,
+            resource_ref=pairing_id,
             request_id=request_id,
             correlation_id=correlation_id,
         )
-        count = owner._authentication.mobile_pairing.revoke_all_devices(
+        owner._authentication.mobile_pairing.cancel_challenge(
             user_id,
+            pairing_id,
             correlation_id=correlation_id,
         )
-        return owner._response(200, {"revoked": count}, request_id, correlation_id)
-
-    if request.method == "POST" and relative.startswith("/auth/mobile-devices/"):
-        suffix = relative.removeprefix("/auth/mobile-devices/")
-        if suffix.endswith(":rename"):
-            device_id = suffix.removesuffix(":rename")
-            await _authorize(
-                owner,
-                request,
-                actor,
-                action="update",
-                resource_ref=device_id,
-                request_id=request_id,
-                correlation_id=correlation_id,
-                bind_payload=True,
-            )
-            device = owner._authentication.mobile_pairing.rename_device(
-                user_id,
-                device_id,
-                _required_string(request.body, "display_name"),
-                correlation_id=correlation_id,
-            )
-            return owner._response(
-                200,
-                owner._authentication.mobile_pairing.safe_device(device),
-                request_id,
-                correlation_id,
-            )
-        if suffix.endswith(":revoke"):
-            device_id = suffix.removesuffix(":revoke")
-            await _authorize(
-                owner,
-                request,
-                actor,
-                action="revoke",
-                resource_ref=device_id,
-                request_id=request_id,
-                correlation_id=correlation_id,
-            )
-            owner._authentication.mobile_pairing.revoke_device(
-                user_id,
-                device_id,
-                correlation_id=correlation_id,
-            )
-            return owner._response(
-                200,
-                {"id": device_id, "revoked": True},
-                request_id,
-                correlation_id,
-            )
+        return owner._response(
+            200,
+            {"id": pairing_id, "cancelled": True},
+            request_id,
+            correlation_id,
+        )
     return None
 
 
-async def handle_authenticated_mobile_auth_route_async(
+async def _handle_pairing_management_async(
     owner: Any,
     request: HTTPRequest,
     relative: str,
@@ -244,39 +224,104 @@ async def handle_authenticated_mobile_auth_route_async(
         return owner._response(201, _pairing_grant(grant), request_id, correlation_id)
 
     if request.method == "POST" and relative.startswith("/auth/mobile-pairings/"):
-        suffix = relative.removeprefix("/auth/mobile-pairings/")
-        if suffix.endswith(":cancel"):
-            pairing_id = suffix.removesuffix(":cancel")
-            await _authorize(
-                owner,
-                request,
-                actor,
-                action="revoke",
-                resource_ref=pairing_id,
-                request_id=request_id,
-                correlation_id=correlation_id,
-            )
-            await owner._runtime_authentication.cancel_mobile_pairing(
-                user_id,
-                pairing_id,
-                correlation_id=correlation_id,
-            )
-            return owner._response(
-                200,
-                {"id": pairing_id, "cancelled": True},
-                request_id,
-                correlation_id,
-            )
-
-    if request.method == "GET" and relative == "/auth/mobile-devices":
+        pairing_id = relative.removeprefix("/auth/mobile-pairings/").removesuffix(":cancel")
+        if not relative.endswith(":cancel"):
+            return None
         await _authorize(
             owner,
             request,
             actor,
-            action="list",
-            resource_ref=user_id,
+            action="revoke",
+            resource_ref=pairing_id,
             request_id=request_id,
             correlation_id=correlation_id,
+        )
+        await owner._runtime_authentication.cancel_mobile_pairing(
+            user_id,
+            pairing_id,
+            correlation_id=correlation_id,
+        )
+        return owner._response(
+            200,
+            {"id": pairing_id, "cancelled": True},
+            request_id,
+            correlation_id,
+        )
+    return None
+
+
+async def _handle_device_management(
+    owner: Any,
+    request: HTTPRequest,
+    relative: str,
+    actor: AuthenticatedActor,
+    *,
+    user_id: str,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse | None:
+    if request.method == "GET" and relative == "/auth/mobile-devices":
+        await _authorize_device_action(
+            owner,
+            request,
+            actor,
+            "list",
+            user_id,
+            request_id,
+            correlation_id,
+        )
+        items: list[JsonValue] = [
+            owner._authentication.mobile_pairing.safe_device(device)
+            for device in owner._authentication.mobile_pairing.list_devices(user_id)
+        ]
+        return owner._response(200, {"items": items}, request_id, correlation_id)
+
+    if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
+        await _authorize_device_action(
+            owner,
+            request,
+            actor,
+            "revoke",
+            user_id,
+            request_id,
+            correlation_id,
+        )
+        count = owner._authentication.mobile_pairing.revoke_all_devices(
+            user_id,
+            correlation_id=correlation_id,
+        )
+        return owner._response(200, {"revoked": count}, request_id, correlation_id)
+
+    return await _handle_one_device(
+        owner,
+        request,
+        relative,
+        actor,
+        user_id=user_id,
+        request_id=request_id,
+        correlation_id=correlation_id,
+    )
+
+
+async def _handle_device_management_async(
+    owner: Any,
+    request: HTTPRequest,
+    relative: str,
+    actor: AuthenticatedActor,
+    *,
+    user_id: str,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse | None:
+    if request.method == "GET" and relative == "/auth/mobile-devices":
+        await _authorize_device_action(
+            owner,
+            request,
+            actor,
+            "list",
+            user_id,
+            request_id,
+            correlation_id,
         )
         devices = await owner._runtime_authentication.list_mobile_devices(user_id)
         items: list[JsonValue] = [
@@ -285,14 +330,14 @@ async def handle_authenticated_mobile_auth_route_async(
         return owner._response(200, {"items": items}, request_id, correlation_id)
 
     if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
-        await _authorize(
+        await _authorize_device_action(
             owner,
             request,
             actor,
-            action="revoke",
-            resource_ref=user_id,
-            request_id=request_id,
-            correlation_id=correlation_id,
+            "revoke",
+            user_id,
+            request_id,
+            correlation_id,
         )
         count = await owner._runtime_authentication.revoke_all_mobile_devices(
             user_id,
@@ -300,55 +345,159 @@ async def handle_authenticated_mobile_auth_route_async(
         )
         return owner._response(200, {"revoked": count}, request_id, correlation_id)
 
-    if request.method == "POST" and relative.startswith("/auth/mobile-devices/"):
-        suffix = relative.removeprefix("/auth/mobile-devices/")
-        if suffix.endswith(":rename"):
-            device_id = suffix.removesuffix(":rename")
-            await _authorize(
-                owner,
-                request,
-                actor,
-                action="update",
-                resource_ref=device_id,
-                request_id=request_id,
-                correlation_id=correlation_id,
-                bind_payload=True,
-            )
-            device = await owner._runtime_authentication.rename_mobile_device(
-                user_id,
-                device_id,
-                _required_string(request.body, "display_name"),
-                correlation_id=correlation_id,
-            )
-            return owner._response(
-                200,
-                await owner._runtime_authentication.safe_mobile_device(device),
-                request_id,
-                correlation_id,
-            )
-        if suffix.endswith(":revoke"):
-            device_id = suffix.removesuffix(":revoke")
-            await _authorize(
-                owner,
-                request,
-                actor,
-                action="revoke",
-                resource_ref=device_id,
-                request_id=request_id,
-                correlation_id=correlation_id,
-            )
-            await owner._runtime_authentication.revoke_mobile_device(
-                user_id,
-                device_id,
-                correlation_id=correlation_id,
-            )
-            return owner._response(
-                200,
-                {"id": device_id, "revoked": True},
-                request_id,
-                correlation_id,
-            )
+    return await _handle_one_device_async(
+        owner,
+        request,
+        relative,
+        actor,
+        user_id=user_id,
+        request_id=request_id,
+        correlation_id=correlation_id,
+    )
+
+
+async def _handle_one_device(
+    owner: Any,
+    request: HTTPRequest,
+    relative: str,
+    actor: AuthenticatedActor,
+    *,
+    user_id: str,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse | None:
+    if request.method != "POST" or not relative.startswith("/auth/mobile-devices/"):
+        return None
+    suffix = relative.removeprefix("/auth/mobile-devices/")
+    if suffix.endswith(":rename"):
+        device_id = suffix.removesuffix(":rename")
+        await _authorize(
+            owner,
+            request,
+            actor,
+            action="update",
+            resource_ref=device_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+            bind_payload=True,
+        )
+        device = owner._authentication.mobile_pairing.rename_device(
+            user_id,
+            device_id,
+            _required_string(request.body, "display_name"),
+            correlation_id=correlation_id,
+        )
+        return owner._response(
+            200,
+            owner._authentication.mobile_pairing.safe_device(device),
+            request_id,
+            correlation_id,
+        )
+    if suffix.endswith(":revoke"):
+        device_id = suffix.removesuffix(":revoke")
+        await _authorize_device_action(
+            owner,
+            request,
+            actor,
+            "revoke",
+            device_id,
+            request_id,
+            correlation_id,
+        )
+        owner._authentication.mobile_pairing.revoke_device(
+            user_id,
+            device_id,
+            correlation_id=correlation_id,
+        )
+        return owner._response(
+            200,
+            {"id": device_id, "revoked": True},
+            request_id,
+            correlation_id,
+        )
     return None
+
+
+async def _handle_one_device_async(
+    owner: Any,
+    request: HTTPRequest,
+    relative: str,
+    actor: AuthenticatedActor,
+    *,
+    user_id: str,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse | None:
+    if request.method != "POST" or not relative.startswith("/auth/mobile-devices/"):
+        return None
+    suffix = relative.removeprefix("/auth/mobile-devices/")
+    if suffix.endswith(":rename"):
+        device_id = suffix.removesuffix(":rename")
+        await _authorize(
+            owner,
+            request,
+            actor,
+            action="update",
+            resource_ref=device_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+            bind_payload=True,
+        )
+        device = await owner._runtime_authentication.rename_mobile_device(
+            user_id,
+            device_id,
+            _required_string(request.body, "display_name"),
+            correlation_id=correlation_id,
+        )
+        return owner._response(
+            200,
+            await owner._runtime_authentication.safe_mobile_device(device),
+            request_id,
+            correlation_id,
+        )
+    if suffix.endswith(":revoke"):
+        device_id = suffix.removesuffix(":revoke")
+        await _authorize_device_action(
+            owner,
+            request,
+            actor,
+            "revoke",
+            device_id,
+            request_id,
+            correlation_id,
+        )
+        await owner._runtime_authentication.revoke_mobile_device(
+            user_id,
+            device_id,
+            correlation_id=correlation_id,
+        )
+        return owner._response(
+            200,
+            {"id": device_id, "revoked": True},
+            request_id,
+            correlation_id,
+        )
+    return None
+
+
+async def _authorize_device_action(
+    owner: Any,
+    request: HTTPRequest,
+    actor: AuthenticatedActor,
+    action: str,
+    resource_ref: str,
+    request_id: str,
+    correlation_id: str,
+) -> None:
+    await _authorize(
+        owner,
+        request,
+        actor,
+        action=action,
+        resource_ref=resource_ref,
+        request_id=request_id,
+        correlation_id=correlation_id,
+    )
 
 
 def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
