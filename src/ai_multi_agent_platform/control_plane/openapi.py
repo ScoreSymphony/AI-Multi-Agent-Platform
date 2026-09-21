@@ -107,13 +107,29 @@ def build_openapi() -> dict[str, Any]:
                 "get": _list_operation("listModelProviders", "Model provider page")
             },
             f"/api/{API_VERSION}/model-providers/{{provider_id}}": {
-                "get": _read_operation("getModelProvider", "provider_id", "Model provider")
+                "get": _read_operation(
+                    "getModelProvider",
+                    "provider_id",
+                    "Model provider",
+                    parameter_description=(
+                        "Full model-provider identifier. Colons and command-like suffixes are "
+                        "valid identifier text for GET item lookup."
+                    ),
+                )
             },
             f"/api/{API_VERSION}/models": {
                 "get": _list_operation("listModels", "Model configuration page")
             },
             f"/api/{API_VERSION}/models/{{model_id}}": {
-                "get": _read_operation("getModel", "model_id", "Model configuration")
+                "get": _read_operation(
+                    "getModel",
+                    "model_id",
+                    "Model configuration",
+                    parameter_description=(
+                        "Full model configuration ID or alias. Colons and command-like suffixes "
+                        "are valid identifier text for GET item lookup."
+                    ),
+                )
             },
         }
     )
@@ -126,7 +142,14 @@ def build_openapi() -> dict[str, Any]:
                     "Updated model provider",
                 ),
                 "parameters": [
-                    _path_parameter("provider_id"),
+                    _path_parameter(
+                        "provider_id",
+                        description=(
+                            "Command target model-provider identifier. The literal terminal "
+                            "command suffix belongs to the operation; provider_id itself may "
+                            "contain colons."
+                        ),
+                    ),
                     {"$ref": "#/components/parameters/IdempotencyKey"},
                 ],
             }
@@ -137,7 +160,14 @@ def build_openapi() -> dict[str, Any]:
             "post": {
                 **_operation(f"{command}Model", "Updated model configuration"),
                 "parameters": [
-                    _path_parameter("model_id"),
+                    _path_parameter(
+                        "model_id",
+                        description=(
+                            "Command target model configuration ID or alias. The literal "
+                            "terminal command suffix belongs to the operation; the target itself "
+                            "may contain colons or command-like text."
+                        ),
+                    ),
                     {"$ref": "#/components/parameters/IdempotencyKey"},
                 ],
             }
@@ -198,6 +228,24 @@ def build_openapi() -> dict[str, Any]:
             },
         },
         "x-platform-api-version": API_VERSION,
+        "x-model-inventory-path-semantics": {
+            "identifier_grammar": (
+                "Model configuration IDs, aliases, and model-provider IDs may contain ':'; "
+                "enable, disable, and refresh-health are not reserved identifier text."
+            ),
+            "get_item_precedence": (
+                "GET item operations consume the entire decoded final path segment as the "
+                "identifier or alias, including any command-like suffix."
+            ),
+            "post_command_precedence": (
+                "POST recognizes only the exact terminal command suffixes declared by the "
+                "corresponding command paths and removes one such suffix from the target."
+            ),
+            "unsupported_post": (
+                "POST to an item-shaped segment without a recognized terminal command suffix "
+                "is method_not_allowed (405), not an unknown-command route."
+            ),
+        },
         "x-evolution-policy": {
             "additive_changes": "allowed within v1",
             "breaking_changes": "require a new major path namespace",
@@ -243,20 +291,29 @@ def _create_operation(operation_id: str, description: str, schema: str) -> dict[
     }
 
 
-def _read_operation(operation_id: str, parameter: str, description: str) -> dict[str, Any]:
+def _read_operation(
+    operation_id: str,
+    parameter: str,
+    description: str,
+    *,
+    parameter_description: str | None = None,
+) -> dict[str, Any]:
     return {
         **_operation(operation_id, description),
-        "parameters": [_path_parameter(parameter)],
+        "parameters": [_path_parameter(parameter, description=parameter_description)],
     }
 
 
-def _path_parameter(name: str) -> dict[str, Any]:
-    return {
+def _path_parameter(name: str, *, description: str | None = None) -> dict[str, Any]:
+    parameter: dict[str, Any] = {
         "name": name,
         "in": "path",
         "required": True,
         "schema": {"type": "string"},
     }
+    if description is not None:
+        parameter["description"] = description
+    return parameter
 
 
 def _query_parameters() -> list[dict[str, Any]]:
