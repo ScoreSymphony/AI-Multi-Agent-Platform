@@ -1,6 +1,6 @@
 # Single-node configuration UX
 
-Issue #696 productizes the existing canonical platform configuration for the supported single-node topology.
+The single-node configuration surface productizes the existing canonical platform configuration for the supported single-node topology.
 
 ## Scope
 
@@ -66,13 +66,13 @@ The editor exposes provider-neutral requirements and preferred model selection. 
 
 The Tools surface continues to expose Capability/Provider inventory and safety metadata and now also exposes first-class Capability Assignment configuration.
 
-Capability Assignments model canonical required/allowed/denied capability policy for an Agent, Agent Team or Project. #696 adds narrow northbound create/revise commands over the existing owning service. Those commands preserve normal authorization/approval semantics, optimistic revision binding and server-authored provenance.
+Capability Assignments model canonical required/allowed/denied capability policy for an Agent, Agent Team or Project. The product surface adds narrow northbound create/revise commands over the existing owning service. Those commands preserve normal authorization/approval semantics, optimistic revision binding and server-authored provenance.
 
 The browser cannot author trusted provenance. Any client-supplied provenance is discarded before the owning service receives canonical content.
 
 ### Existing lifecycle configuration
 
-The following mature product surfaces remain the owning configuration paths rather than being duplicated by #696:
+The following mature product surfaces remain the owning configuration paths rather than being duplicated by this product surface:
 
 - Memory and Knowledge lifecycle;
 - Automations;
@@ -108,7 +108,7 @@ Secret values are not introduced into these editors. Existing Connection and Plu
 
 ## Single-node boundary
 
-#696 does not introduce configuration for:
+This product surface does not introduce configuration for:
 
 - adding or pairing another machine;
 - remote Worker installation or enrollment;
