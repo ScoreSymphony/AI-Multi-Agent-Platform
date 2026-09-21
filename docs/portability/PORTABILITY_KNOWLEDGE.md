@@ -1,6 +1,6 @@
 # Portable KnowledgeSource semantics
 
-Issue #79 treats canonical knowledge content and provider-owned retrieval indexes as different portability layers.
+Portability treats canonical knowledge content and provider-owned retrieval indexes as different portability layers.
 
 ## Portable resource
 
