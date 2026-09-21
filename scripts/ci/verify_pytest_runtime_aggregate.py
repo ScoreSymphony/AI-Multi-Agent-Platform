@@ -29,9 +29,7 @@ def _report_run_attempt(
 ) -> int:
     value = payload.get("run_attempt", 1)
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise ValueError(
-            f"invalid {kind} run_attempt for lane {lane} in {path}: {value!r}"
-        )
+        raise ValueError(f"invalid {kind} run_attempt for lane {lane} in {path}: {value!r}")
     return value
 
 
