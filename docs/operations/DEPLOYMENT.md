@@ -31,7 +31,7 @@ without changing canonical Task/Run contracts.
 
 ## Prerequisites
 
-Stage 1 currently targets a host with:
+The reference single-node profile targets a host with:
 
 - Python 3.12 or newer;
 - Git;
@@ -81,7 +81,7 @@ set +a
 For PowerShell, set the corresponding `AI_MAP_*` environment variables in the current
 process before invoking `platform-server`.
 
-The supported Stage-1 settings are:
+The supported reference single-node settings are:
 
 ```bash
 export AI_MAP_DATA_DIR="$PWD/.data/single-node"
@@ -254,7 +254,7 @@ Before serving after a restart, local File/Workspace providers also reconcile on
 whose ownership can be proven: `PENDING` File writes are tombstoned and owned stale Workspace
 materializations are removed. Cleanup failure is fail-closed; unknown temp paths are preserved.
 
-The Stage-1 regression suite verifies restart persistence for:
+The single-node regression suite verifies restart persistence for:
 
 - canonical Task/Run state;
 - Project identity and idempotency state;
@@ -338,7 +338,7 @@ operator copy first when retention is required.
 
 ## Networking baseline
 
-Stage 1 needs only the client/frontend-to-Control-Plane flow. SQLite and local file/workspace
+The reference single-node profile needs only the client/frontend-to-Control-Plane flow. SQLite and local file/workspace
 storage have no network listener. The reference orchestrator and executor are in-process and
 expose no private admin port.
 
