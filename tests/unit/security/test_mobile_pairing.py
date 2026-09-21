@@ -85,7 +85,8 @@ def test_mobile_pairing_fallback_code_resolves_without_pairing_id() -> None:
     )
 
     assert device.user_id == user.user_id
-    assert auth.authenticate_bearer(issued.secret, now=NOW + timedelta(seconds=2)).identity.actor_id == user.user_id
+    actor = auth.authenticate_bearer(issued.secret, now=NOW + timedelta(seconds=2))
+    assert actor.identity.actor_id == user.user_id
 
 
 def test_mobile_pairing_rejects_expired_cancelled_wrong_and_cross_user_use() -> None:
