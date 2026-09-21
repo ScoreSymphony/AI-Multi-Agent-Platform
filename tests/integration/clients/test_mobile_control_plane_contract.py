@@ -183,7 +183,6 @@ def test_mobile_routes_project_real_single_node_control_plane_state(tmp_path: Pa
     asyncio.run(scenario())
 
 
-
 def test_mobile_pairing_uses_public_one_time_exchange_and_server_revocation(
     tmp_path: Path,
 ) -> None:
