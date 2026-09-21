@@ -2,6 +2,11 @@
 
 Mobile baseline: optional mobile client profile
 Terminal physical-device acceptance: validated separately from distribution workflow acceptance
+
+This is an optional mobile distribution path, not a dependency or support requirement of the V1/M3
+platform baseline. Official `mobile-v*` APK releases are published independently through GitHub
+Releases; workflow/release evidence alone does not prove device-side in-place update retention.
+
 The Android companion is distributed directly through GitHub Releases. Google Play, an app-store
 account, Expo EAS and any other paid build/distribution service are not required.
 
@@ -192,7 +197,8 @@ verification and wrong-signer distinction without exposing production material. 
 publication additionally proves protected-key signing, signer continuity after the first release,
 checksum generation and expected GitHub Release assets.
 
-Clean install/launch against a remote Control Plane and N -> N+1 data-preserving update are retained
-as real-device evidence. The terminal physical Android/VPS journey, including a wrong-signature
-update rejection on a real device, is validated separately so the distribution workflow is not confused
-with product-level device acceptance.
+Clean install/launch is retained as real-device evidence. Release-side N -> N+1 signer and version
+continuity is also proven by the protected publication workflow. Device-side in-place N -> N+1 update
+and preservation of application/secure-pairing data remain acceptance-pending and must not be inferred
+from workflow success. The broader terminal physical Android/VPS journey is validated separately so
+distribution-workflow evidence is not confused with product-level device acceptance.
