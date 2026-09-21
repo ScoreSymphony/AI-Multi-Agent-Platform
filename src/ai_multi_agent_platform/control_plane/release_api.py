@@ -21,9 +21,9 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException
-from .openapi_errors import ensure_method_not_allowed_responses
 from .module_registry import install_control_plane_modules
 from .northbound_errors import api_exception_for_boundary, log_unexpected_boundary_error
+from .openapi_errors import ensure_method_not_allowed_responses
 from .task_project_reassignment import (
     AuthenticatedControlPlaneHTTP as _CurrentAuthenticatedControlPlaneHTTP,
 )
