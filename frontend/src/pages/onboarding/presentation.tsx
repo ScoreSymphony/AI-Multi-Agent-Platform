@@ -49,6 +49,7 @@ export function MultiAgentFirstResult({ result }: { result: MultiAgentFirstRunRe
       </div>
       <div className="actions">
         <AppLink href={`/tasks/${result.task_id}`}>Open Task</AppLink>
+        <AppLink href={`/workspaces/${result.workspace_id}`}>Open Workspace</AppLink>
         {result.result_id ? <AppLink href={`/results/${result.result_id}`}>Open produced Result</AppLink> : null}
       </div>
       <div className="context-summary">

@@ -719,6 +719,11 @@ try {
   if ((await taskLink.getAttribute("href")) !== `/tasks/${firstRunResult.task_id}`) {
     throw new Error("Official browser result did not deep-link the canonical Task ID");
   }
+  const firstRunWorkspaceLink = resultCard.getByRole("link", { name: "Open Workspace", exact: true });
+  await firstRunWorkspaceLink.waitFor();
+  if ((await firstRunWorkspaceLink.getAttribute("href")) !== `/workspaces/${firstRunResult.workspace_id}`) {
+    throw new Error("Official browser result did not deep-link the canonical Workspace ID");
+  }
   const producedResultLink = resultCard.getByRole("link", { name: "Open produced Result", exact: true });
   await producedResultLink.waitFor();
   if ((await resultCard.getByRole("link", { name: "Run", exact: true }).count()) < 4) {
@@ -1039,6 +1044,73 @@ try {
   await manifestAlert.waitFor({ state: "detached" });
   await page.unroute(manifestApi, failManifestTemporarily);
 
+  // #1333: prove the maintained operator chain Task -> Run -> Workspace against an
+  // actually bound canonical Run. #889's specialized Step Runs intentionally carry their
+  // Workspace through Agent/Context execution metadata and are not RunWorkspaceBinding records,
+  // so use the public workspace-aware Task:start contract that owns this exact invariant.
+  const diagnosticTask = await publicApiCommand(page, "/tasks", {
+    title: "Run Workspace operator diagnostics",
+    objective: "Prove canonical Run-to-Workspace navigation and immutable snapshot provenance.",
+    owner_type: taskViaApi.owner.type,
+    owner_id: taskViaApi.owner.id,
+    project_id: firstRunResult.project_id,
+  });
+  requireCanonicalIdentity(diagnosticTask, diagnosticTask.id, "Workspace diagnostic Task");
+  await publicApiCommand(page, `/tasks/${diagnosticTask.id}:queue`, undefined);
+  const diagnosticRun = await publicApiCommand(page, `/tasks/${diagnosticTask.id}:start`, {
+    workspace_id: createdWorkspace.id,
+    workspace_snapshot_id: workspaceViaApi.base_snapshot_id,
+  });
+  requireCanonicalIdentity(diagnosticRun, diagnosticRun.id, "Workspace-bound diagnostic Run");
+  if (
+    diagnosticRun.workspace_id !== createdWorkspace.id
+    || diagnosticRun.workspace_snapshot_id !== workspaceViaApi.base_snapshot_id
+    || typeof diagnosticRun.workspace_content_checksum !== "string"
+    || !diagnosticRun.workspace_content_checksum
+  ) {
+    throw new Error(
+      `Canonical workspace-aware Task:start did not expose immutable Run provenance: ${JSON.stringify(diagnosticRun)}`,
+    );
+  }
+
+  const diagnosticTaskPath = `/tasks/${encodeURIComponent(diagnosticTask.id)}`;
+  await page.goto(`${frontendUrl}${diagnosticTaskPath}`);
+  await page.locator(`main[data-route="${diagnosticTaskPath}"]`).waitFor();
+  const taskToRunLink = page.locator(`a[href="/runs/${diagnosticRun.id}"]`).first();
+  await taskToRunLink.waitFor();
+  await taskToRunLink.click();
+  await page.waitForURL(`${frontendUrl}/runs/${diagnosticRun.id}`);
+  const workspaceProvenanceCard = page.getByRole("heading", {
+    name: "Workspace provenance",
+    exact: true,
+  }).locator("..");
+  await workspaceProvenanceCard.waitFor();
+  const runToWorkspaceLink = workspaceProvenanceCard.getByRole("link", {
+    name: "Open Workspace",
+    exact: true,
+  });
+  if ((await runToWorkspaceLink.getAttribute("href")) !== `/workspaces/${createdWorkspace.id}`) {
+    throw new Error("Run detail did not deep-link its canonical Workspace binding");
+  }
+  requireText(
+    await workspaceProvenanceCard.innerText(),
+    diagnosticRun.workspace_snapshot_id,
+    "Run Workspace snapshot provenance",
+  );
+  requireText(
+    await workspaceProvenanceCard.innerText(),
+    diagnosticRun.workspace_content_checksum,
+    "Run Workspace checksum provenance",
+  );
+  await runToWorkspaceLink.click();
+  await page.waitForURL(`${frontendUrl}/workspaces/${createdWorkspace.id}`);
+  await page.locator(`code[title="${createdWorkspace.id}"]`).first().waitFor();
+
+  const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
+  if (!firstRunRunId) {
+    throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
+  }
+
   // #1296: close the final #747 representative browser-evidence gap through
   // operator diagnostics/status. Re-enter the already-proven Search/history
   // surface, use the maintained shell navigation, and keep every read on the
@@ -1047,11 +1119,6 @@ try {
   await page.getByRole("heading", { name: "Global search", exact: true }).waitFor();
   const observabilityLink = page.getByRole("link", { name: "Observability", exact: true });
   await observabilityLink.waitFor();
-
-  const firstRunRunId = firstRunResult.steps.find((step) => step.run_id)?.run_id;
-  if (!firstRunRunId) {
-    throw new Error("Official multi-agent first run exposed no canonical Run for diagnostics correlation");
-  }
 
   // Register before route navigation: Observability may auto-select the same recent Task and
   // start the canonical timeline request during initial render, before the explicit filter submit.
@@ -1097,6 +1164,46 @@ try {
   await timelineCard.getByText(`run:${firstRunRunId}`, { exact: true }).first().waitFor();
   if ((await timelineCard.getByText("No timeline entries", { exact: true }).count()) !== 0) {
     throw new Error("Observability rendered its empty state for the completed first-run Task");
+  }
+
+  // #1333: the generic first-run Step Runs are not RunWorkspaceBinding records. Re-target
+  // Observability to the real workspace-bound diagnostic Run above and prove that the public
+  // Run binding is surfaced as a canonical Workspace link even when telemetry itself omits it.
+  const diagnosticTimelineResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(
+        `/api/v1/tasks/${encodeURIComponent(diagnosticTask.id)}/timeline`,
+      )
+      && response.request().method() === "GET",
+  );
+  await page.getByLabel("Exact Task ID", { exact: true }).fill(diagnosticTask.id);
+  await (await waitForButton(page, "Open telemetry")).click();
+  const diagnosticTimelineResponse = await diagnosticTimelineResponsePromise;
+  if (!diagnosticTimelineResponse.ok()) {
+    throw new Error(
+      `Diagnostic observability timeline failed with ${diagnosticTimelineResponse.status()}: ${await diagnosticTimelineResponse.text()}`,
+    );
+  }
+  const diagnosticTimelinePayload = await diagnosticTimelineResponse.json();
+  if (
+    !diagnosticTimelinePayload.items?.some(
+      (item) =>
+        item.type === "event"
+        && item.subject_type === "run"
+        && item.subject_id === diagnosticRun.id,
+    )
+  ) {
+    throw new Error(
+      `Public diagnostic timeline did not retain canonical Run ${diagnosticRun.id}: ${JSON.stringify(diagnosticTimelinePayload)}`,
+    );
+  }
+  await observabilityRoute.locator(`code[title="${diagnosticTask.id}"]`).first().waitFor();
+  const traceWorkspaceLink = observabilityRoute.locator(
+    `a[href="/workspaces/${createdWorkspace.id}"]`,
+  ).first();
+  await traceWorkspaceLink.waitFor();
+  if ((await traceWorkspaceLink.getAttribute("href")) !== `/workspaces/${createdWorkspace.id}`) {
+    throw new Error("Task-scoped observability did not retain the bound Run Workspace correlation");
   }
 
   // Finish on the canonical operator status surface and distinguish normal
