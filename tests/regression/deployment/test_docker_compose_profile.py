@@ -19,7 +19,7 @@ def test_compose_keeps_control_plane_private_and_state_durable() -> None:
     assert '      - "8000"' in compose
     assert '"${AI_MAP_PUBLIC_PORT:-8080}:8080"' in compose
 
-    control_plane = compose.split("\n  web:", 1)[0]
+    control_plane = compose.split("\n\n  backup:", 1)[0]
     assert "ports:" not in control_plane
     assert "expose:" in control_plane
     assert "no-new-privileges:true" in control_plane
