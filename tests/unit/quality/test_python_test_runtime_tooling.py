@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -11,6 +14,8 @@ from scripts.ci.run_pytest_lane import budget_violations, build_report  # noqa: 
 from scripts.ci.verify_pytest_runtime_aggregate import (  # noqa: E402
     aggregate_violations,
     build_aggregate,
+    load_lane_reports,
+    load_validation_reports,
 )
 from scripts.ci.verify_pytest_shards import compare_collections  # noqa: E402
 
@@ -203,3 +208,85 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
             "validation_critical_path_seconds": 350,
         },
     ) == ["failed or over-budget lanes: integration"]
+
+
+def test_runtime_report_loaders_prefer_latest_rerun_attempt(tmp_path: Path) -> None:
+    pytest_reports = tmp_path / "pytest"
+    validation_reports = tmp_path / "validation"
+    pytest_reports.mkdir()
+    validation_reports.mkdir()
+
+    (pytest_reports / "system-attempt-1.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "run_attempt": 1,
+                "wall_seconds": 196.418,
+                "pytest_exit_code": 0,
+                "budget_violations": ["slowest test exceeded budget"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (pytest_reports / "system-attempt-2.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "run_attempt": 2,
+                "wall_seconds": 91.0,
+                "pytest_exit_code": 0,
+                "budget_violations": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (validation_reports / "system-attempt-1.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "run_attempt": 1,
+                "wall_seconds": 223.701,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (validation_reports / "system-attempt-2.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "run_attempt": 2,
+                "wall_seconds": 117.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    selected_pytest = load_lane_reports(pytest_reports)
+    selected_validation = load_validation_reports(validation_reports)
+
+    assert selected_pytest["system-regression"]["run_attempt"] == 2
+    assert selected_pytest["system-regression"]["budget_violations"] == []
+    assert selected_validation["system-regression"]["run_attempt"] == 2
+    assert selected_validation["system-regression"]["wall_seconds"] == 117.0
+
+
+def test_runtime_report_loader_rejects_duplicate_same_attempt(tmp_path: Path) -> None:
+    for name in ("a.json", "b.json"):
+        (tmp_path / name).write_text(
+            json.dumps(
+                {
+                    "lane": "integration",
+                    "run_attempt": 2,
+                    "wall_seconds": 1.0,
+                    "pytest_exit_code": 0,
+                    "budget_violations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate pytest runtime report for lane integration at run attempt 2",
+    ):
+        load_lane_reports(tmp_path)
