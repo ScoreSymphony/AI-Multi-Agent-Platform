@@ -1,6 +1,6 @@
 # Coordination async persistence boundary
 
-Issue #892 requires the canonical #384 Plan/Step runtime to avoid synchronous `sqlite3` work on the asyncio event-loop thread while SQLite remains the supported single-node backend.
+The canonical Plan/Step runtime avoids synchronous `sqlite3` work on the asyncio event-loop thread while SQLite remains the supported single-node backend.
 
 ## Runtime contract
 
