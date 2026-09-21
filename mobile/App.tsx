@@ -407,26 +407,26 @@ export default function App() {
     setNotice(null);
     try {
       if (current === "dashboard") {
-        const [healthResult, taskResult, runResult, agentResult, workerResult] =
-          await Promise.all([
-            client.health(),
-            client.listTasks(),
-            client.listRuns(),
-            client.listAgents(),
-            client.listWorkers(),
-          ]);
+        const [healthResult, taskResult, runResult] = await Promise.all([
+          client.health(),
+          client.listTasks(),
+          client.listRuns(),
+        ]);
+        const agentResult = serverSupports("agents") ? await client.listAgents() : null;
+        const workerResult = serverSupports("workers") ? await client.listWorkers() : null;
         setHealth(healthResult.data.status);
         setTasks(taskResult.data.items);
         setRuns(runResult.data.items);
-        setAgents(agentResult.data.items);
-        setWorkers(workerResult.data.items);
-        setStale(
+        setAgents(agentResult?.data.items ?? []);
+        setWorkers(workerResult?.data.items ?? []);
+        const staleNow =
           healthResult.stale ||
-            taskResult.stale ||
-            runResult.stale ||
-            agentResult.stale ||
-            workerResult.stale,
-        );
+          taskResult.stale ||
+          runResult.stale ||
+          Boolean(agentResult?.stale) ||
+          Boolean(workerResult?.stale);
+        setStale(staleNow);
+        setConnectionState(staleNow ? "offline" : "connected");
       } else if (current === "work") {
         const [taskResult, runResult, resultResult, artifactResult] = await Promise.all([
           client.listTasks(),
@@ -438,26 +438,40 @@ export default function App() {
         setRuns(runResult.data.items);
         setResults(resultResult.data.items);
         setArtifacts(artifactResult.data.items);
-        setStale(
+        const staleNow =
           taskResult.stale ||
-            runResult.stale ||
-            resultResult.stale ||
-            artifactResult.stale,
-        );
+          runResult.stale ||
+          resultResult.stale ||
+          artifactResult.stale;
+        setStale(staleNow);
+        setConnectionState(staleNow ? "offline" : "connected");
       } else if (current === "decisions") {
-        const [approvalResult, verificationResult] = await Promise.all([
-          client.listApprovals(),
-          client.listPendingVerification(),
-        ]);
-        setApprovals(approvalResult.data.items);
-        setVerifications(verificationResult.data.items);
-        setStale(approvalResult.stale || verificationResult.stale);
+        const approvalResult = serverSupports("approvals")
+          ? await client.listApprovals()
+          : null;
+        const verificationResult = serverSupports("verification-reviews")
+          ? await client.listPendingVerification()
+          : null;
+        setApprovals(approvalResult?.data.items ?? []);
+        setVerifications(verificationResult?.data.items ?? []);
+        const staleNow = Boolean(approvalResult?.stale || verificationResult?.stale);
+        setStale(staleNow);
+        setConnectionState(staleNow ? "offline" : "connected");
       } else if (current === "notifications") {
+        if (!serverSupports("notifications")) {
+          setNotifications([]);
+          setStale(false);
+          setNotice("This server does not advertise the optional Notifications surface.");
+          return;
+        }
         const notificationResult = await client.listNotifications();
         setNotifications(notificationResult.data.items);
         setStale(notificationResult.stale);
+        setConnectionState(notificationResult.stale ? "offline" : "connected");
       }
     } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
@@ -541,12 +555,20 @@ export default function App() {
 
   async function runSearch(): Promise<void> {
     if (!client) return;
+    if (!serverSupports("search")) {
+      setSearchResults([]);
+      setNotice("This server does not advertise the optional Search surface.");
+      return;
+    }
     setBusy(true);
     try {
       const response = await client.search(searchQuery);
       setSearchResults(response.data.items);
       setStale(response.stale);
+      setConnectionState(response.stale ? "offline" : "connected");
     } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
