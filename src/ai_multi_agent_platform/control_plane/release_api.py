@@ -192,6 +192,7 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
             if normalized_path == f"/api/{API_VERSION}/openapi.json":
                 specification = _filter_extension_discovery(self._control_plane, response.body)
                 _augment_generated_transport_contract(cast(dict[str, Any], specification))
+                ensure_method_not_allowed_responses(cast(dict[str, Any], specification))
                 return HTTPResponse(
                     status=response.status,
                     body=specification,
