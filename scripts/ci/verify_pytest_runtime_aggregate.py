@@ -53,8 +53,7 @@ def _load_reports(
         if current_attempt is not None:
             if attempt == current_attempt:
                 raise ValueError(
-                    f"duplicate {kind} runtime report for lane {lane} "
-                    f"at run attempt {attempt}"
+                    f"duplicate {kind} runtime report for lane {lane} at run attempt {attempt}"
                 )
             if attempt < current_attempt:
                 continue
