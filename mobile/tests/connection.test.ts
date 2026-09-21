@@ -3,10 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import {
   classifyConnectionError,
   connectionStateMessage,
+  initialConnectionState,
   probeControlPlane,
 } from "../src/connection";
 
 describe("mobile connection compatibility", () => {
+  it("starts unconfigured without a saved server and requests re-pairing for a profile without a credential", () => {
+    expect(initialConnectionState(false, false)).toBe("never_configured");
+    expect(initialConnectionState(true, false)).toBe("authentication_expired");
+    expect(initialConnectionState(true, true)).toBe("connecting");
+  });
+
   it("accepts the advertised v1 Control Plane manifest", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
