@@ -107,9 +107,7 @@ def test_fresh_install_bootstrap_creates_admin_policy_and_authenticated_browser_
     assert bootstrap_operation["responses"][str(repeated.status)] == {
         "$ref": "#/components/responses/Error"
     }
-    assert bootstrap_operation["responses"]["405"] == {
-        "$ref": "#/components/responses/Error"
-    }
+    assert bootstrap_operation["responses"]["405"] == {"$ref": "#/components/responses/Error"}
 
 
 def test_partial_first_user_bootstrap_can_resume_only_with_existing_credentials(tmp_path) -> None:
