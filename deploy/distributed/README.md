@@ -1,7 +1,7 @@
 # Distributed deployment reference profiles
 
-This directory contains provider-neutral deployment examples for issue #240. They are
-compositions over the canonical #14 distributed runtime, not a new Worker architecture.
+This directory contains provider-neutral distributed deployment examples. They are
+compositions over the canonical distributed runtime, not a new Worker architecture.
 
 ## Profiles
 
@@ -33,17 +33,17 @@ for request in profile.registration_requests:
 PY
 ```
 
-`registration_requests` are canonical #14 objects. `host_ref`, `transport_endpoint_ref` and
+`registration_requests` are canonical Node/Worker registration objects. `host_ref`, `transport_endpoint_ref` and
 `workspace_root` remain deployment-only metadata and are not copied into Node/Worker identity.
 The shipped Worker process binds the declared `reporter_worker_id` as the authenticated
 `service_identity_ref` for both local and remote reporters.
 
 ## Runnable composition
 
-Issue #240 ships three explicit operator entrypoints in addition to the unchanged #39
-`platform-server` fallback:
+The distributed deployment surface ships three explicit operator entrypoints in addition to the
+reference `platform-server` fallback:
 
-- `platform-message-broker` — self-hosted network implementation of the existing #35
+- `platform-message-broker` — self-hosted network implementation of the existing
   `MessageTransport` contract;
 - `platform-distributed-server` — normal Control Plane plus `DistributedRuntime`, authenticated
   Worker-protocol HTTP surface, scheduler attachment and remote Workspace materialization;
@@ -65,9 +65,9 @@ actually register it.
 
 For a Worker topology:
 
-1. provision each Node reporter's scoped #36 Worker credential outside source control with
+1. provision each Node reporter's scoped Worker credential outside source control with
    `platform --yes worker provision <reporter_worker_id> --secret-file <worker-token-file>`;
-2. provision the #35 transport HMAC key and/or mTLS material outside source control;
+2. provision the transport HMAC key and/or mTLS material outside source control;
 3. start `platform-message-broker` on the selected loopback/private endpoint;
 4. configure `PLATFORM_MESSAGE_BROKER_HOST` and `PLATFORM_MESSAGE_BROKER_PORT` for
    `platform-distributed-server` and start it with the same `--profile` used by the Workers;
@@ -91,7 +91,7 @@ composition enabled, the existing kernel `LifecycleBackend` seam routes the cano
 `DistributedRuntime`; the canonical scheduler chooses an eligible Worker and the terminal Worker
 snapshot is reconciled back into the same Run/Task lifecycle.
 
-`TcpMessageTransport` is the checked-in network-capable #35 adapter. Loopback operation may run
+`TcpMessageTransport` is the checked-in network-capable message-transport adapter. Loopback operation may run
 without TLS; non-loopback TCP connections/listeners fail closed unless TLS is configured. The
 Worker-protocol HTTP client likewise requires HTTPS for non-loopback Control Plane URLs.
 
@@ -102,7 +102,7 @@ complete authenticated registration/heartbeat snapshot. Additional Worker proces
 Node run their own execution/Workspace endpoints without inventing a second Node reporter. This
 keeps Node-wide capacity and liveness authority canonical while allowing separate OS processes.
 
-Local Workers use the same #36 Worker identity and #14 registration semantics as remote Workers.
+Local Workers use the same canonical Worker identity and registration semantics as remote Workers.
 `connection_mode = "local"` changes deployment locality/TLS expectations only; it does not create
 an unauthenticated local Worker model. The reference local profiles therefore use loopback TCP,
 a reporter and a credential reference rather than an unused in-process transport declaration.
@@ -115,7 +115,7 @@ share, replace or clean up the same materialization tree by accident.
 
 Each Worker host declares one absolute machine-local `workspace_root`. Worker jobs carry only
 workspace, snapshot and artifact references; they never carry the Control Plane's local
-filesystem path. #37 materialization transfers the exact canonical snapshot to a Worker-local
+filesystem path. Workspace materialization transfers the exact canonical snapshot to a Worker-local
 `<workspace_root>/<worker_id>/<workspace_id>/<snapshot_id>` execution tree and collects changed
 files back through the canonical File boundary.
 
@@ -130,9 +130,9 @@ added to Task/Run state.
 ## Security defaults
 
 - Remote Worker bindings require TLS.
-- Local same-host reporters still require #36 Worker authentication; loopback transport may omit
+- Local same-host reporters still require Worker authentication; loopback transport may omit
   TLS when the deployment remains loopback-only.
-- Registration uses #36 Worker authentication and #15 authorization for both local and remote
+- Registration uses canonical Worker authentication and authorization for both local and remote
   reporters.
 - TCP transport supports scoped deployment HMAC authentication and TLS/mTLS.
 - Credential values are read only from operator-selected runtime environment variables or TLS
@@ -144,4 +144,4 @@ added to Task/Run state.
 
 See `docs/operations/ADVANCED_DEPLOYMENT.md` for the network matrix, placement examples, failure behavior,
 credential rotation, drain/restart/replacement operations, reproducible two-machine flow and the
-#39 fallback path.
+reference single-node fallback path.
