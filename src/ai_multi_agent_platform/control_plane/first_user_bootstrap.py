@@ -12,6 +12,7 @@ from ai_multi_agent_platform.security.async_authorization_policy import (
 from ai_multi_agent_platform.security.authentication import safe_actor
 from ai_multi_agent_platform.security.first_user_bootstrap import (
     FirstUserBootstrapService,
+    FirstUserBootstrapState,
     FirstUserBootstrapUnavailable,
 )
 
@@ -150,6 +151,33 @@ class AuthenticatedControlPlaneHTTP(_AuthenticatedControlPlaneHTTP):
 
 def _augment_first_user_bootstrap_openapi(specification: dict[str, Any]) -> dict[str, Any]:
     document = dict(specification)
+
+    components = dict(document.get("components", {}))
+    schemas = dict(components.get("schemas", {}))
+    schemas["FirstUserBootstrapStatus"] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["state", "bootstrap_available", "password_policy"],
+        "properties": {
+            "state": {
+                "type": "string",
+                "enum": [state.value for state in FirstUserBootstrapState],
+            },
+            "bootstrap_available": {"type": "boolean"},
+            "password_policy": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["min_length", "max_bytes"],
+                "properties": {
+                    "min_length": {"type": "integer", "minimum": 1},
+                    "max_bytes": {"type": "integer", "minimum": 1},
+                },
+            },
+        },
+    }
+    components["schemas"] = schemas
+    document["components"] = components
+
     paths = dict(document.get("paths", {}))
     paths[f"/api/{API_VERSION}{BOOTSTRAP_STATUS_PATH}"] = {
         "get": {
@@ -157,7 +185,15 @@ def _augment_first_user_bootstrap_openapi(specification: dict[str, Any]) -> dict
             "description": "Return public first-user initialization state.",
             "security": [],
             "responses": {
-                "200": {"description": "First-user bootstrap status"},
+                "200": {
+                    "description": "First-user bootstrap status",
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/FirstUserBootstrapStatus"}
+                        }
+                    },
+                },
+                "405": {"$ref": "#/components/responses/Error"},
                 "500": {"$ref": "#/components/responses/Error"},
             },
         }
