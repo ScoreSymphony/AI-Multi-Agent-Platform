@@ -16,7 +16,7 @@
     "plugin_interface_versions": {}
   },
   "generated_from": "upstream/*.yaml + canonical VersionSnapshot",
-  "last_reviewed_at": "2026-09-14T00:00:00Z",
+  "last_reviewed_at": "2026-09-21T00:00:00Z",
   "components": [
     {
       "component": "Hermes Agent",
@@ -40,20 +40,20 @@
     {
       "component": "LiteLLM",
       "source_url": "https://github.com/BerriAI/litellm",
-      "revision": "v1.100.1 / 1dba17b10ded12ad0021edb453ba2c54e4637928",
+      "revision": "v1.101.0 / 18243cd7af4c3325165ba68b21379e2719e051c7",
       "status": "tested",
       "integration_mode": "optional ModelProvider library or separately deployed proxy",
       "boundary": "Optional ModelProvider adapter/library or OpenAI-compatible proxy",
       "license": "MIT outside enterprise/; enterprise/ is excluded from the integration scope",
-      "last_checked_at": "2026-09-14T00:00:00Z",
-      "latest_known_revision": "v1.100.1 / 1dba17b10ded12ad0021edb453ba2c54e4637928",
+      "last_checked_at": "2026-09-21T00:00:00Z",
+      "latest_known_revision": "v1.101.0 / 18243cd7af4c3325165ba68b21379e2719e051c7",
       "update_risk": "medium",
       "local_modifications": false,
       "patches": [],
       "notes": [
         "Enterprise-licensed upstream paths are outside the approved integration scope.",
         "Core operation must remain possible without the LiteLLM optional dependency.",
-        "LiteLLM 1.100.1 is validated by the pinned real-library integration profile in PR #1004."
+        "LiteLLM 1.101.0 is validated by the pinned real-library integration profile in PR #1338."
       ]
     }
   ]

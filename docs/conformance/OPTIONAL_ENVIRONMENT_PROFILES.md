@@ -25,9 +25,9 @@ The existing required `test` job may continue to run `ENV-MCP` independently as 
 
 ## LiteLLM (`ENV-LITELLM`)
 
-The LiteLLM profile requires the exact optional dependency `litellm==1.100.1`. It runs the repository's pinned real-library integration path. LiteLLM's supported `mock_response` mechanism exercises the installed library's request/response machinery without a paid provider, network credential or external model service, while the platform adapter preserves the canonical `ModelProvider` request/response boundary.
+The LiteLLM profile requires the exact optional dependency `litellm==1.101.0`. It runs the repository's pinned real-library integration path. LiteLLM's supported `mock_response` mechanism exercises the installed library's request/response machinery without a paid provider, network credential or external model service, while the platform adapter preserves the canonical `ModelProvider` request/response boundary.
 
-The profile fails closed when LiteLLM is absent or its installed version differs from the repository pin. A passing run produces the same versioned conformance report with deployment profile `litellm-pinned` and records `litellm=1.100.1` in adapter versions.
+The profile fails closed when LiteLLM is absent or its installed version differs from the repository pin. A passing run produces the same versioned conformance report with deployment profile `litellm-pinned` and records `litellm=1.101.0` in adapter versions.
 
 The existing required `litellm-compat` CI context runs this profile and retains `platform-conformance-litellm` / `conformance-litellm.json`.
 
