@@ -268,7 +268,7 @@ The `single-node-install-smoke` CI job additionally installs only `.[server]` in
 virtual environment, starts the real `platform-server` HTTP process, verifies canonical
 readiness, performs a graceful foreground shutdown, restarts against the same data root and
 verifies the retry-safe canonical smoke again. This is the installation/process-lifecycle
-proof required by #39.
+proof for the documented clean-install and restart lifecycle.
 
 The ReferenceExecutor itself remains replaceable and does not become canonical lifecycle
 storage.
@@ -462,7 +462,7 @@ needed by the chosen local workloads and measure:
 
 The reference path itself is CPU-only and requires no accelerator.
 
-## Advanced deployment integrations and remaining work
+## Advanced deployment integrations
 
 The repository has a production-shaped reference single-node baseline plus a hardened
 single-server process/network profile. The following advanced operational foundations
