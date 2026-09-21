@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import json
 
 import pytest
 
@@ -144,18 +145,20 @@ async def _asgi_request(
     *,
     path: str,
     headers: dict[str, str],
+    method: str = "GET",
+    body: bytes = b"",
 ) -> list[dict[str, object]]:
     messages: list[dict[str, object]] = []
 
     async def receive() -> dict[str, object]:
-        return {"type": "http.request", "body": b"", "more_body": False}
+        return {"type": "http.request", "body": body, "more_body": False}
 
     async def send(message: dict[str, object]) -> None:
         messages.append(message)
 
     scope: dict[str, object] = {
         "type": "http",
-        "method": "GET",
+        "method": method,
         "path": path,
         "query_string": b"",
         "headers": [
@@ -382,3 +385,79 @@ def test_browser_control_plane_login_csrf_session_listing_and_logout() -> None:
     )
     assert logout.status == 200
     assert "Max-Age=0" in logout.headers["set-cookie"]
+
+
+def test_authenticated_auth_wrong_method_still_returns_405() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    token = auth.create_personal_access_token(user.user_id, purpose="issue-1330", now=NOW)
+    http = AuthenticatedControlPlaneHTTP(_EchoControlPlane(), auth, secure_cookie=False)
+    headers = {
+        "authorization": f"Bearer {token.secret}",
+        "x-request-id": "request-1330-authenticated",
+        "x-correlation-id": "correlation-1330-authenticated",
+    }
+
+    wrong_method = _run(
+        http.handle(HTTPRequest(method="GET", path="/api/v1/auth/login", headers=headers))
+    )
+    assert wrong_method.status == 405
+    assert wrong_method.body["code"] == "method_not_allowed"
+
+    unknown = _run(
+        http.handle(
+            HTTPRequest(method="GET", path="/api/v1/auth/not-a-public-route", headers=headers)
+        )
+    )
+    assert unknown.status == 404
+    assert unknown.body["code"] == "not_found"
+
+
+def test_auth_openapi_does_not_invent_internal_route_ownership() -> None:
+    auth = _service()
+    http = AuthenticatedControlPlaneHTTP(_EchoControlPlane(), auth, secure_cookie=False)
+
+    response = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
+
+    assert response.status == 200
+    paths = response.body["paths"]
+    assert set(paths["/api/v1/auth/login"]) == {"post"}
+    assert set(paths["/api/v1/auth/me"]) == {"get"}
+    assert set(paths["/api/v1/auth/credentials"]) == {"get", "post"}
+    assert "/api/v1/auth/not-a-public-route" not in paths
+
+
+def test_asgi_auth_route_precedence_matches_direct_http_for_invalid_bodies() -> None:
+    auth = _service()
+    http = AuthenticatedControlPlaneHTTP(_EchoControlPlane(), auth, secure_cookie=False)
+    app = ControlPlaneASGI(http)
+    headers = {
+        "x-request-id": "request-1330-asgi",
+        "x-correlation-id": "correlation-1330-asgi",
+        "content-type": "application/json",
+    }
+    cases = (
+        ("GET", "/api/v1/auth/login", b"{", 405, "method_not_allowed"),
+        ("POST", "/api/v1/auth/me", b"[]", 405, "method_not_allowed"),
+        ("GET", "/api/v1/auth/not-a-public-route", b"{", 404, "not_found"),
+    )
+
+    for method, path, body, expected_status, expected_code in cases:
+        messages = _run(
+            _asgi_request(
+                app,
+                path=path,
+                headers=headers,
+                method=method,
+                body=body,
+            )
+        )
+        start = next(message for message in messages if message["type"] == "http.response.start")
+        body_message = next(
+            message for message in messages if message["type"] == "http.response.body"
+        )
+        payload = json.loads(body_message["body"])
+        assert start["status"] == expected_status
+        assert payload["code"] == expected_code
+        assert payload["request_id"] == "request-1330-asgi"
+        assert payload["correlation_id"] == "correlation-1330-asgi"
