@@ -213,7 +213,7 @@ to be eliminated in one risky refactor.
 | `task_reassignment` | `task_management.reassignment` | compatibility-only under the package-boundary policy; internal Control Plane caller migrated to the canonical domain | Remove only after supported external callers have migrated and the normal public-import deprecation window permits removal. |
 | `capability_assignments` | `capabilities.assignments` | compatibility-only under the bounded-context policy | Same public-import deprecation rule; canonical code must not import the shim. |
 | `repository_intelligence` | `repositories.intelligence` | compatibility-only under repository/distributed ownership consolidation | Canonical callers and ProjectAtlas entrypoint migrated; remove the root only after the public-import deprecation window. |
-| `high_availability` | `distributed.high_availability` | compatibility-only under #1241 | Canonical callers migrated; contracts remain backed by `distributed.control_plane_ha`; remove the root only after the public-import deprecation window. |
+| `high_availability` | `distributed.high_availability` | compatibility-only during the public-import deprecation window | Canonical callers migrated; contracts remain backed by `distributed.control_plane_ha`; remove the root only after the public-import deprecation window. |
 
 ## Staged migration order
 
@@ -225,7 +225,7 @@ to be eliminated in one risky refactor.
 3. **Repository intelligence** — completed under ownership consolidation: provider-neutral implementation and
    ProjectAtlas import strings are canonical under `repositories.intelligence`, with the root retained
    only for compatibility.
-4. **High availability** — completed under #1241: implementation is canonical beneath
+4. **High availability** — implementation is canonical beneath
    `distributed.high_availability`, with the root retained only for compatibility.
 5. **Broader subdomain nesting** — consider additional physical moves only when dependency evidence
    shows a clear benefit. Documentation grouping alone is preferable to mass path churn for stable
