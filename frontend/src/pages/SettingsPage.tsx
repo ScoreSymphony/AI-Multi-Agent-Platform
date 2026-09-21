@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import qrcode from "qrcode-generator";
 import {
   BrowserSessionClient,
   type AuthenticatedActor,
   type BrowserSessionSummary,
+  type MobileDeviceSummary,
+  type MobilePairingChallenge,
   type ReleaseOperatorStatus,
 } from "../api/browserSession";
 import { ControlPlaneError } from "../api/client";
@@ -20,6 +23,9 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
   const setupClient = useMemo(() => new SetupClient({ transport: session.transport }), [session]);
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [sessions, setSessions] = useState<BrowserSessionSummary[] | null>(null);
+  const [mobileDevices, setMobileDevices] = useState<MobileDeviceSummary[] | null>(null);
+  const [mobilePairing, setMobilePairing] = useState<MobilePairingChallenge | null>(null);
+  const [pairingClock, setPairingClock] = useState(() => Date.now());
   const [releaseStatus, setReleaseStatus] = useState<ReleaseOperatorStatus | null>(null);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -44,12 +50,15 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       const currentActor = await session.me();
       setActor(currentActor);
       setSessions(await session.listSessions());
+      setMobileDevices(await session.listMobileDevices());
       setError(null);
       await loadReleaseStatus();
     } catch (nextError) {
       if (nextError instanceof ControlPlaneError && nextError.status === 401) {
         setActor(null);
         setSessions(null);
+        setMobileDevices(null);
+        setMobilePairing(null);
         setReleaseStatus(null);
         setReleaseError(null);
         session.clearLocalSession();
@@ -66,6 +75,12 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     void loadIdentity();
   }, [loadIdentity]);
 
+  useEffect(() => {
+    if (mobilePairing === null) return;
+    const timer = window.setInterval(() => setPairingClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [mobilePairing]);
+
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMutating(true);
@@ -74,6 +89,7 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       setActor(result.actor);
       setPassword("");
       setSessions(await session.listSessions());
+      setMobileDevices(await session.listMobileDevices());
       await loadReleaseStatus();
       setError(null);
     } catch (nextError) {
@@ -89,6 +105,8 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       await session.logout();
       setActor(null);
       setSessions(null);
+      setMobileDevices(null);
+      setMobilePairing(null);
       setReleaseStatus(null);
       setReleaseError(null);
       setError(null);
@@ -117,6 +135,89 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     try {
       await session.revokeSession(sessionId);
       await loadIdentity();
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function createMobilePairing() {
+    setMutating(true);
+    try {
+      const challenge = await session.createMobilePairing(pairingOrigin(session.baseUrl));
+      setMobilePairing(challenge);
+      setPairingClock(Date.now());
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function cancelMobilePairing() {
+    if (mobilePairing === null) return;
+    setMutating(true);
+    try {
+      await session.cancelMobilePairing(mobilePairing.id);
+      setMobilePairing(null);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function refreshMobileDevices() {
+    setMutating(true);
+    try {
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function revokeMobileDevice(device: MobileDeviceSummary) {
+    if (!window.confirm(`Revoke mobile device "${device.display_name}"?`)) return;
+    setMutating(true);
+    try {
+      await session.revokeMobileDevice(device.id);
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function renameMobileDevice(device: MobileDeviceSummary) {
+    const nextName = window.prompt("Device name", device.display_name)?.trim();
+    if (!nextName || nextName === device.display_name) return;
+    setMutating(true);
+    try {
+      await session.renameMobileDevice(device.id, nextName);
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function revokeAllMobileDevices() {
+    if (!window.confirm("Revoke all active mobile device credentials?")) return;
+    setMutating(true);
+    try {
+      await session.revokeAllMobileDevices();
+      setMobileDevices(await session.listMobileDevices());
+      setError(null);
     } catch (nextError) {
       setError(nextError);
     } finally {
@@ -204,6 +305,117 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
             <div className="actions">
               <a href="/onboarding">Open guided setup</a>
             </div>
+          </Card>
+
+          <Card title="Mobile companion pairing">
+            <p>
+              Pair a phone without copying a durable bearer token. Pairing material is short-lived
+              and single-use; the phone receives a separate server-owned credential that can be
+              revoked here at any time.
+            </p>
+            {mobilePairing === null ? (
+              <div className="actions">
+                <button disabled={mutating} onClick={() => void createMobilePairing()}>
+                  Pair mobile device
+                </button>
+              </div>
+            ) : (
+              <div className="stack">
+                <div className="grid-two">
+                  <div>
+                    <img
+                      alt="Mobile pairing QR code"
+                      src={pairingQrDataUrl(mobilePairing.pairing_uri)}
+                      width={240}
+                      height={240}
+                    />
+                  </div>
+                  <dl className="definition-list">
+                    <div><dt>Server</dt><dd><code>{mobilePairing.server_origin}</code></dd></div>
+                    <div><dt>Fallback code</dt><dd><code>{formatPairingCode(mobilePairing.code)}</code></dd></div>
+                    <div><dt>Expires</dt><dd>{formatDate(mobilePairing.expires_at)}</dd></div>
+                    <div>
+                      <dt>Time remaining</dt>
+                      <dd>{formatCountdown(secondsRemaining(mobilePairing.expires_at, pairingClock))}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <p>
+                  Scan the QR code in the Android app, or enter the server origin and fallback code
+                  manually. The QR contains only this short-lived pairing proof, not the durable
+                  device credential.
+                </p>
+                <div className="actions">
+                  <button disabled={mutating} onClick={() => void cancelMobilePairing()}>
+                    Cancel pairing
+                  </button>
+                  <button disabled={mutating} onClick={() => void refreshMobileDevices()}>
+                    Refresh paired devices
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card title="Paired mobile devices">
+            <div className="actions">
+              <button disabled={mutating} onClick={() => void refreshMobileDevices()}>
+                Refresh
+              </button>
+              <button
+                disabled={mutating || !mobileDevices?.some((item) => item.active)}
+                onClick={() => void revokeAllMobileDevices()}
+              >
+                Revoke all active devices
+              </button>
+            </div>
+            {mobileDevices === null ? (
+              <LoadingState />
+            ) : mobileDevices.length === 0 ? (
+              <EmptyState title="No paired mobile devices" />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Device</th>
+                      <th>Platform</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Last used</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mobileDevices.map((device) => (
+                      <tr key={device.id}>
+                        <td>
+                          <strong>{device.display_name}</strong><br />
+                          <code>{device.id}</code>
+                        </td>
+                        <td>{device.platform ?? "—"}</td>
+                        <td><StatusBadge value={device.active ? "active" : "revoked"} /></td>
+                        <td>{formatDate(device.created_at)}</td>
+                        <td>{formatDate(device.last_used_at)}</td>
+                        <td>
+                          <div className="actions">
+                            <button disabled={mutating} onClick={() => void renameMobileDevice(device)}>
+                              Rename
+                            </button>
+                            <button
+                              disabled={mutating || !device.active}
+                              onClick={() => void revokeMobileDevice(device)}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
 
           <SetupLifecyclePanel setup={setupClient} onboarding={componentSetupClient} />
@@ -339,6 +551,36 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
       )}
     </div>
   );
+}
+
+function pairingOrigin(baseUrl: string): string {
+  if (baseUrl) return new URL(baseUrl, window.location.origin).origin;
+  return window.location.origin;
+}
+
+function pairingQrDataUrl(value: string): string {
+  const qr = qrcode(0, "M");
+  qr.addData(value, "Byte");
+  qr.make();
+  return qr.createDataURL(5, 4);
+}
+
+function secondsRemaining(expiresAt: string, now: number): number {
+  const expiry = Date.parse(expiresAt);
+  if (!Number.isFinite(expiry)) return 0;
+  return Math.max(0, Math.ceil((expiry - now) / 1000));
+}
+
+function formatCountdown(seconds: number): string {
+  if (seconds <= 0) return "Expired";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
+function formatPairingCode(code: string): string {
+  const normalized = code.replace(/[-\s]/g, "").toUpperCase();
+  return normalized.match(/.{1,4}/g)?.join("-") ?? normalized;
 }
 
 function formatDate(value: string | null): string {
