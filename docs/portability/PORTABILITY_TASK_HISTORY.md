@@ -1,6 +1,6 @@
 # Portable Task and Run history
 
-Issue #79 treats historical Task/Run portability as archival interchange, not as a way to recreate live execution state.
+Historical Task/Run portability is archival interchange, not a way to recreate live execution state.
 
 ## Boundary
 
