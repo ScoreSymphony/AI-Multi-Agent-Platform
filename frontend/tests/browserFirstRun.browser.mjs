@@ -201,6 +201,37 @@ async function publicApiCommand(page, path, body) {
   }, { commandPath: path, commandBody: body });
 }
 
+async function consumeMobilePairing(page, challenge, deviceName) {
+  return page.evaluate(async ({ pairingId, code, protocolVersion, name }) => {
+    const response = await fetch("/api/v1/auth/mobile-pairings:consume", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Correlation-ID": crypto.randomUUID(),
+      },
+      body: JSON.stringify({
+        pairing_id: pairingId,
+        code,
+        device_name: name,
+        platform: "android",
+        protocol_version: protocolVersion,
+      }),
+    });
+    const payload = await response.json();
+    return {
+      status: response.status,
+      device: response.ok ? payload.device ?? null : null,
+      error: response.ok ? null : payload,
+    };
+  }, {
+    pairingId: challenge.id,
+    code: challenge.code,
+    protocolVersion: challenge.protocol_version,
+    name: deviceName,
+  });
+}
+
 function requireCanonicalIdentity(resource, expectedId, label) {
   if (typeof expectedId !== "string" || expectedId.length === 0 || !resource || resource.id !== expectedId) {
     throw new Error(
@@ -915,9 +946,74 @@ try {
     throw new Error(`Bootstrap endpoint did not fail closed after first run: ${JSON.stringify(bootstrapStatus)}`);
   }
 
-  // Existing completed installation: ordinary sign-in returns directly to the dashboard.
+  // #1370 desktop Settings revalidation: use the maintained real Chromium path and the public
+  // Control Plane to prove the post-#1297 mobile-pairing/device-management surface is reachable
+  // by sequential keyboard navigation and exposes useful pairing/device evidence.
   await page.goto(`${frontendUrl}/settings`);
   await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+  const desktopPairMobileButton = await waitForButton(page, "Pair mobile device");
+  await tabTo(page, desktopPairMobileButton, "Desktop Pair mobile device action", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, desktopPairMobileButton, "Desktop Pair mobile device action");
+  const desktopPairingResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/v1/auth/mobile-pairings")
+      && response.request().method() === "POST",
+  );
+  await page.keyboard.press("Enter");
+  const desktopPairingResponse = await desktopPairingResponsePromise;
+  if (!desktopPairingResponse.ok()) {
+    throw new Error(`Desktop mobile pairing creation failed with HTTP ${desktopPairingResponse.status()}`);
+  }
+  const desktopPairing = await desktopPairingResponse.json();
+  if (!desktopPairing.id || !desktopPairing.code || desktopPairing.protocol_version !== "1") {
+    throw new Error(`Desktop mobile pairing returned an incomplete challenge: ${JSON.stringify(desktopPairing)}`);
+  }
+  const desktopPairingCard = page.getByRole("heading", { name: "Mobile companion pairing", exact: true }).locator("..");
+  const desktopPairingText = await desktopPairingCard.innerText();
+  for (const label of ["Server", "Fallback code", "Expires", "Time remaining"]) {
+    requireText(desktopPairingText, label, "Desktop mobile pairing presentation");
+  }
+  const desktopPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
+  await desktopPairingQr.waitFor();
+  await assertHorizontallyReachable(page, desktopPairingQr, "Desktop mobile pairing QR");
+  await assertNoDocumentHorizontalOverflow(page, "Desktop Settings mobile pairing");
+
+  const desktopCancelPairingButton = await waitForButton(page, "Cancel pairing");
+  await tabTo(page, desktopCancelPairingButton, "Desktop Cancel pairing action", { maxPresses: 80 });
+  await page.keyboard.press("Enter");
+  await desktopPairMobileButton.waitFor();
+
+  // Create a second challenge and consume it through the public mobile endpoint so the same
+  // maintained browser run has representative canonical paired-device data without a physical phone.
+  const devicePairingResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/v1/auth/mobile-pairings")
+      && response.request().method() === "POST",
+  );
+  await tabTo(page, desktopPairMobileButton, "Desktop Pair mobile device action for device fixture", { maxPresses: 80 });
+  await page.keyboard.press("Enter");
+  const devicePairingResponse = await devicePairingResponsePromise;
+  if (!devicePairingResponse.ok()) {
+    throw new Error(`Device-fixture mobile pairing creation failed with HTTP ${devicePairingResponse.status()}`);
+  }
+  const devicePairing = await devicePairingResponse.json();
+  const browserMobileDeviceName = "Browser acceptance Android";
+  const consumedPairing = await consumeMobilePairing(page, devicePairing, browserMobileDeviceName);
+  if (consumedPairing.status !== 201 || !consumedPairing.device?.id) {
+    throw new Error(`Public mobile pairing consume failed: ${JSON.stringify(consumedPairing)}`);
+  }
+  const browserMobileDeviceId = consumedPairing.device.id;
+  const desktopRefreshPairedDevices = await waitForButton(page, "Refresh paired devices");
+  await tabTo(page, desktopRefreshPairedDevices, "Desktop Refresh paired devices action", { maxPresses: 80 });
+  await page.keyboard.press("Enter");
+  const desktopDevicesCard = page.getByRole("heading", { name: "Paired mobile devices", exact: true }).locator("..");
+  const desktopDeviceRow = desktopDevicesCard.locator("tbody tr").filter({ hasText: browserMobileDeviceName });
+  await desktopDeviceRow.waitFor();
+  await assertUsableTableWrapper(
+    page,
+    desktopDevicesCard.locator(".table-wrap").first(),
+    "Desktop paired-device table",
+  );
+
+  // Existing completed installation: ordinary sign-in returns directly to the dashboard.
   await (await waitForButton(page, "Sign out")).click();
   await page.goto(frontendUrl);
   await signIn(page);
@@ -1282,6 +1378,156 @@ try {
     throw new Error("Mobile navigation did not close after keyboard navigation");
   }
   await assertNoDocumentHorizontalOverflow(page, "Narrow shell destination");
+
+  // #1370 narrow Settings revalidation: exercise pairing presentation, intentional table
+  // containment and representative device actions at the supported ~390 CSS px viewport.
+  await page.goto(`${frontendUrl}/settings`);
+  await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Settings before pairing");
+  const narrowPairMobileButton = await waitForButton(page, "Pair mobile device");
+  await tabTo(page, narrowPairMobileButton, "Narrow Pair mobile device action", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, narrowPairMobileButton, "Narrow Pair mobile device action");
+  const narrowPairingResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/v1/auth/mobile-pairings")
+      && response.request().method() === "POST",
+  );
+  await page.keyboard.press("Enter");
+  const narrowPairingResponse = await narrowPairingResponsePromise;
+  if (!narrowPairingResponse.ok()) {
+    throw new Error(`Narrow mobile pairing creation failed with HTTP ${narrowPairingResponse.status()}`);
+  }
+  const narrowPairingCard = page.getByRole("heading", { name: "Mobile companion pairing", exact: true }).locator("..");
+  const narrowPairingText = await narrowPairingCard.innerText();
+  for (const label of ["Server", "Fallback code", "Expires", "Time remaining"]) {
+    requireText(narrowPairingText, label, "Narrow mobile pairing presentation");
+  }
+  const narrowPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
+  await narrowPairingQr.waitFor();
+  await assertHorizontallyReachable(page, narrowPairingQr, "Narrow mobile pairing QR");
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Settings pairing challenge");
+  const narrowCancelPairingButton = await waitForButton(page, "Cancel pairing");
+  await tabTo(page, narrowCancelPairingButton, "Narrow Cancel pairing action", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, narrowCancelPairingButton, "Narrow Cancel pairing action");
+  await page.keyboard.press("Enter");
+  await narrowPairMobileButton.waitFor();
+
+  const narrowDevicesCard = page.getByRole("heading", { name: "Paired mobile devices", exact: true }).locator("..");
+  let narrowDeviceRow = narrowDevicesCard.locator("tbody tr").filter({ hasText: browserMobileDeviceName });
+  await narrowDeviceRow.waitFor();
+  await assertUsableTableWrapper(
+    page,
+    narrowDevicesCard.locator(".table-wrap").first(),
+    "Narrow paired-device table",
+  );
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Settings paired-device table");
+
+  const narrowRenameButton = narrowDeviceRow.getByRole("button", { name: "Rename", exact: true });
+  await tabTo(page, narrowRenameButton, "Narrow device Rename action", { maxPresses: 80 });
+  await assertHorizontallyReachable(page, narrowRenameButton, "Narrow device Rename action");
+  const renamedDeviceName = "Browser acceptance Android renamed";
+  const renameDialogPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Keyboard Rename action did not expose a prompt dialog")),
+      5_000,
+    );
+    page.once("dialog", async (dialog) => {
+      const snapshot = { type: dialog.type(), message: dialog.message() };
+      try {
+        await dialog.accept(renamedDeviceName);
+        clearTimeout(timeout);
+        resolve(snapshot);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  });
+  await page.keyboard.press("Enter");
+  const renameDialog = await renameDialogPromise;
+  if (renameDialog.type !== "prompt" || !renameDialog.message.includes("Device name")) {
+    throw new Error(`Keyboard Rename action exposed an unexpected dialog: ${JSON.stringify(renameDialog)}`);
+  }
+  narrowDeviceRow = narrowDevicesCard.locator("tbody tr").filter({ hasText: renamedDeviceName });
+  await narrowDeviceRow.waitFor();
+
+  const renamedDeviceButton = narrowDeviceRow.getByRole("button", { name: "Rename", exact: true });
+  const narrowRevokeButton = narrowDeviceRow.getByRole("button", { name: "Revoke", exact: true });
+  await tabTo(page, renamedDeviceButton, "Narrow renamed-device Rename action", { maxPresses: 80 });
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(narrowRevokeButton, "Narrow device Revoke action");
+  await assertHorizontallyReachable(page, narrowRevokeButton, "Narrow device Revoke action");
+  await page.keyboard.press("Shift+Tab");
+  await assertKeyboardFocus(renamedDeviceButton, "Narrow reverse traversal to Rename action");
+  await page.keyboard.press("Tab");
+  await assertKeyboardFocus(narrowRevokeButton, "Narrow forward traversal to Revoke action");
+
+  const revokeDialogPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Keyboard Revoke action did not expose a confirmation dialog")),
+      5_000,
+    );
+    page.once("dialog", async (dialog) => {
+      const snapshot = { type: dialog.type(), message: dialog.message() };
+      try {
+        await dialog.dismiss();
+        clearTimeout(timeout);
+        resolve(snapshot);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  });
+  await page.keyboard.press("Enter");
+  const revokeDialog = await revokeDialogPromise;
+  if (revokeDialog.type !== "confirm" || !revokeDialog.message.includes("Revoke mobile device")) {
+    throw new Error(`Keyboard Revoke action exposed an unexpected confirmation: ${JSON.stringify(revokeDialog)}`);
+  }
+  const inventoryAfterDismissedRevoke = await readPublicApiResource(page, "/auth/mobile-devices");
+  const deviceAfterDismissedRevoke = inventoryAfterDismissedRevoke.items?.find(
+    (device) => device.id === browserMobileDeviceId,
+  );
+  if (!deviceAfterDismissedRevoke?.active || deviceAfterDismissedRevoke.display_name !== renamedDeviceName) {
+    throw new Error(
+      `Dismissed device Revoke confirmation mutated canonical state: ${JSON.stringify(deviceAfterDismissedRevoke)}`,
+    );
+  }
+
+  const narrowRevokeAllButton = await waitForButton(page, "Revoke all active devices");
+  await tabTo(page, narrowRevokeAllButton, "Narrow Revoke all active devices action", { reverse: true, maxPresses: 20 });
+  await assertHorizontallyReachable(page, narrowRevokeAllButton, "Narrow Revoke all active devices action");
+  const revokeAllDialogPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Keyboard Revoke-all action did not expose a confirmation dialog")),
+      5_000,
+    );
+    page.once("dialog", async (dialog) => {
+      const snapshot = { type: dialog.type(), message: dialog.message() };
+      try {
+        await dialog.dismiss();
+        clearTimeout(timeout);
+        resolve(snapshot);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  });
+  await page.keyboard.press("Enter");
+  const revokeAllDialog = await revokeAllDialogPromise;
+  if (revokeAllDialog.type !== "confirm" || !revokeAllDialog.message.includes("Revoke all active mobile device credentials")) {
+    throw new Error(`Keyboard Revoke-all action exposed an unexpected confirmation: ${JSON.stringify(revokeAllDialog)}`);
+  }
+  const inventoryAfterDismissedRevokeAll = await readPublicApiResource(page, "/auth/mobile-devices");
+  const deviceAfterDismissedRevokeAll = inventoryAfterDismissedRevokeAll.items?.find(
+    (device) => device.id === browserMobileDeviceId,
+  );
+  if (!deviceAfterDismissedRevokeAll?.active || deviceAfterDismissedRevokeAll.display_name !== renamedDeviceName) {
+    throw new Error(
+      `Dismissed Revoke-all confirmation mutated canonical state: ${JSON.stringify(deviceAfterDismissedRevokeAll)}`,
+    );
+  }
+  await assertNoDocumentHorizontalOverflow(page, "Narrow Settings after device actions");
 
   // Search remains a usable release surface at the chosen narrow width.
   await page.goto(`${frontendUrl}${searchPath}`);
