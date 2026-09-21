@@ -3,6 +3,10 @@
 This directory contains the maintained single-server reference composition. It is an
 operator example over the canonical platform contracts, not a new platform architecture.
 
+The production Docker Compose implementation of the same boundaries lives under
+[`../docker/`](../docker/README.md). It is an alternative deployment composition, not a
+replacement for this systemd/Caddy reference.
+
 The reference layout is:
 
 ```text
