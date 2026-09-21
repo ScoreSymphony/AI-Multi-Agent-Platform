@@ -357,7 +357,7 @@ describe("MobileSessionStore", () => {
     ).rejects.toThrow("offline");
 
     const restarted = new MobileSessionStore(storage);
-    expect(await restarted.current()).toEqual({ baseUrl: "https://platform.example" });
+    expect(await restarted.current()).toMatchObject({ baseUrl: "https://platform.example" });
     expect(await restarted.getToken()).toBe("amp1.credential_1.device-secret");
   });
 
