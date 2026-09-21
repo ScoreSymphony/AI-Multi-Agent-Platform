@@ -50,6 +50,17 @@ The platform owns the canonical state in that path. Orchestrators, executors, mo
 
 No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker is required for the reference single-node first run. The retired Forge runtime is not part of this baseline.
 
+### Docker Compose deployment
+
+For a production-shaped container deployment, Docker Engine plus Docker Compose can replace the host Python/Node prerequisites. The repository root contains the maintained `docker-compose.yml` profile:
+
+```bash
+docker compose -f docker-compose.yml build
+docker compose -f docker-compose.yml up -d
+```
+
+It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication in this profile requires an HTTPS external edge because secure cookies remain enabled. Generic operation and Hostinger Docker Manager instructions are in [`deploy/docker/README.md`](deploy/docker/README.md).
+
 ### Linux/macOS
 
 From a clean checkout, install and start the Control Plane:
