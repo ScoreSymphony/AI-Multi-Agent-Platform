@@ -207,7 +207,10 @@ def add_auth_parsers(
     )
     mobile_pair.add_argument(
         "--server-origin",
-        help="public Control Plane origin encoded into the pairing payload; defaults to profile endpoint",
+        help=(
+            "public Control Plane origin encoded into the pairing payload; "
+            "defaults to profile endpoint"
+        ),
     )
     mobile_cancel = mobile_commands.add_parser(
         "cancel",
