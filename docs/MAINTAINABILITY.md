@@ -53,7 +53,7 @@ These values are review heuristics, not canonical architecture constraints. Resp
 
 ## Baseline snapshot
 
-The first maintainability inventory generated on 2026-09-15 for PR #1035 measured:
+The first maintainability inventory generated on 2026-09-15 measured:
 
 | Metric | Count |
 | --- | ---: |
