@@ -46,6 +46,11 @@ def test_mobile_pairing_is_single_use_and_issues_revocable_device_credential() -
     safe = auth.mobile_pairing.safe_device(device, now=NOW + timedelta(seconds=2))
     assert safe["display_name"] == "Alice phone"
     assert safe["active"] is True
+    assert safe["scope"] == {
+        "actions": ["approve", "create", "execute", "modify", "read", "view"],
+        "resource_types": [],
+        "resource_ids": [],
+    }
     assert "secret" not in safe
     assert grant.secret not in repr(safe)
 
