@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -417,7 +418,7 @@ export class RegistryClient {
   async preview(
     itemId: string,
     version: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
     sourceRegistry?: string | null,
   ): Promise<RegistryPreview> {
     return this.command<RegistryPreview>(
@@ -431,7 +432,7 @@ export class RegistryClient {
   async install(
     itemId: string,
     version: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
     sourceRegistry?: string | null,
   ): Promise<MarketplaceMutation> {
     return this.command<MarketplaceMutation>(
@@ -445,7 +446,7 @@ export class RegistryClient {
   async update(
     itemId: string,
     version: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
     sourceRegistry?: string | null,
   ): Promise<MarketplaceMutation> {
     return this.command<MarketplaceMutation>(
@@ -459,7 +460,7 @@ export class RegistryClient {
   async activate(
     itemId: string,
     version: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
     sourceRegistry?: string | null,
   ): Promise<RegistryActivation> {
     return this.command<RegistryActivation>(
@@ -472,7 +473,7 @@ export class RegistryClient {
 
   async uninstall(
     itemId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<MarketplaceMutation> {
     return this.command<MarketplaceMutation>(
       "marketplace.uninstall",
@@ -485,7 +486,7 @@ export class RegistryClient {
   async pin(
     itemId: string,
     version: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<RegistryInstallation> {
     return this.command<RegistryInstallation>(
       "registry.pin",
@@ -497,7 +498,7 @@ export class RegistryClient {
 
   async unpin(
     itemId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<RegistryInstallation> {
     return this.command<RegistryInstallation>(
       "registry.unpin",

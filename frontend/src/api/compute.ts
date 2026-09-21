@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -153,17 +154,17 @@ export class ComputeClient {
     );
   }
 
-  drainNode(nodeId: string, idempotencyKey: string = crypto.randomUUID()): Promise<CanonicalNode> {
+  drainNode(nodeId: string, idempotencyKey: string = createUuid()): Promise<CanonicalNode> {
     return this.command<CanonicalNode>("node.drain", requireRef(nodeId, "node"), idempotencyKey);
   }
 
-  undrainNode(nodeId: string, idempotencyKey: string = crypto.randomUUID()): Promise<CanonicalNode> {
+  undrainNode(nodeId: string, idempotencyKey: string = createUuid()): Promise<CanonicalNode> {
     return this.command<CanonicalNode>("node.undrain", requireRef(nodeId, "node"), idempotencyKey);
   }
 
   enableNodeMaintenance(
     nodeId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalNode> {
     return this.command<CanonicalNode>(
       "node.maintenance-enable",
@@ -174,7 +175,7 @@ export class ComputeClient {
 
   disableNodeMaintenance(
     nodeId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalNode> {
     return this.command<CanonicalNode>(
       "node.maintenance-disable",
@@ -185,7 +186,7 @@ export class ComputeClient {
 
   drainWorker(
     workerId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalWorker> {
     return this.command<CanonicalWorker>(
       "worker.drain",
@@ -196,7 +197,7 @@ export class ComputeClient {
 
   undrainWorker(
     workerId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalWorker> {
     return this.command<CanonicalWorker>(
       "worker.undrain",

@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import type {
   APIErrorBody,
   APImanifest,
@@ -391,7 +392,7 @@ export class ControlPlaneClient {
     return this.request<T>(path, {
       method: options.method ?? "POST",
       body: options.body,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 

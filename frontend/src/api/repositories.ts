@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -134,7 +135,7 @@ export class RepositoryCollectionClient {
   fetch(
     repositoryId: string,
     approvalId?: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<Record<string, JsonValue>> {
     return this.command<Record<string, JsonValue>>(
       "repository.fetch",
@@ -163,7 +164,7 @@ export class RepositoryCollectionClient {
         checkout: options.checkout ?? false,
         ...approvalPayload(options.approvalId),
       },
-      options.idempotencyKey ?? crypto.randomUUID(),
+      options.idempotencyKey ?? createUuid(),
     );
   }
 
@@ -171,7 +172,7 @@ export class RepositoryCollectionClient {
     repositoryId: string,
     revision: string,
     approvalId?: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<RepositoryRevisionView> {
     return this.command<RepositoryRevisionView>(
       "repository.checkout",
@@ -192,7 +193,7 @@ export class RepositoryCollectionClient {
       authorEmail: string;
       approvalId?: string;
     },
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<RepositoryCommitView> {
     return this.command<RepositoryCommitView>(
       "repository.commit",
@@ -225,7 +226,7 @@ export class RepositoryCollectionClient {
       "repository.push",
       repositoryId,
       payload,
-      options.idempotencyKey ?? crypto.randomUUID(),
+      options.idempotencyKey ?? createUuid(),
     );
   }
 
@@ -237,7 +238,7 @@ export class RepositoryCollectionClient {
       defaultBranch?: string;
       approvalId?: string;
     },
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalRepository> {
     return this.command<CanonicalRepository>(
       "repository.local.attach",
@@ -269,14 +270,14 @@ export class RepositoryCollectionClient {
         attach: options.attach ?? false,
         ...approvalPayload(options.approvalId),
       },
-      options.idempotencyKey ?? crypto.randomUUID(),
+      options.idempotencyKey ?? createUuid(),
     );
   }
 
   detach(
     repositoryId: string,
     approvalId?: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<{ repository_id: string; detached: boolean }> {
     return this.command<{ repository_id: string; detached: boolean }>(
       "repository.detach",

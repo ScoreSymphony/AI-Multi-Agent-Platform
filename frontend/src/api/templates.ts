@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -196,7 +197,7 @@ export class TemplateClient {
   create(
     content: TemplateContent,
     scope: TemplateScopeInput = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create",
@@ -209,7 +210,7 @@ export class TemplateClient {
   createFromAgent(
     agentId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-agent",
@@ -222,7 +223,7 @@ export class TemplateClient {
   createFromAgentTeam(
     teamId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-agent-team",
@@ -235,7 +236,7 @@ export class TemplateClient {
   createFromWorkflow(
     workflowId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-workflow",
@@ -248,7 +249,7 @@ export class TemplateClient {
   createFromCapabilityAssignment(
     assignmentId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-capability-assignment",
@@ -264,7 +265,7 @@ export class TemplateClient {
   createFromModelRoutingProfile(
     profileId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-model-routing-profile",
@@ -280,7 +281,7 @@ export class TemplateClient {
   createFromAutomation(
     automationId: string,
     options: { name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-automation",
@@ -293,7 +294,7 @@ export class TemplateClient {
   createFromProject(
     projectId: string,
     options: { name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.create-from-project",
@@ -310,7 +311,7 @@ export class TemplateClient {
       project_template_id?: string;
       project_template_revision?: number;
     },
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     if (workspaceIds.length === 0) throw new Error("at least one Workspace is required");
     return this.command(
@@ -330,7 +331,7 @@ export class TemplateClient {
     templateId: string,
     expectedRevision: number,
     content: TemplateContent,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.revise",
@@ -346,7 +347,7 @@ export class TemplateClient {
   publish(
     templateId: string,
     expectedRevision: number,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.publish",
@@ -359,7 +360,7 @@ export class TemplateClient {
   activateUntrusted(
     templateId: string,
     expectedRevision: number,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.publish",
@@ -375,7 +376,7 @@ export class TemplateClient {
   clone(
     templateId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.clone",
@@ -388,7 +389,7 @@ export class TemplateClient {
   fork(
     templateId: string,
     options: { revision?: number; name?: string } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalTemplate> {
     return this.command(
       "template.fork",
@@ -401,7 +402,7 @@ export class TemplateClient {
   preview(
     templateId: string,
     options: { revision?: number; allow_draft?: boolean } = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<TemplatePreview> {
     return this.command(
       "template.preview",
@@ -414,7 +415,7 @@ export class TemplateClient {
   apply(
     templateId: string,
     revision?: number,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<TemplateInstantiation> {
     return this.command(
       "template.apply",
@@ -427,7 +428,7 @@ export class TemplateClient {
   reapply(
     instanceId: string,
     revision?: number,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<TemplateInstantiation> {
     return this.command(
       "template.reapply",

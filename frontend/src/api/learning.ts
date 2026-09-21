@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -311,11 +312,11 @@ export class LearningClient {
     options: LearningCommandOptions,
   ): Promise<T> {
     const correlationId = requireNonBlank(
-      options.correlationId ?? crypto.randomUUID(),
+      options.correlationId ?? createUuid(),
       "Learning command correlation ID",
     );
     const idempotencyKey = requireNonBlank(
-      options.idempotencyKey ?? crypto.randomUUID(),
+      options.idempotencyKey ?? createUuid(),
       "Learning command idempotency key",
     );
     return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {

@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ApiTransport } from "./transport";
 import type { ApiRequestOptions, ApiTransportOptions } from "./transport";
 import type { JsonValue, ListQuery, Page } from "./types";
@@ -255,7 +256,7 @@ export class GoalClient {
     return this.request<CanonicalGoal>(`/commands/${encodeURIComponent(command)}`, {
       method: "POST",
       body: { resource_ref: resourceRef, ...payload },
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 

@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -111,11 +112,11 @@ export class ApprovalClient {
     const resourceRef = requireNonBlank(approvalId, "Approval ID");
     const digest = requireNonBlank(requestedActionDigest, "Requested action digest");
     const idempotencyKey = requireNonBlank(
-      options.idempotencyKey ?? crypto.randomUUID(),
+      options.idempotencyKey ?? createUuid(),
       "Approval decision idempotency key",
     );
     const correlationId = requireNonBlank(
-      options.correlationId ?? crypto.randomUUID(),
+      options.correlationId ?? createUuid(),
       "Approval decision correlation ID",
     );
     const body: Record<string, JsonValue> = {

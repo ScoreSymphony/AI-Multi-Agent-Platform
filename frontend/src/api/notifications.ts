@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -207,7 +208,7 @@ export class NotificationClient {
     return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
       method: "POST",
       body: { resource_ref: resourceRef, ...payload },
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 }

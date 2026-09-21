@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ApiTransport } from "./transport";
 import type { ApiRequestOptions, ApiTransportOptions } from "./transport";
 
@@ -145,7 +146,7 @@ export class SetupClient {
     return this.request<T>(path, {
       method: "POST",
       body,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 

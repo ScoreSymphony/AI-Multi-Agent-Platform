@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -127,7 +128,7 @@ export class IntegrationsClient {
 
   createConnection(
     input: CreateConnectionInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalConnection> {
     validateCreateInput(input);
     return this.command<CanonicalConnection>(
@@ -141,7 +142,7 @@ export class IntegrationsClient {
   enableConnection(
     connectionId: string,
     approvalId?: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalConnection> {
     return this.command<CanonicalConnection>(
       "connection.enable",
@@ -154,7 +155,7 @@ export class IntegrationsClient {
   disableConnection(
     connectionId: string,
     approvalId?: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalConnection> {
     return this.command<CanonicalConnection>(
       "connection.disable",
@@ -167,7 +168,7 @@ export class IntegrationsClient {
   removeConnection(
     connectionId: string,
     approvalId?: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<{ id: string; removed: boolean }> {
     return this.command<{ id: string; removed: boolean }>(
       "connection.remove",
@@ -179,7 +180,7 @@ export class IntegrationsClient {
 
   checkConnectionHealth(
     connectionId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalConnection> {
     return this.command<CanonicalConnection>(
       "connection.health",
@@ -193,7 +194,7 @@ export class IntegrationsClient {
     connectionId: string,
     stream: string,
     mode: ConnectorSyncMode = "incremental",
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<ConnectorSyncResult> {
     if (!stream.trim()) throw new Error("connector sync stream is required");
     if (!(["incremental", "resync", "rebuild"] as const).includes(mode)) {

@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -237,7 +238,7 @@ export class ResearchClient {
   ): Promise<T> {
     return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
       method: "POST",
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
       body: { resource_ref: resourceRef, ...payload },
     });
   }
