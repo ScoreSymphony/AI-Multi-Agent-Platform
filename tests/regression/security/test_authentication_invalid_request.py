@@ -54,6 +54,7 @@ def test_authentication_route_shape_precedes_authentication() -> None:
         ("POST", "/api/v1/auth/me", 405, "method_not_allowed"),
         ("GET", "/api/v1/auth/sessions/session_fixture:revoke", 405, "method_not_allowed"),
         ("GET", "/api/v1/auth/not-a-public-route", 404, "not_found"),
+        ("GET", "/api/v1/auth", 404, "not_found"),
     )
     for method, route, expected_status, expected_code in cases:
         response = asyncio.run(
