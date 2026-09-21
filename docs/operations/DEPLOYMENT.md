@@ -87,7 +87,7 @@ The supported reference single-node settings are:
 export AI_MAP_DATA_DIR="$PWD/.data/single-node"
 export AI_MAP_HOST="127.0.0.1"
 export AI_MAP_PORT="8000"
-export AI_MAP_SECURE_COOKIE="true"
+export AI_MAP_SECURE_COOKIE="false"
 export AI_MAP_LOG_LEVEL="info"
 export AI_MAP_SHUTDOWN_TIMEOUT_SECONDS="30"
 ```
@@ -96,9 +96,10 @@ The deployment loader imports only explicitly supported environment variables. I
 forward the complete process environment to the platform, and the example contains no
 credentials.
 
-`AI_MAP_SECURE_COOKIE=false` is accepted only for a loopback-only deployment. External
-exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
-reverse proxy or equivalent trusted boundary.
+The checked-in reference value is `false` because the browser-first development flow below uses
+loopback HTTP at `127.0.0.1`. `AI_MAP_SECURE_COOKIE=false` is accepted only for a loopback-only
+deployment. External exposure must set `AI_MAP_SECURE_COOKIE=true` and terminate TLS at an
+explicitly configured reverse proxy or equivalent trusted boundary.
 
 ## Browser-first initial setup
 
