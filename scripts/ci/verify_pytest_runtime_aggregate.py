@@ -41,20 +41,23 @@ def _load_reports(
 ) -> dict[str, dict[str, Any]]:
     reports: dict[str, dict[str, Any]] = {}
     attempts: dict[str, int] = {}
+    seen_attempts: set[tuple[str, int]] = set()
     for path in sorted(root.rglob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         lane = payload.get("lane")
         if not isinstance(lane, str) or lane not in expected:
             continue
         attempt = _report_run_attempt(payload, kind=kind, lane=lane, path=path)
+        attempt_key = (lane, attempt)
+        if attempt_key in seen_attempts:
+            raise ValueError(
+                f"duplicate {kind} runtime report for lane {lane} at run attempt {attempt}"
+            )
+        seen_attempts.add(attempt_key)
+
         current_attempt = attempts.get(lane)
-        if current_attempt is not None:
-            if attempt == current_attempt:
-                raise ValueError(
-                    f"duplicate {kind} runtime report for lane {lane} at run attempt {attempt}"
-                )
-            if attempt < current_attempt:
-                continue
+        if current_attempt is not None and attempt < current_attempt:
+            continue
         reports[lane] = payload
         attempts[lane] = attempt
     return reports
