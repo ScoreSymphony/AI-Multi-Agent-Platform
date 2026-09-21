@@ -38,6 +38,17 @@ describe("mobile architecture boundary", () => {
     expect(app).toContain("Mutations are disabled");
   });
 
+
+  it("accepts update links only from the official project GitHub release provenance", () => {
+    const updates = readFileSync(resolve(ROOT, "src/updates.ts"), "utf8");
+    const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
+    expect(updates).toContain("ScoreSymphony/AI-Multi-Agent-Platform");
+    expect(updates).toContain("mobile-release.json");
+    expect(updates).toContain("Rejected untrusted mobile update URL");
+    expect(app).toContain("No APK is ever installed automatically.");
+    expect(app).toContain("requireOfficialUpdateUrl");
+  });
+
   it("does not import server runtime packages into the mobile application", () => {
     const app = readFileSync(resolve(ROOT, "App.tsx"), "utf8");
     expect(app).not.toContain("ai_multi_agent_platform");
