@@ -19,7 +19,7 @@ from ai_multi_agent_platform.models import (  # noqa: E402
     ModelRole,
 )
 
-PINNED_LITELLM_VERSION = "1.100.1"
+PINNED_LITELLM_VERSION = "1.101.0"
 
 
 def test_pinned_litellm_library_executes_through_platform_adapter() -> None:
