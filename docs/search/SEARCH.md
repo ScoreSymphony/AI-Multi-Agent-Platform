@@ -398,10 +398,10 @@ Remaining progressive work is intentionally gated on the owning canonical APIs a
 
 Memory/Knowledge and Nodes/Workers are no longer remaining integrations: they rebuild from their canonical northbound resources and preserve authorization-safe discovery. Worker Jobs intentionally remain outside global Search because dispatch/reservation evidence is not a discovery catalog.
 
-Remaining progressive integrations include:
+Additional canonical-domain integrations remain governed by their owning privacy and lifecycle contracts, including:
 
 - Conversations/Messages with retention/deletion propagation (#72);
-- Notifications where useful after the currently reopened #75 is stable;
+- Notifications through the recipient-scoped canonical projection;
 - Templates (#78);
 - Repository/Git and durable external-resource references (#82/#44);
 - Organizations/Memberships with membership-removal/suspension isolation (#87);
