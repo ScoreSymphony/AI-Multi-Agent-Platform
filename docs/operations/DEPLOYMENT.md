@@ -347,10 +347,10 @@ transport, tools, browser services and connectors. Those services must not be ma
 default simply because deployment tooling can expose a port. The
 [advanced deployment guide](ADVANCED_DEPLOYMENT.md) owns distributed packaging and heterogeneous-device networking examples.
 
-## Stage 2 — single-server operational hardening
+## Single-server operational hardening
 
-Stage 2 extends the same single-machine architecture with optional process and network
-boundaries suitable for a longer-running server. It does **not** replace the Stage-1 profile
+The hardened single-server profile extends the same single-machine architecture with optional process and network
+boundaries suitable for a longer-running server. It does **not** replace the reference single-node profile
 and does not introduce a second Task/Run/Worker architecture.
 
 The recommended same-origin web composition is:
@@ -439,11 +439,11 @@ canonical Node/Task capacity metadata.
 ### Optionality/failure behavior
 
 Frontend, static-file server and reverse proxy are optional components. Their absence must not
-prevent the Stage-1 Control Plane from starting, becoming ready or executing
+prevent the reference single-node Control Plane from starting, becoming ready or executing
 `platform-server smoke`. When they are enabled, failures in the public edge may make the web
 surface unreachable without changing canonical Task/Run state.
 
-Multiple schedulable local and remote Workers are not required by this Stage-2 baseline.
+Multiple schedulable local and remote Workers are not required by the hardened single-server profile.
 The canonical Node/Worker contracts provide shared registration, capability declaration,
 reservation and scheduling semantics, while the [advanced deployment guide](ADVANCED_DEPLOYMENT.md)
 packages those contracts into distributed and heterogeneous deployment profiles. Operators may adopt those advanced profiles
@@ -464,8 +464,8 @@ The reference path itself is CPU-only and requires no accelerator.
 
 ## Advanced deployment integrations and remaining work
 
-The repository has a production-shaped Stage-1 single-node baseline plus the Stage-2
-single-server process/network hardening reference. The following advanced operational foundations
+The repository has a production-shaped reference single-node baseline plus a hardened
+single-server process/network profile. The following advanced operational foundations
 are available without becoming prerequisites for the baseline:
 
 - canonical Node/Worker registry, capability, reservation and scheduling contracts, with
