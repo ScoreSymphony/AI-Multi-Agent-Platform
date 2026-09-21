@@ -220,8 +220,12 @@ It authenticates the request first and then delegates authorization and the oper
 the current Control Plane composition rather than inheriting authority from a historical
 HTTP implementation.
 
-Public endpoints are limited to the platform root/health/readiness/OpenAPI plus local
-bootstrap/login. Protected requests authenticate using either:
+Public endpoints are limited to the platform root/health/readiness/OpenAPI plus the explicitly
+unauthenticated Authentication bootstrap/login and Mobile pairing-consume operations. In the
+maintained composition these include `GET /api/v1/auth/bootstrap-status`, one-time
+`POST /api/v1/auth/bootstrap-admin`, `POST /api/v1/auth/login` and
+`POST /api/v1/auth/mobile-pairings:consume`; all other Authentication management routes are
+protected. Protected requests authenticate using either:
 
 ```text
 Authorization: Bearer <personal/service/worker/... credential>
@@ -242,6 +246,7 @@ contracts internally.
 ### Local auth routes
 
 ```text
+GET  /api/v1/auth/bootstrap-status
 POST /api/v1/auth/bootstrap-admin
 POST /api/v1/auth/login
 GET  /api/v1/auth/me
