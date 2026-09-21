@@ -91,9 +91,9 @@ Kernel-owned task/run commands include:
 
 These commands delegate to canonical kernel behavior. The foundation does not reserve approval, worker, plugin, automation or evaluation commands before those domains define them.
 
-## Extension contract for later domains
+## Extension contract for domain integrations
 
-Later issues extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
+Additional canonical domains extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
 
 ### Resource registration
 
@@ -234,7 +234,7 @@ Every API error has both a stable specific `code` and a stable broader `category
 
 `RequestContext` carries actor identity, owner context, request/correlation IDs and idempotency metadata. Sensitive Control Plane operations call the configured `AuthorizationProvider` using canonical action/resource references.
 
-Authentication transport remains replaceable and is completed by its dedicated security issue. The Control Plane does not define a second policy domain.
+Authentication transport remains replaceable and is composed by the platform security/authentication layer. The Control Plane does not define a second policy domain.
 
 ## Live updates
 
