@@ -6,8 +6,9 @@ import hmac
 import secrets
 import threading
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from string import ascii_uppercase, digits
+from typing import Any, cast
 from urllib.parse import urlencode, urlsplit
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -22,6 +23,7 @@ from .authentication_models import (
     MobilePairingGrant,
     PairedMobileDevice,
 )
+from .authentication_store import InMemoryAuthenticationStore
 from .authentication_tokens import authentication_now, secret_verifier
 from .authorization import ActorType
 
@@ -43,7 +45,7 @@ class MobilePairingService:
 
     def __init__(
         self,
-        authentication,
+        authentication: Any,
         *,
         challenge_ttl: timedelta = timedelta(minutes=5),
         max_failed_attempts: int = 5,
@@ -53,7 +55,10 @@ class MobilePairingService:
         if max_failed_attempts < 1:
             raise ValueError("mobile pairing max_failed_attempts must be positive")
         self.authentication = authentication
-        self.store = authentication.store
+        self.store: InMemoryAuthenticationStore = cast(
+            InMemoryAuthenticationStore,
+            authentication.store,
+        )
         self.challenge_ttl = challenge_ttl
         self.max_failed_attempts = max_failed_attempts
         self._lock = threading.Lock()
@@ -63,7 +68,7 @@ class MobilePairingService:
         user_id: str,
         server_origin: str,
         *,
-        now=None,
+        now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> MobilePairingGrant:
         current = authentication_now(now)
@@ -112,7 +117,7 @@ class MobilePairingService:
         user_id: str,
         pairing_id: str,
         *,
-        now=None,
+        now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> None:
         current = authentication_now(now)
@@ -143,7 +148,7 @@ class MobilePairingService:
         platform: str | None = None,
         metadata: dict[str, JsonValue] | None = None,
         protocol_version: str = _PAIRING_PROTOCOL_VERSION,
-        now=None,
+        now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> tuple[PairedMobileDevice, IssuedCredential]:
         current = authentication_now(now)
@@ -190,7 +195,7 @@ class MobilePairingService:
         *,
         device_name: str,
         protocol_version: str,
-        now,
+        now: datetime,
     ) -> tuple[str, str, str]:
         if protocol_version != _PAIRING_PROTOCOL_VERSION:
             raise MobilePairingError("unsupported mobile pairing protocol version")
@@ -211,7 +216,7 @@ class MobilePairingService:
         supplied: str,
         *,
         rate_key: str,
-        now,
+        now: datetime,
         correlation_id: str | None,
     ) -> MobilePairingChallenge:
         challenge = self._challenge_for_proof(pairing_id, supplied, now)
@@ -256,7 +261,7 @@ class MobilePairingService:
         platform: str | None,
         metadata: dict[str, JsonValue] | None,
         rate_key: str,
-        now,
+        now: datetime,
     ) -> tuple[PairedMobileDevice, IssuedCredential]:
         self.authentication.rate_limiter.record(rate_key, success=True, now=now)
         # Consume before issuing the durable credential while holding the service lock.
@@ -264,13 +269,16 @@ class MobilePairingService:
             challenge,
             consumed_at=now,
         )
-        issued = self.authentication.create_credential(
+        issued = cast(
+            IssuedCredential,
+            self.authentication.create_credential(
             challenge.user_id,
             ActorType.HUMAN,
             CredentialKind.MOBILE,
             purpose=f"mobile device: {display_name}",
             now=now,
-            scope=_MOBILE_CREDENTIAL_SCOPE,
+                scope=_MOBILE_CREDENTIAL_SCOPE,
+            ),
         )
         device = PairedMobileDevice(
             device_id=new_id("mobile_device"),
@@ -296,7 +304,7 @@ class MobilePairingService:
         device_id: str,
         display_name: str,
         *,
-        now=None,
+        now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> PairedMobileDevice:
         current = authentication_now(now)
@@ -322,7 +330,7 @@ class MobilePairingService:
         user_id: str,
         device_id: str,
         *,
-        now=None,
+        now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> None:
         current = authentication_now(now)
@@ -342,7 +350,7 @@ class MobilePairingService:
         self,
         user_id: str,
         *,
-        now=None,
+        now: datetime | None = None,
         correlation_id: str | None = None,
     ) -> int:
         current = authentication_now(now)
@@ -393,7 +401,7 @@ class MobilePairingService:
         self,
         pairing_id: str | None,
         supplied: str,
-        now,
+        now: datetime,
     ) -> MobilePairingChallenge | None:
         if pairing_id is not None:
             return self.store.mobile_pairings.get(pairing_id)
