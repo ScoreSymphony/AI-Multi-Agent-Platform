@@ -1,6 +1,6 @@
 # File and Artifact portability
 
-Issue #79 treats canonical File and Artifact identity separately from storage-provider locations. Portable packages may carry file bytes and canonical metadata, but never make a filesystem path, object key, signed URL or source-provider URI canonical.
+Portability treats canonical File and Artifact identity separately from storage-provider locations. Portable packages may carry file bytes and canonical metadata, but never make a filesystem path, object key, signed URL or source-provider URI canonical.
 
 ## File resource
 
@@ -24,7 +24,7 @@ A portable `artifact` resource carries the canonical Artifact ID, name, media ty
 
 ## ID remapping and dependency order
 
-Both File and Artifact resources participate in the same #79 `ImportPreview` mapping used by Agent/Team portability. When IDs are regenerated:
+Both File and Artifact resources participate in the same canonical `ImportPreview` mapping used by Agent/Team portability. When IDs are regenerated:
 
 - the Artifact canonical ID is remapped;
 - the File canonical ID is remapped;
@@ -47,7 +47,7 @@ The destination operation:
 
 If creation succeeds but checksum verification or Artifact linking fails, the reference materializer performs a compensating File delete before propagating the failure. A failure of that compensation is surfaced as a backend error rather than silently claiming rollback succeeded.
 
-This per-File compensation is not the final package transaction boundary. #79 still needs a package-level executor that coordinates rollback across multiple resource types.
+This per-File compensation participates in the package transaction boundary. Package-level compensation across resource types is coordinated by `ImportExecutor`.
 
 ## Integrity layers
 
