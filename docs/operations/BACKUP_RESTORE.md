@@ -137,6 +137,29 @@ platform-backup restore /srv/backups/legacy-v1 \
 
 Restore refuses an existing target directory. It verifies the entire manifest/payload before writing, restores through a sibling `.restore-partial` directory, invalidates persisted authentication sessions, recreates the executor directory empty, re-runs durable-layout/SQLite-integrity/schema-version checks, writes a recovery-required marker, and then atomically publishes the restored data directory. A stale partial restore directory is deleted on retry.
 
+
+### Docker Compose named-volume workflow
+
+The optional generic local Docker Compose profile uses the same `platform-backup` implementation;
+it does not define a second backup format or weaker restore rule. Its operations profile exports
+backups through an operator-controlled bind mount after the running composition has been stopped.
+For disaster restore, `deploy/docker/docker-compose.recovery.yml` selects a **new named volume**,
+mounts that volume root only into the offline restore container, and restores into the absent
+`restored-data` child. Runtime services then mount that child as
+`/var/lib/ai-multi-agent-platform`.
+
+This layout exists specifically so the canonical clean-target and sibling atomic-publication
+contract above remains true even though a Docker named-volume mount point itself already exists.
+The maintained executable command sequence, including build-commit pinning, backup verification,
+replacement-volume creation, dirty-target rejection, `recover-restore`, and readiness checking, is
+documented in [`deploy/docker/README.md`](../../deploy/docker/README.md).
+
+The Hostinger Docker Manager example remains a deployment convenience rather than a separate
+recovery authority. A manager-only UI is not assumed to expose the one-shot `docker compose run`,
+operator-selected host backup directory, or named-volume replacement controls required by this
+workflow. Use a Compose-capable shell/SSH path for the generic container recovery procedure, or the
+maintained systemd/venv single-server profile when those Docker controls are unavailable.
+
 ## Post-restore recovery and readiness gate
 
 A successful restore creates:
