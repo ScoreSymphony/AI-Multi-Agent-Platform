@@ -357,8 +357,14 @@ class ControlPlaneHTTP:
                 context, _page_query(request.query)
             )
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
-            provider_id, command = segments[1].rsplit(":", 1)
+        if len(segments) == 2 and request.method == "POST":
+            provider_id, separator, command = segments[1].rpartition(":")
+            if not separator or not provider_id or command not in _MODEL_PROVIDER_COMMANDS:
+                raise APIException(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                )
             if command == "enable":
                 item = await self._control_plane.set_model_provider_enabled(
                     context, provider_id, enabled=True
@@ -367,14 +373,8 @@ class ControlPlaneHTTP:
                 item = await self._control_plane.set_model_provider_enabled(
                     context, provider_id, enabled=False
                 )
-            elif command == "refresh-health":
-                item = await self._control_plane.refresh_model_provider_health(context, provider_id)
             else:
-                raise APIException(
-                    status=404,
-                    code="not_found",
-                    message="unknown model-provider command",
-                )
+                item = await self._control_plane.refresh_model_provider_health(context, provider_id)
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_model_provider(context, segments[1])
@@ -395,18 +395,19 @@ class ControlPlaneHTTP:
         if len(segments) == 1 and request.method == "GET":
             page = await self._control_plane.list_models(context, _page_query(request.query))
             return self._response(200, page, request_id, correlation_id)
-        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
-            model_id, command = segments[1].rsplit(":", 1)
-            if command == "enable":
-                item = await self._control_plane.set_model_enabled(context, model_id, enabled=True)
-            elif command == "disable":
-                item = await self._control_plane.set_model_enabled(context, model_id, enabled=False)
-            else:
+        if len(segments) == 2 and request.method == "POST":
+            model_id, separator, command = segments[1].rpartition(":")
+            if not separator or not model_id or command not in _MODEL_COMMANDS:
                 raise APIException(
-                    status=404,
-                    code="not_found",
-                    message="unknown model command",
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
                 )
+            item = await self._control_plane.set_model_enabled(
+                context,
+                model_id,
+                enabled=command == "enable",
+            )
             return self._response(200, item, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_model(context, segments[1])
@@ -755,32 +756,6 @@ def _foundation_route_error_before_body_validation(
     method: str,
     path: str,
 ) -> APIException | None:
-    if method.upper() == "POST":
-        for prefix, commands, message in (
-            (
-                f"/api/{API_VERSION}/models/",
-                _MODEL_COMMANDS,
-                "unknown model command",
-            ),
-            (
-                f"/api/{API_VERSION}/model-providers/",
-                _MODEL_PROVIDER_COMMANDS,
-                "unknown model-provider command",
-            ),
-        ):
-            if not path.startswith(prefix):
-                continue
-            relative = path[len(prefix) :]
-            if "/" in relative or ":" not in relative:
-                continue
-            _, command = relative.rsplit(":", 1)
-            if command not in commands:
-                return APIException(
-                    status=404,
-                    code="not_found",
-                    message=message,
-                )
-
     task_prefix = f"/api/{API_VERSION}/tasks/"
     if not path.startswith(task_prefix):
         return None

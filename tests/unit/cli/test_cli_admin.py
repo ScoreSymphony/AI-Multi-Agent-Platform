@@ -138,6 +138,40 @@ def test_model_provider_mutation_requires_confirmation_and_uses_idempotency_key(
     assert headers["idempotency-key"] == "provider-disable-test"
 
 
+def test_colon_bearing_model_targets_are_encoded_before_command_suffixes(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "cli.json"
+    transport = RecordingTransport()
+
+    code, _, error = _invoke(
+        config,
+        transport,
+        "--yes",
+        "model",
+        "disable",
+        "local:qwen:disable",
+    )
+    assert code == 0 and not error
+    assert transport.calls[-1][0:2] == (
+        "POST",
+        "/api/v1/models/local%3Aqwen%3Adisable:disable",
+    )
+
+    code, _, error = _invoke(
+        config,
+        transport,
+        "model-provider",
+        "refresh-health",
+        "local:provider:disable",
+    )
+    assert code == 0 and not error
+    assert transport.calls[-1][0:2] == (
+        "POST",
+        "/api/v1/model-providers/local%3Aprovider%3Adisable:refresh-health",
+    )
+
+
 def test_task_cancel_uses_same_confirmation_boundary(tmp_path: Path) -> None:
     config = tmp_path / "cli.json"
     transport = RecordingTransport()

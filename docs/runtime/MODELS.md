@@ -89,6 +89,31 @@ The versioned Control Plane exposes the canonical model inventory without turnin
 
 Inventory mutations require the Control Plane idempotency key. Provider construction and provider-native configuration remain adapter/bootstrap responsibilities rather than generic HTTP object creation.
 
+### Identifier and command-path precedence
+
+The V1 model inventory does **not** reserve `:` or command-looking suffixes inside canonical model configuration IDs, aliases, or model-provider IDs. This preserves already-valid persisted identifiers and keeps provider-private naming conventions out of canonical identity rules.
+
+Routing is deliberately method-aware:
+
+- `GET /models/{model_id_or_alias}` and `GET /model-providers/{provider_id}` consume the entire decoded final path segment as the item identifier, including text such as `:disable`;
+- `POST` recognizes a command only when the final segment ends in one of the exact commands declared for that collection: `:enable`, `:disable`, and, for model providers, `:refresh-health`;
+- one recognized terminal command suffix is removed to obtain the command target, so an identifier that itself ends in command-looking text remains targetable by appending another command suffix;
+- `POST` to an item-shaped URI without a recognized terminal command suffix returns canonical `405 / method_not_allowed`; genuinely nonexistent URI shapes remain `404 / not_found`.
+
+For example, if both `local:qwen` and `local:qwen:disable` are valid aliases:
+
+```text
+GET  /api/v1/models/local:qwen:disable
+     -> item lookup for alias "local:qwen:disable"
+
+POST /api/v1/models/local:qwen:disable
+     -> disable command targeting alias "local:qwen"
+
+POST /api/v1/models/local:qwen:disable:disable
+     -> disable command targeting alias "local:qwen:disable"
+```
+
+Northbound clients percent-encode the identifier as one path segment before appending a command suffix. The Web client and CLI therefore preserve colon-bearing targets without imposing a narrower canonical identifier grammar.
 ## Current model and routing surface
 
 The model surface includes the provider/registry/router foundation together with durable Model Routing Profiles: distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; provider-neutral streaming with fallback; timeout/cancellation/error normalization; model/provider configuration examples; Control Plane inventory; and immutable routing-profile revisions.
