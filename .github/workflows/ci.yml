@@ -153,14 +153,14 @@ jobs:
           python-version: "3.12"
       - name: Download Python runtime evidence
         if: needs.python-validation.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: python-test-runtime-*
           path: .artifacts/test-runtime-aggregate
           merge-multiple: true
       - name: Download Python validation runtime evidence
         if: needs.python-validation.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: python-validation-runtime-*
           path: .artifacts/validation-runtime-aggregate
