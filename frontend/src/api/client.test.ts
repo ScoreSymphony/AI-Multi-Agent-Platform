@@ -104,6 +104,31 @@ describe("ControlPlaneClient", () => {
     expect((init.headers as Headers).get("Idempotency-Key")).toBeTruthy();
   });
 
+  it("encodes colon-bearing inventory targets before appending command suffixes", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(model), { status: 200 }),
+    );
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.getModel("local:qwen:disable");
+    await client.disableModel("local:qwen:disable");
+    await client.getModelProvider("local:provider:disable");
+    await client.refreshModelProviderHealth("local:provider:disable");
+
+    expect((fetchSpy.mock.calls[0] as [string, RequestInit])[0]).toBe(
+      "/api/v1/models/local%3Aqwen%3Adisable",
+    );
+    expect((fetchSpy.mock.calls[1] as [string, RequestInit])[0]).toBe(
+      "/api/v1/models/local%3Aqwen%3Adisable:disable",
+    );
+    expect((fetchSpy.mock.calls[2] as [string, RequestInit])[0]).toBe(
+      "/api/v1/model-providers/local%3Aprovider%3Adisable",
+    );
+    expect((fetchSpy.mock.calls[3] as [string, RequestInit])[0]).toBe(
+      "/api/v1/model-providers/local%3Aprovider%3Adisable:refresh-health",
+    );
+  });
+
   it("reads usage records through the registered Control Plane extension collection", async () => {
     const page = { items: [], next_cursor: null, total: 0, limit: 100 };
     const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify(page), { status: 200 }));
