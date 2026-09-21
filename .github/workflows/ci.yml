@@ -189,6 +189,10 @@ jobs:
 
   single-node-install-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AI_MAP_PUBLIC_PORT: "18080"
+      AI_MAP_SOURCE_CONTEXT: "../.."
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -212,6 +216,49 @@ jobs:
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Run fresh-install process lifecycle smoke
         run: python scripts/ci/fresh_install_lifecycle_smoke.py
+      - name: Validate Docker Compose configurations
+        run: |
+          docker compose -f docker-compose.yml config
+          docker compose -f deploy/docker/docker-compose.hostinger.yml config
+      - name: Build production container images
+        run: |
+          docker compose -f docker-compose.yml build --pull
+          docker compose -f deploy/docker/docker-compose.hostinger.yml build
+      - name: Start Compose profile
+        run: docker compose -f docker-compose.yml up -d
+      - name: Wait for same-origin readiness
+        shell: bash
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:18080/api/v1/readiness \
+              > /tmp/readiness.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.yml ps
+          docker compose -f docker-compose.yml logs --tail=200
+          exit 1
+      - name: Verify public Web and API boundary
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            http://127.0.0.1:18080/api/v1/health \
+            > /tmp/health.json
+          curl --fail --silent --show-error \
+            http://127.0.0.1:18080/api/v1/readiness \
+            > /tmp/readiness.json
+          curl --fail --silent --show-error \
+            http://127.0.0.1:18080/ \
+            > /tmp/index.html
+          test -s /tmp/index.html
+      - name: Show Compose logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml logs --tail=300
+      - name: Tear down Compose profile
+        if: always()
+        run: docker compose -f docker-compose.yml down -v --remove-orphans
 
   frontend:
     runs-on: ubuntu-latest

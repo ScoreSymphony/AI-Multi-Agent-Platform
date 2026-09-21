@@ -320,6 +320,7 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         expires_at: datetime | None = None,
         now: datetime | None = None,
         scope: CredentialScope | Mapping[str, JsonValue] | None = None,
+        _emit_created_audit: bool = True,
     ) -> IssuedCredential:
         if isinstance(scope, CredentialScope):
             effective_scope = scope
@@ -335,6 +336,7 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             expires_at=expires_at,
             now=now,
             scope=effective_scope.to_json(),
+            _emit_created_audit=_emit_created_audit,
         )
 
     def create_personal_access_token(
