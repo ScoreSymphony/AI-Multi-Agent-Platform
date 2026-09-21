@@ -47,6 +47,7 @@ def test_recovery_override_restores_into_clean_volume_subpath() -> None:
     recovery = RECOVERY_COMPOSE.read_text(encoding="utf-8")
 
     assert "subpath: restored-data" in recovery
+    assert "external: true" in recovery
     assert (
         "name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}"
         in recovery
