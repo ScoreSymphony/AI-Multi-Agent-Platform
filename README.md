@@ -50,7 +50,9 @@ The platform owns the canonical state in that path. Orchestrators, executors, mo
 
 No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker is required for the reference single-node first run. The retired Forge runtime is not part of this baseline.
 
-From a clean checkout on Linux/macOS, install and start the Control Plane:
+### Linux/macOS
+
+From a clean checkout, install and start the Control Plane:
 
 ```bash
 git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
@@ -74,17 +76,60 @@ npm install
 npm run dev
 ```
 
+### Windows PowerShell
+
+From a clean checkout, install and start the Control Plane:
+
+```powershell
+git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
+Set-Location AI-Multi-Agent-Platform
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install ".[server]"
+
+Copy-Item config\single-node.env.example .env.single-node
+
+$env:AI_MAP_DATA_DIR = ".data\single-node"
+$env:AI_MAP_HOST = "127.0.0.1"
+$env:AI_MAP_PORT = "8000"
+$env:AI_MAP_SECURE_COOKIE = "true"
+$env:AI_MAP_LOG_LEVEL = "info"
+$env:AI_MAP_SHUTDOWN_TIMEOUT_SECONDS = "30"
+
+platform-server serve
+```
+
+In a second PowerShell window, start the Web UI:
+
+```powershell
+Set-Location AI-Multi-Agent-Platform\frontend
+npm install
+npm run dev
+```
+
 Open `http://127.0.0.1:5173`. On a fresh installation the server-owned bootstrap state routes directly to **Create your administrator account**. Creating the account installs the explicit initial administrator policy, establishes the browser session, and continues into the persistent setup wizard. The wizard discovers the environment, lets you review component/application choices, previews compatibility and dependency actions before mutation, resumes persisted progress after reload/restart, validates the actual backend state, and only then enables the dashboard.
 
 `platform-server bootstrap-admin --username ...` remains available as an operator/recovery alternative, but it is not a prerequisite for the normal browser-first flow. `platform-server smoke` remains available after an administrator exists and runs a canonical Task/Run with the in-process reference orchestrator/executor without requiring a model endpoint or external service.
 
-On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` and set the `AI_MAP_*` values from `config/single-node.env.example` in the current process instead of sourcing the POSIX env file. Run the same `platform-server serve` command and start the frontend from a second PowerShell window. The maintained deployment guide contains the complete Windows and operator instructions.
+The maintained deployment guide contains the complete operator instructions. On Windows, the `AI_MAP_*` values above apply to the current PowerShell process; set them again in a new shell before starting the Control Plane after a reboot or terminal restart.
 
-With the server running, the public health surfaces remain available from another terminal:
+With the server running, the public health surfaces remain available from another terminal.
+
+Linux/macOS:
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
 curl http://127.0.0.1:8000/api/v1/readiness
+platform --endpoint http://127.0.0.1:8000 doctor
+```
+
+Windows PowerShell:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/health
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/readiness
 platform --endpoint http://127.0.0.1:8000 doctor
 ```
 
