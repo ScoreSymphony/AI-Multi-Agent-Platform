@@ -50,16 +50,16 @@ The platform owns the canonical state in that path. Orchestrators, executors, mo
 
 No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker is required for the reference single-node first run. The retired Forge runtime is not part of this baseline.
 
-### Docker Compose deployment
+### Optional Docker Compose deployment
 
-For a production-shaped container deployment, Docker Engine plus Docker Compose can replace the host Python/Node prerequisites. The repository root contains the maintained `docker-compose.yml` profile:
+For an optional container deployment, Docker Engine plus Docker Compose can replace the host Python/Node prerequisites. The repository root contains the maintained `docker-compose.yml` profile:
 
 ```bash
 docker compose -f docker-compose.yml build
 docker compose -f docker-compose.yml up -d
 ```
 
-It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication in this profile requires an HTTPS external edge because secure cookies remain enabled. Generic operation and Hostinger Docker Manager instructions are in [`deploy/docker/README.md`](deploy/docker/README.md).
+It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication in this profile requires an HTTPS external edge because secure cookies remain enabled. The Docker profile is optional and does not replace the recovery-complete systemd/venv single-server baseline; its current recovery and shutdown-override limits are documented in [`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
@@ -202,7 +202,7 @@ For normative details, use [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE
 
 ## Current maturity
 
-The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not published a formal GitHub release, so release claims remain conservative while conformance, hardening and operational-version acceptance continue.
+The usable single-node prototype gate and maintained multi-agent first-run path exist on `main`. The repository is still under active development and has not published the formal platform/V1 release; the first formal platform publication still targets `1.0.0`. Separately versioned optional Android client artifacts are already published under `mobile-v*` GitHub Releases. Those mobile artifacts do not constitute the platform `1.0.0` release or make Mobile part of the required V1 baseline.
 
 Architectural role and public compatibility maturity are separate concepts; the current taxonomy is documented in [`docs/FEATURE_CLASSIFICATION.md`](docs/FEATURE_CLASSIFICATION.md). Curated point-in-time integration status lives in [`docs/STATUS.md`](docs/STATUS.md), while GitHub issues, dependencies, pull-request checks and merged repository state remain authoritative for individual work items. The README intentionally does not duplicate an issue/PR ledger or dated progress history.
 
