@@ -69,25 +69,39 @@ def test_readme_does_not_become_a_live_issue_ledger_again() -> None:
     assert "Recent convergence materially moved the frontier forward" not in readme
 
 
-def test_status_document_declares_non_competing_ownership() -> None:
+def test_status_document_declares_maintained_sources_without_tracker_ownership() -> None:
     status = (ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8")
-    assert "GitHub issues and their explicit dependencies are authoritative" in status
-    assert "IMPLEMENTATION_ROADMAP.md" in status
-    assert "[`RELEASE_PROCESS.md`](RELEASE_PROCESS.md)" in status
-    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/releases" in status
-    assert "Historical README status snapshot — 2026-09-07" in status
+    assert "without depending on issue-tracker chronology" in status
+    assert "[README](../README.md)" in status
+    assert "[Release process](RELEASE_PROCESS.md)" in status
+    assert "[Platform conformance](PLATFORM_CONFORMANCE.md)" in status
+    assert (
+        "[`docs/history/issues/STATUS_2026-09-11.md`](history/issues/STATUS_2026-09-11.md)"
+        in status
+    )
+    assert "GitHub issues and their explicit dependencies are authoritative" not in status
 
 
-def test_status_does_not_leave_completed_collector_as_pending() -> None:
+def test_status_keeps_issue_and_pr_chronology_historical() -> None:
     status = (ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8")
-    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/782" in status
-    assert "19b5b882478ad3ff3947006ae97c9d6228cc93b0" in status
+    assert (
+        "Issue- and pull-request-specific integration chronology is historical provenance" in status
+    )
+    assert "github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/" not in status
+    assert "github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/" not in status
     assert "The #728 staging branch is kept synchronized" not in status
     assert "Further integration commits may still arrive before final #728 closure" not in status
     assert "before anything reaches `main`" not in status
 
 
-def test_roadmap_points_to_status_without_claiming_live_authority() -> None:
+def test_roadmap_points_to_maintained_guidance_without_live_tracker_semantics() -> None:
     roadmap = (ROOT / "docs" / "IMPLEMENTATION_ROADMAP.md").read_text(encoding="utf-8")
-    assert "[`STATUS.md`](STATUS.md)" in roadmap
-    assert "it is not the live work-item tracker" in roadmap
+    assert "is no longer an active product or operator contract" in roadmap
+    assert "[Feature classification](FEATURE_CLASSIFICATION.md)" in roadmap
+    assert "[Platform conformance](PLATFORM_CONFORMANCE.md)" in roadmap
+    assert "[Release process](RELEASE_PROCESS.md)" in roadmap
+    assert (
+        "[`docs/history/issues/IMPLEMENTATION_ROADMAP_2026-09-07.md`]"
+        "(history/issues/IMPLEMENTATION_ROADMAP_2026-09-07.md)" in roadmap
+    )
+    assert "GitHub issues and their explicit dependencies are authoritative" not in roadmap
