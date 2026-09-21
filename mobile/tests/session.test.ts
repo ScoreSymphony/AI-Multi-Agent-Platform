@@ -295,8 +295,9 @@ describe("MobileSessionStore", () => {
       ),
     ).rejects.toThrow("offline");
 
-    expect(await store.current()).toEqual({ baseUrl: "https://platform.example" });
-    expect(await store.getToken()).toBe("amp1.credential_1.device-secret");
+    const restarted = new MobileSessionStore(storage);
+    expect(await restarted.current()).toEqual({ baseUrl: "https://platform.example" });
+    expect(await restarted.getToken()).toBe("amp1.credential_1.device-secret");
   });
 
 });
