@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { APImanifest } from "../../api/types";
+import brandIcon from "../../assets/brand-icon.png";
 import { OnboardingCallout } from "../../components/OnboardingCallout";
 import { ErrorState } from "../../components/States";
 import { PermissionHintsProvider } from "../../security/permissions";
@@ -40,7 +41,7 @@ export function ShellLayout({
       <div className="app-shell">
         <aside id="platform-navigation" className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
           <div className="brand">
-            <span className="brand-mark">A</span>
+            <img className="brand-mark" src={brandIcon} alt="" aria-hidden="true" />
             <div className="brand-copy">
               <strong>Agent Platform</strong>
               <small>Control Plane</small>

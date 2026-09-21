@@ -36,7 +36,7 @@ pre { overflow: auto; padding: 1rem; border-radius: 8px; background: #090d15; bo
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 276px minmax(0, 1fr); }
 .sidebar { border-right: 1px solid var(--line-soft); background: rgba(10, 15, 24, .97); padding: .85rem .75rem 1.25rem; overflow-y: auto; height: 100vh; position: sticky; top: 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .brand { display: flex; align-items: center; gap: .75rem; padding: .45rem .5rem 1rem; margin-bottom: .35rem; border-bottom: 1px solid var(--line-soft); }
-.brand-mark { width: 2rem; height: 2rem; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; background: linear-gradient(135deg, var(--accent), #a78bfa); color: #07111b; font-weight: 900; }
+.brand-mark { width: 2.4rem; height: 2.4rem; flex: 0 0 auto; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(56, 189, 248, .18)); }
 .brand-copy { min-width: 0; }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: .92rem; letter-spacing: -.01em; }
