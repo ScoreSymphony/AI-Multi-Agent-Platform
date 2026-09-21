@@ -138,16 +138,16 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #11.
 - **Integration category/categories:** optional adapter/library dependency; optional external service.
 - **Canonical upstream repository:** `https://github.com/BerriAI/litellm`.
-- **Pinned version/tag/commit or deployed revision:** `v1.100.1` / `1dba17b10ded12ad0021edb453ba2c54e4637928`.
+- **Pinned version/tag/commit or deployed revision:** `v1.101.0` / `18243cd7af4c3325165ba68b21379e2719e051c7`.
 - **Verified license:** MIT for content outside `enterprise/`; `enterprise/` is separately licensed and is not used or copied by this integration.
-- **License verification date:** 2026-09-14.
-- **Last review date:** 2026-09-14.
+- **License verification date:** 2026-09-21.
+- **Last review date:** 2026-09-21.
 - **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.litellm.LiteLLMModelProvider` implements the canonical `ModelProvider`; proxy mode reuses the existing OpenAI-compatible provider transport. The platform `ModelRouter` remains authoritative for canonical routing policy.
 - **Local source path:** `src/ai_multi_agent_platform/adapters/litellm.py` contains platform-owned adapter code only.
 - **Source origin/path:** no LiteLLM source is copied; library mode uses the pinned PyPI dependency and proxy mode targets a separately deployed service.
 - **Modified locally:** no upstream source is vendored or modified.
 - **Required notices / attribution:** installed packages retain upstream license metadata. Do not copy or vendor `enterprise/` under the MIT assumption; any future source redistribution requires a new license/notices review.
-- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.100.1` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
+- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.101.0` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
 - **Security/deployment/resource constraints:** credential values are resolved from environment-variable references and are not exposed through canonical metadata. Proxy authentication does not replace platform authentication/authorization. No LiteLLM telemetry callbacks are enabled by the baseline adapter. Resource and GPU requirements depend on the selected downstream endpoint, not on platform core.
 - **Required for baseline:** no; core imports, model contracts, reference routing and baseline tests must work without the package or proxy installed.
 - **Recurring paid service required:** no; local/self-hosted endpoints are explicitly supported and covered by configuration/tests.
