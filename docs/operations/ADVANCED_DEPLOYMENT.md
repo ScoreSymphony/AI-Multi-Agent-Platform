@@ -276,7 +276,7 @@ platform-worker \
 ```
 
 The sibling still owns its own presence/execution/Workspace endpoints. Its liveness is verified by
-the Control Plane through #35 and is not inferred from the reporter process alone. Both processes
+the Control Plane through the configured MessageTransport and is not inferred from the reporter process alone. Both processes
 use the profile's host-level Workspace parent but receive different worker-ID child roots.
 
 ## CPU + accelerator and heterogeneous examples
@@ -307,7 +307,7 @@ A physical two-host installation uses the same composition:
 
 1. choose private reachable DNS/IP endpoints;
 2. provision broker TLS and the HTTPS edge used by the Worker-protocol route;
-3. configure either high-entropy #35 HMAC authentication or mTLS;
+3. configure either high-entropy message-transport HMAC authentication or mTLS;
 4. start `platform-message-broker` on the private interface;
 5. configure `PLATFORM_MESSAGE_BROKER_HOST`, `PLATFORM_MESSAGE_BROKER_PORT`, TLS client values and
    optional `PLATFORM_TRANSPORT_AUTH_KEY` for the Control Plane;
@@ -334,7 +334,7 @@ cross-host operator path.
 
 ### Sibling Worker/process loss
 
-The next reporter heartbeat is bounded by per-Worker #35 presence. An unreachable sibling becomes
+The next reporter heartbeat is bounded by per-Worker message-transport presence. An unreachable sibling becomes
 `OFFLINE` and is excluded from new scheduling even while the reporter remains healthy. The same
 Worker ID may become `HEALTHY` again when its endpoint is reachable and the next authenticated
 heartbeat reports it.
