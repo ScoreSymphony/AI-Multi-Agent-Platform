@@ -219,6 +219,10 @@ jobs:
       - name: Validate Docker Compose configurations
         run: |
           docker compose -f docker-compose.yml config
+          AI_MAP_DATA_VOLUME=ci-recovery-config docker compose \
+            -f docker-compose.yml \
+            -f deploy/docker/docker-compose.recovery.yml \
+            config
           docker compose -f deploy/docker/docker-compose.hostinger.yml config
       - name: Build production container images
         run: |
@@ -253,12 +257,185 @@ jobs:
             http://127.0.0.1:18080/ \
             > /tmp/index.html
           test -s /tmp/index.html
+      - name: Exercise Compose backup and replacement-volume restore
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          export AI_MAP_BACKUP_DIR="$PWD/.ci-compose-backups"
+          export AI_MAP_BACKUP_NAME="ci-backup"
+          export AI_MAP_BUILD_COMMIT="$GITHUB_SHA"
+          export AI_MAP_REPLACEMENT_VOLUME="ai-map-ci-restored-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          docker compose -f docker-compose.yml stop
+
+          ADMIN_OUTPUT="$(
+            printf '%s\n' 'compose-backup-ci-password' | \
+              docker compose -f docker-compose.yml run --rm --no-deps -T control-plane \
+                platform-server bootstrap-admin \
+                --username compose-backup-ci \
+                --password-stdin
+          )"
+          EXPECTED_USER_ID="$(
+            printf '%s\n' "$ADMIN_OUTPUT" | \
+              sed -n 's/^bootstrapped administrator identity: //p' | tail -n 1
+          )"
+
+          SMOKE_OUTPUT="$(
+            docker compose -f docker-compose.yml run --rm --no-deps -T control-plane \
+              platform-server smoke
+          )"
+          EXPECTED_TASK_ID="$(
+            printf '%s\n' "$SMOKE_OUTPUT" | \
+              sed -n 's/.*task=\([^ ]*\).*/\1/p' | tail -n 1
+          )"
+          EXPECTED_RUN_ID="$(
+            printf '%s\n' "$SMOKE_OUTPUT" | \
+              sed -n 's/.*run=\([^ ]*\).*/\1/p' | tail -n 1
+          )"
+
+          test -n "$EXPECTED_USER_ID"
+          test -n "$EXPECTED_TASK_ID"
+          test -n "$EXPECTED_RUN_ID"
+
+          mkdir -p "$AI_MAP_BACKUP_DIR"
+          sudo chown 10001:10001 "$AI_MAP_BACKUP_DIR"
+
+          docker compose -f docker-compose.yml --profile operations run \
+            --rm --no-deps -T --build backup \
+            create \
+            --data-dir /var/lib/ai-multi-agent-platform \
+            --destination "/backups/$AI_MAP_BACKUP_NAME" \
+            --quiesced \
+            --platform-commit "$AI_MAP_BUILD_COMMIT"
+
+          docker compose -f docker-compose.yml --profile operations run \
+            --rm --no-deps -T --build backup \
+            verify "/backups/$AI_MAP_BACKUP_NAME"
+
+          docker compose -f docker-compose.yml down
+
+          if docker volume inspect "$AI_MAP_REPLACEMENT_VOLUME" >/dev/null 2>&1; then
+            echo "replacement volume unexpectedly already exists" >&2
+            exit 1
+          fi
+          docker volume create "$AI_MAP_REPLACEMENT_VOLUME"
+          export AI_MAP_DATA_VOLUME="$AI_MAP_REPLACEMENT_VOLUME"
+
+          docker compose \
+            -f docker-compose.yml \
+            -f deploy/docker/docker-compose.recovery.yml \
+            --profile operations run --rm --no-deps -T --build restore \
+            restore "/backups/$AI_MAP_BACKUP_NAME" \
+            --target-data-dir /var/lib/ai-multi-agent-platform/restored-data \
+            --expected-platform-commit "$AI_MAP_BUILD_COMMIT"
+
+          set +e
+          DIRTY_RESTORE_OUTPUT="$(
+            docker compose \
+              -f docker-compose.yml \
+              -f deploy/docker/docker-compose.recovery.yml \
+              --profile operations run --rm --no-deps -T restore \
+              restore "/backups/$AI_MAP_BACKUP_NAME" \
+              --target-data-dir /var/lib/ai-multi-agent-platform/restored-data \
+              --expected-platform-commit "$AI_MAP_BUILD_COMMIT" 2>&1
+          )"
+          DIRTY_RESTORE_STATUS=$?
+          set -e
+          test "$DIRTY_RESTORE_STATUS" -ne 0
+          printf '%s\n' "$DIRTY_RESTORE_OUTPUT" | \
+            grep -F "restore target must not already exist"
+
+          docker compose \
+            -f docker-compose.yml \
+            -f deploy/docker/docker-compose.recovery.yml \
+            --profile operations run --rm --no-deps -T --build recover-restore
+
+          docker compose \
+            -f docker-compose.yml \
+            -f deploy/docker/docker-compose.recovery.yml \
+            up -d
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:18080/api/v1/readiness \
+              > /tmp/restored-readiness.json; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker compose \
+                -f docker-compose.yml \
+                -f deploy/docker/docker-compose.recovery.yml \
+                ps
+              docker compose \
+                -f docker-compose.yml \
+                -f deploy/docker/docker-compose.recovery.yml \
+                logs --tail=200
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker compose \
+            -f docker-compose.yml \
+            -f deploy/docker/docker-compose.recovery.yml \
+            stop
+
+          docker compose \
+            -f docker-compose.yml \
+            -f deploy/docker/docker-compose.recovery.yml \
+            run --rm --no-deps -T \
+            -e EXPECTED_USER_ID="$EXPECTED_USER_ID" \
+            -e EXPECTED_TASK_ID="$EXPECTED_TASK_ID" \
+            -e EXPECTED_RUN_ID="$EXPECTED_RUN_ID" \
+            control-plane python - <<'PY'
+          import asyncio
+          import os
+          from pathlib import Path
+
+          from ai_multi_agent_platform.deployment import (
+              SingleNodeConfig,
+              build_single_node_deployment,
+          )
+
+          data_dir = Path(os.environ["AI_MAP_DATA_DIR"])
+          deployment = build_single_node_deployment(
+              SingleNodeConfig(data_dir=data_dir, secure_cookie=False)
+          )
+
+          expected_user_id = os.environ["EXPECTED_USER_ID"]
+          expected_task_id = os.environ["EXPECTED_TASK_ID"]
+          expected_run_id = os.environ["EXPECTED_RUN_ID"]
+
+          async def verify() -> None:
+              task = await deployment.kernel.get_task(expected_task_id)
+              run = await deployment.kernel.get_run(expected_task_id, expected_run_id)
+              assert task.task_id == expected_task_id
+              assert run.run_id == expected_run_id
+              assert run.task_id == expected_task_id
+              assert task.status.value == "succeeded"
+              assert run.status.value == "succeeded"
+
+          asyncio.run(verify())
+          assert expected_user_id in deployment.authentication.store.users
+          assert deployment.authorization.has_policy(expected_user_id)
+          PY
+
       - name: Show Compose logs on failure
         if: failure()
         run: docker compose -f docker-compose.yml logs --tail=300
       - name: Tear down Compose profile
         if: always()
-        run: docker compose -f docker-compose.yml down -v --remove-orphans
+        shell: bash
+        run: |
+          AI_MAP_DATA_VOLUME="ai-map-ci-restored-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            docker compose \
+              -f docker-compose.yml \
+              -f deploy/docker/docker-compose.recovery.yml \
+              down -v --remove-orphans || true
+          docker compose -f docker-compose.yml down -v --remove-orphans || true
+          docker volume rm ai-multi-agent-platform_platform-data >/dev/null 2>&1 || true
+          rm -rf .ci-compose-backups
 
   frontend:
     runs-on: ubuntu-latest
