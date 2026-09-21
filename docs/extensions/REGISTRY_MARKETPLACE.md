@@ -108,7 +108,7 @@ uses the following existing authorities:
 | Agent Team | `AgentService` / canonical Agent repository | `AgentTeamMarketplaceKindHandler` / `KIND_HANDLER` | yes, ordinary Team revisions after canonical member validation | yes, exactly one canonical Team revision at a time without changing ownership scope | yes, `AgentService.delete_team()` | canonical Team repository remains authoritative across restart; Marketplace does not reconstruct live team/runtime state | current canonical Team revision |
 
 Agent Packs use this same owner model rather than introducing a package-owned Team lifecycle. A
-Marketplace Team item can depend on multiple first-class Agent items; #1174 planning exposes a
+Marketplace Team item can depend on multiple first-class Agent items; the cross-kind dependency model exposes a
 deterministic leaf-first install plan, each Agent is installed through `AgentService`, and the Team
 is installed only after its canonical member revisions exist. This preserves ordinary Agent/Team
 revision, update, status and uninstall semantics. The separate Portability workflow still
