@@ -119,7 +119,7 @@ def _http(*, include_colon_inventory: bool = False) -> ControlPlaneHTTP:
         registry.register_provider(ColonCustomModelProvider())
         registry.register_model(
             ModelConfiguration(
-                config_id="model-colon-base",
+                config_id="local:model",
                 display_name="Colon Base",
                 provider_id="local:provider",
                 aliases=("local:qwen",),
@@ -129,7 +129,7 @@ def _http(*, include_colon_inventory: bool = False) -> ControlPlaneHTTP:
         )
         registry.register_model(
             ModelConfiguration(
-                config_id="model-colon-suffix",
+                config_id="local:model:disable",
                 display_name="Colon Suffix",
                 provider_id="local:provider:disable",
                 aliases=("local:qwen:disable", "local:qwen:custom"),
@@ -299,8 +299,19 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         )
         assert suffix_model.status == 200
         assert isinstance(suffix_model.body, dict)
-        assert suffix_model.body["id"] == "model-colon-suffix"
+        assert suffix_model.body["id"] == "local:model:disable"
         assert suffix_model.body["enabled"] is True
+
+        colon_config_id = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/models/local:model:disable",
+                headers=_headers(),
+            )
+        )
+        assert colon_config_id.status == 200
+        assert isinstance(colon_config_id.body, dict)
+        assert colon_config_id.body["id"] == "local:model:disable"
 
         disable_base_model = await http.handle(
             HTTPRequest(
@@ -311,7 +322,7 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         )
         assert disable_base_model.status == 200
         assert isinstance(disable_base_model.body, dict)
-        assert disable_base_model.body["id"] == "model-colon-base"
+        assert disable_base_model.body["id"] == "local:model"
         assert disable_base_model.body["enabled"] is False
 
         suffix_model_after_base_command = await http.handle(
@@ -334,7 +345,7 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         )
         assert disable_suffix_model.status == 200
         assert isinstance(disable_suffix_model.body, dict)
-        assert disable_suffix_model.body["id"] == "model-colon-suffix"
+        assert disable_suffix_model.body["id"] == "local:model:disable"
         assert disable_suffix_model.body["enabled"] is False
 
         custom_model_item = await http.handle(
@@ -346,7 +357,7 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         )
         assert custom_model_item.status == 200
         assert isinstance(custom_model_item.body, dict)
-        assert custom_model_item.body["id"] == "model-colon-suffix"
+        assert custom_model_item.body["id"] == "local:model:disable"
 
         unsupported_model_post = await http.handle(
             HTTPRequest(
@@ -449,6 +460,17 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         assert empty_provider_command_target.status == 405
         assert isinstance(empty_provider_command_target.body, dict)
         assert empty_provider_command_target.body["code"] == "method_not_allowed"
+
+        nonexistent_nested_model_route = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/models/local:qwen/custom",
+                headers=_headers(),
+            )
+        )
+        assert nonexistent_nested_model_route.status == 404
+        assert isinstance(nonexistent_nested_model_route.body, dict)
+        assert nonexistent_nested_model_route.body["code"] == "not_found"
 
     asyncio.run(scenario())
 
