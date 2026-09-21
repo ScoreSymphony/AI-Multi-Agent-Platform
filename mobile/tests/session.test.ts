@@ -109,7 +109,7 @@ describe("MobileSessionStore", () => {
     expect(descriptor).toEqual({
       baseUrl: "https://platform.example",
       pairingId: "pairing_123",
-      code: "ABCDEFGHIJKL",
+      code: "ABCDEFGHJKLM",
       protocolVersion: "1",
     });
     expect(() =>
@@ -186,7 +186,7 @@ describe("MobileSessionStore", () => {
     expect(consumeUrl).toBe("https://platform.example/api/v1/auth/mobile-pairings:consume");
     expect(JSON.parse(String(consumeInit.body))).toMatchObject({
       pairing_id: null,
-      code: "ABCDEFGHIJKL",
+      code: "ABCDEFGHJKLM",
       device_name: "Alice phone",
       platform: "android",
       protocol_version: "1",
