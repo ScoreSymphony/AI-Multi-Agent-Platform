@@ -118,6 +118,14 @@ export function classifyConnectionError(error: unknown): MobileConnectionState {
   return "offline";
 }
 
+export function initialConnectionState(
+  hasSavedProfile: boolean,
+  hasCredentialSession: boolean,
+): MobileConnectionState {
+  if (hasCredentialSession) return "connecting";
+  return hasSavedProfile ? "authentication_expired" : "never_configured";
+}
+
 export function connectionStateMessage(state: MobileConnectionState): string {
   switch (state) {
     case "never_configured":
