@@ -57,6 +57,7 @@ def build_report(
     junit_path: Path,
     budget: dict[str, Any],
     exit_code: int,
+    run_attempt: int = 1,
 ) -> dict[str, Any]:
     cases = _testcases(junit_path)
     modules: dict[str, float] = defaultdict(float)
@@ -84,6 +85,7 @@ def build_report(
     return {
         "schema_version": 1,
         "lane": lane,
+        "run_attempt": run_attempt,
         "wall_seconds": round(wall_seconds, 3),
         "pytest_exit_code": exit_code,
         "testcase_count": len(cases),
@@ -214,12 +216,21 @@ def main() -> int:
     if not junit_path.exists():
         return completed.returncode or 2
 
+    run_attempt_raw = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    try:
+        run_attempt = int(run_attempt_raw)
+    except ValueError as exc:
+        raise SystemExit(f"invalid GITHUB_RUN_ATTEMPT: {run_attempt_raw!r}") from exc
+    if run_attempt < 1:
+        raise SystemExit(f"invalid GITHUB_RUN_ATTEMPT: {run_attempt_raw!r}")
+
     report = build_report(
         lane=args.lane,
         wall_seconds=wall_seconds,
         junit_path=junit_path,
         budget=budget,
         exit_code=completed.returncode,
+        run_attempt=run_attempt,
     )
     violations = budget_violations(report)
     report["budget_violations"] = violations
