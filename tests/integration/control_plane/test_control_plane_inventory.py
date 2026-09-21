@@ -337,6 +337,17 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         assert disable_suffix_model.body["id"] == "model-colon-suffix"
         assert disable_suffix_model.body["enabled"] is False
 
+        custom_model_item = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/models/local:qwen:custom",
+                headers=_headers(),
+            )
+        )
+        assert custom_model_item.status == 200
+        assert isinstance(custom_model_item.body, dict)
+        assert custom_model_item.body["id"] == "model-colon-suffix"
+
         unsupported_model_post = await http.handle(
             HTTPRequest(
                 method="POST",
@@ -395,6 +406,17 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         assert disable_suffix_provider.body["id"] == "local:provider:disable"
         assert disable_suffix_provider.body["enabled"] is False
 
+        custom_provider_item = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/model-providers/local:provider:custom",
+                headers=_headers(),
+            )
+        )
+        assert custom_provider_item.status == 200
+        assert isinstance(custom_provider_item.body, dict)
+        assert custom_provider_item.body["id"] == "local:provider:custom"
+
         unsupported_provider_post = await http.handle(
             HTTPRequest(
                 method="POST",
@@ -405,6 +427,28 @@ def test_colon_bearing_model_and_provider_ids_use_method_aware_precedence() -> N
         assert unsupported_provider_post.status == 405
         assert isinstance(unsupported_provider_post.body, dict)
         assert unsupported_provider_post.body["code"] == "method_not_allowed"
+
+        empty_model_command_target = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/models/:disable",
+                headers=_headers("empty-model-command-target"),
+            )
+        )
+        assert empty_model_command_target.status == 405
+        assert isinstance(empty_model_command_target.body, dict)
+        assert empty_model_command_target.body["code"] == "method_not_allowed"
+
+        empty_provider_command_target = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/model-providers/:disable",
+                headers=_headers("empty-provider-command-target"),
+            )
+        )
+        assert empty_provider_command_target.status == 405
+        assert isinstance(empty_provider_command_target.body, dict)
+        assert empty_provider_command_target.body["code"] == "method_not_allowed"
 
     asyncio.run(scenario())
 
