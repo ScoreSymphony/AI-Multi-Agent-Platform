@@ -161,7 +161,7 @@ describe("BrowserSessionClient", () => {
       return jsonResponse({ id: "pairing_1", cancelled: true });
     });
     const session = new BrowserSessionClient({
-      baseUrl: "https://platform.example/api/v1",
+      baseUrl: "https://platform.example",
       fetchImpl,
       storage,
     });
