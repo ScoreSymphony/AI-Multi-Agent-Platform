@@ -190,6 +190,9 @@ def test_manifest_and_openapi_include_current_domains_without_speculation() -> N
         assert f"/api/v1/{NOTIFICATION_PREFERENCE_COLLECTION}" in composed_paths
         assert "/api/v1/commands/{command}" in composed_paths
         assert "/api/v1/search" in composed_paths
+        assert composed_paths["/api/v1/search"]["get"]["responses"]["405"] == {
+            "$ref": "#/components/responses/Error"
+        }
         assert composed_openapi.body["x-registered-extension-collections"] == []
         assert composed_openapi.body["x-registered-extension-commands"] == []
         assert composed_openapi.body["x-notifications"]["search_indexed"] is True

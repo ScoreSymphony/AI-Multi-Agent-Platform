@@ -23,6 +23,7 @@ from .http import (
 from .models import API_VERSION, APIException
 from .module_registry import install_control_plane_modules
 from .northbound_errors import api_exception_for_boundary, log_unexpected_boundary_error
+from .openapi_errors import ensure_method_not_allowed_responses
 from .task_project_reassignment import (
     AuthenticatedControlPlaneHTTP as _CurrentAuthenticatedControlPlaneHTTP,
 )
@@ -191,6 +192,7 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
             if normalized_path == f"/api/{API_VERSION}/openapi.json":
                 specification = _filter_extension_discovery(self._control_plane, response.body)
                 _augment_generated_transport_contract(cast(dict[str, Any], specification))
+                ensure_method_not_allowed_responses(cast(dict[str, Any], specification))
                 return HTTPResponse(
                     status=response.status,
                     body=specification,
@@ -346,7 +348,8 @@ def build_openapi(
         include_approval_decisions=include_approval_decisions,
     )
     _augment_openapi(specification)
-    return _augment_generated_transport_contract(specification)
+    _augment_generated_transport_contract(specification)
+    return ensure_method_not_allowed_responses(specification)
 
 
 __all__ = [

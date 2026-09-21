@@ -45,6 +45,7 @@ from .models import (
     paginate,
 )
 from .openapi import build_openapi as build_base_openapi
+from .openapi_errors import ensure_method_not_allowed_responses
 from .service import ControlPlane as BaseControlPlane
 from .service import ScopeStore
 
@@ -447,6 +448,7 @@ class ControlPlane(BaseControlPlane):
     def apply_openapi_contributions(self, specification: dict[str, Any]) -> dict[str, Any]:
         for _, contributor in self._openapi_contributors:
             contributor(specification)
+        ensure_method_not_allowed_responses(specification)
         return specification
 
     async def dispatch_registered_route(self, request: HTTPRequest) -> HTTPResponse | None:
@@ -852,6 +854,7 @@ def _error_responses() -> dict[str, Any]:
             "401",
             "403",
             "404",
+            "405",
             "409",
             "413",
             "415",
