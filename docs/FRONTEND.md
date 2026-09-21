@@ -1,6 +1,6 @@
 # Frontend architecture
 
-The platform web client is as a replaceable northbound application over the versioned Control Plane.
+The platform web client is a replaceable northbound application over the versioned Control Plane.
 
 ## Hard boundary
 
