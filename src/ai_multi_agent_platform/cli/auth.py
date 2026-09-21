@@ -469,9 +469,7 @@ def _execute_auth(
             return 0
         if args.mobile_command == "cancel":
             renderer.success(
-                client.post(
-                    f"/auth/mobile-pairings/{_segment(args.pairing_id)}:cancel"
-                )
+                client.post(f"/auth/mobile-pairings/{_segment(args.pairing_id)}:cancel")
             )
             return 0
         if args.mobile_command == "list":
@@ -492,11 +490,7 @@ def _execute_auth(
                 stdin=stdin,
                 stdout=renderer.stdout,
             )
-            renderer.success(
-                client.post(
-                    f"/auth/mobile-devices/{_segment(args.device_id)}:revoke"
-                )
-            )
+            renderer.success(client.post(f"/auth/mobile-devices/{_segment(args.device_id)}:revoke"))
             return 0
         _require_confirmation(
             args,
