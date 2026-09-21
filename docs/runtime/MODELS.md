@@ -67,18 +67,11 @@ This keeps the stable #5 request envelope compatible with the richer #10 canonic
 
 ## Durable routing profiles and default policy
 
-The #10 foundation owns canonical model inventory, deterministic selection and request-time `RoutingRequirements`. It does **not** currently define a durable, reusable and versioned routing-profile resource.
+The platform owns first-class durable, reusable and versioned Model Routing Profiles in addition to request-time `RoutingRequirements`. The canonical `model-routing-profiles` collection and `model-routing-profile.create|version|enable|disable` commands preserve immutable revisions and provider-neutral routing intent; Project scope is fixed after profile creation.
 
-Durable routing profiles, reusable default policy, exact profile revisions, persisted fallback semantics and portable routing-policy references are tracked by **#309 — Add durable versioned model-routing profiles and assignment policy configuration**. #309 extends the existing `ModelRouter`; it does not replace #10's routing ownership.
+Agents and other canonical configuration surfaces may bind an exact routing-profile reference without turning provider-private model names or gateway policy into platform identity. The Models Web surface exposes the same canonical profiles through the Control Plane rather than maintaining client-local routing configuration.
 
-Until #309 lands:
-
-- routing requirements can be supplied through canonical request, Agent and Task integration surfaces;
-- integration-local mappings may resolve routing-profile references where needed;
-- those mappings are not authoritative platform-owned routing-profile persistence;
-- configuration examples must not advertise a generic `routing.default_requirements` block as active platform configuration.
-
-Provider/runtime health remains live registry/runtime state and must not become durable routing-profile identity.
+Provider/runtime health remains live registry/runtime state and must not become durable routing-profile identity. A routing profile constrains canonical selection policy; it does not freeze or replace live provider availability.
 
 ## Control Plane inventory
 
@@ -96,10 +89,8 @@ The versioned Control Plane exposes the canonical model inventory without turnin
 
 Inventory mutations require the Control Plane idempotency key. Provider construction and provider-native configuration remain adapter/bootstrap responsibilities rather than generic HTTP object creation.
 
-## Issue #10 completion state
+## Current model and routing surface
 
-The #10 provider/registry/router foundation includes distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; provider-neutral streaming with fallback; timeout/cancellation/error normalization; model/provider configuration examples; Control Plane inventory; and end-to-end/contract coverage.
+The model surface includes the provider/registry/router foundation together with durable Model Routing Profiles: distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; provider-neutral streaming with fallback; timeout/cancellation/error normalization; model/provider configuration examples; Control Plane inventory; and immutable routing-profile revisions.
 
-The durable reusable routing-policy/profile layer is intentionally tracked separately in #309. That follow-up does not make the completed #10 provider/registry/router foundation incomplete.
-
-The baseline remains local-first and does not require any recurring paid AI/API service. Optional gateways and additional commercial or local providers remain replaceable follow-up adapters.
+The baseline remains local-first and does not require any recurring paid AI/API service. Optional gateways and additional commercial or local providers remain replaceable adapters.
