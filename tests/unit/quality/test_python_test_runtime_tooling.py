@@ -290,3 +290,30 @@ def test_runtime_report_loader_rejects_duplicate_same_attempt(tmp_path: Path) ->
         match="duplicate pytest runtime report for lane integration at run attempt 2",
     ):
         load_lane_reports(tmp_path)
+
+def test_runtime_report_loader_rejects_duplicate_stale_attempt(tmp_path: Path) -> None:
+    reports = [
+        ("a.json", 1),
+        ("b.json", 2),
+        ("c.json", 1),
+    ]
+    for name, attempt in reports:
+        (tmp_path / name).write_text(
+            json.dumps(
+                {
+                    "lane": "integration",
+                    "run_attempt": attempt,
+                    "wall_seconds": 1.0,
+                    "pytest_exit_code": 0,
+                    "budget_violations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate pytest runtime report for lane integration at run attempt 1",
+    ):
+        load_lane_reports(tmp_path)
+
