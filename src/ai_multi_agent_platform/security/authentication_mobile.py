@@ -279,11 +279,7 @@ class MobilePairingService:
             display_name=display_name,
             server_origin=challenge.server_origin,
             created_at=now,
-            platform=(
-                platform.strip()
-                if isinstance(platform, str) and platform.strip()
-                else None
-            ),
+            platform=(platform.strip() if isinstance(platform, str) and platform.strip() else None),
             metadata=metadata or {},
         )
         self.store.mobile_devices[device.device_id] = device
