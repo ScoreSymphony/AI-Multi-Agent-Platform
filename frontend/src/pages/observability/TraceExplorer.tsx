@@ -217,6 +217,7 @@ export function TraceExplorer({
             items={trace.items}
             selectedNodeId={selectedNode?.id ?? null}
             onInspect={inspectNode}
+            workspaceByRunId={workspaceByRunId}
           />
         )}
         {trace?.next_cursor ? (
@@ -242,7 +243,7 @@ export function TraceExplorer({
             />
           ) : null}
           {!nodeLoading && !nodeError && selectedNode ? (
-            <TraceNodeDetail node={selectedNode} />
+            <TraceNodeDetail node={selectedNode} workspaceByRunId={workspaceByRunId} />
           ) : null}
         </Card>
       ) : null}
@@ -254,10 +255,12 @@ function TraceTable({
   items,
   selectedNodeId,
   onInspect,
+  workspaceByRunId,
 }: {
   items: TraceNode[];
   selectedNodeId: string | null;
   onInspect: (nodeId: string) => void | Promise<void>;
+  workspaceByRunId: Record<string, string>;
 }) {
   const byId = new Map(items.map((item) => [item.id, item]));
   return (
@@ -329,7 +332,13 @@ function TraceTable({
   );
 }
 
-function TraceNodeDetail({ node }: { node: TraceNode }) {
+function TraceNodeDetail({
+  node,
+  workspaceByRunId,
+}: {
+  node: TraceNode;
+  workspaceByRunId: Record<string, string>;
+}) {
   return (
     <div>
       <p>
