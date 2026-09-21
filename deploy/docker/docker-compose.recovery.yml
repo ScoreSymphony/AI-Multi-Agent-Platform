@@ -83,4 +83,5 @@ services:
 
 volumes:
   platform-data:
+    external: true
     name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}
