@@ -2,7 +2,7 @@
 
 # Forge reuse implementation status
 
-> **Historical status snapshot (2026-09-03).** This document records the state while #9 was still deciding and implementing the execution-only runtime boundary. It is no longer the source of truth for active Forge support status. #9 subsequently completed with a real pinned Rust sidecar integration; #991 first deprecated that integration and then removed the executable Forge adapter/transport under ADR 0014 after the generic guarantees and #889/#46 gates were satisfied. See [`FORGE_RETENTION_DECISION.md`](FORGE_RETENTION_DECISION.md) and `docs/ADAPTER_SUPPORT_MATRIX.toml` for the current removed/non-active state.
+> **Historical status snapshot (2026-09-03).** This document records the state while #9 was still deciding and implementing the execution-only runtime boundary. It is no longer the source of truth for active Forge support status. #9 subsequently completed with a real pinned Rust sidecar integration; #991 first deprecated that integration and then removed the executable Forge adapter/transport under ADR 0014 after the generic guarantees and #889/#46 gates were satisfied. See [`FORGE_RETENTION_DECISION.md`](../../integrations/FORGE_RETENTION_DECISION.md) and `docs/ADAPTER_SUPPORT_MATRIX.toml` for the current removed/non-active state.
 
 Status date: 2026-09-03
 
