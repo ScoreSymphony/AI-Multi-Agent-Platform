@@ -45,6 +45,19 @@ describe("#1333 trace Workspace correlation", () => {
     expect(html).toContain("step: step_test");
   });
 
+  it("falls back to the public Run binding when telemetry omits Workspace context", () => {
+    const html = renderToStaticMarkup(
+      <TraceContext
+        node={node({ run_id: "run_test", step_id: "step_test" })}
+        workspaceId="workspace_bound"
+      />,
+    );
+
+    expect(html).toContain('href="/workspaces/workspace_bound"');
+    expect(html).toContain("workspace_bound");
+    expect(html).toContain("step: step_test");
+  });
+
   it("keeps the existing Task-scoped fallback when Workspace context is absent", () => {
     const html = renderToStaticMarkup(<TraceContext node={node({})} />);
     expect(html).toContain("Task-scoped");
