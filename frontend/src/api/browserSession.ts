@@ -27,6 +27,31 @@ export interface BrowserSessionSummary {
   active: boolean;
 }
 
+
+export interface MobilePairingChallenge {
+  id: string;
+  server_origin: string;
+  code: string;
+  pairing_uri: string;
+  protocol_version: "1";
+  expires_at: string;
+  secret_display: "one_time";
+}
+
+export interface MobileDeviceSummary {
+  id: string;
+  user_id: string;
+  credential_id: string;
+  display_name: string;
+  server_origin: string;
+  platform: string | null;
+  metadata: Record<string, JsonValue>;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  active: boolean;
+}
+
 export interface FirstUserBootstrapStatus {
   state: "uninitialized" | "incomplete" | "initialized";
   bootstrap_available: boolean;
@@ -271,6 +296,46 @@ export class BrowserSessionClient {
     return this.request<{ items: BrowserSessionSummary[] }>("/auth/sessions").then(
       (result) => result.items,
     );
+  }
+
+  createMobilePairing(serverOrigin: string): Promise<MobilePairingChallenge> {
+    return this.request<MobilePairingChallenge>("/auth/mobile-pairings", {
+      method: "POST",
+      body: { server_origin: serverOrigin },
+    });
+  }
+
+  cancelMobilePairing(pairingId: string): Promise<{ id: string; cancelled: boolean }> {
+    return this.request<{ id: string; cancelled: boolean }>(
+      `/auth/mobile-pairings/${encodeURIComponent(pairingId)}:cancel`,
+      { method: "POST" },
+    );
+  }
+
+  listMobileDevices(): Promise<MobileDeviceSummary[]> {
+    return this.request<{ items: MobileDeviceSummary[] }>("/auth/mobile-devices").then(
+      (result) => result.items,
+    );
+  }
+
+  renameMobileDevice(deviceId: string, displayName: string): Promise<MobileDeviceSummary> {
+    return this.request<MobileDeviceSummary>(
+      `/auth/mobile-devices/${encodeURIComponent(deviceId)}:rename`,
+      { method: "POST", body: { display_name: displayName } },
+    );
+  }
+
+  revokeMobileDevice(deviceId: string): Promise<{ id: string; revoked: boolean }> {
+    return this.request<{ id: string; revoked: boolean }>(
+      `/auth/mobile-devices/${encodeURIComponent(deviceId)}:revoke`,
+      { method: "POST" },
+    );
+  }
+
+  revokeAllMobileDevices(): Promise<{ revoked: number }> {
+    return this.request<{ revoked: number }>("/auth/mobile-devices:revoke-all", {
+      method: "POST",
+    });
   }
 
   releaseStatus(): Promise<ReleaseOperatorStatus> {
