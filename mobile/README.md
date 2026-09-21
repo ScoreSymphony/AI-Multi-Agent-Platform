@@ -69,6 +69,49 @@ server-side; the app clears its secure local credential after explicit sign-out 
 401/revocation response. Pairing does not emulate the browser HttpOnly-cookie/CSRF session model
 and does not create a second authentication authority.
 
+## Server profiles and connection state
+
+The companion can retain multiple named self-hosted server profiles. Each profile has an isolated
+credential key, so selecting another profile cannot reuse the previous server's bearer token.
+Canonical read caches remain process-local to one `MobileControlPlaneClient`; switching profiles
+discards the visible canonical projection before a new client is created.
+
+The profile document contains only connection metadata (display name, HTTPS origin, last successful
+connection and advertised API/resources/commands). This implementation keeps that metadata in
+`expo-secure-store` as a stricter storage posture, while raw credentials are stored under
+separate per-profile secure keys. Removing a profile deletes its credential. Explicit sign-out
+removes only the selected profile credential and leaves non-secret connection metadata so the app
+can explain that re-pairing is required.
+
+Before pairing or reconnecting, the app reads the public `GET /api/v1` manifest and requires the
+advertised `api_version` to match the client's supported Control Plane major. Advertised optional
+resources are used to degrade unavailable mobile surfaces rather than treating every missing
+optional capability as a broken application.
+
+The UI distinguishes never-configured, connecting, connected, offline/unreachable,
+expired-or-revoked authentication, TLS/certificate failure, incompatible API and permission-denied
+states. Remote origins never downgrade from HTTPS; loopback HTTP remains development-only.
+
+## GitHub-distributed update discovery
+
+The app identifies its embedded semantic version and Android `versionCode`. `npm run
+validate:release` verifies these embedded values stay aligned with `package.json`, Expo
+`version`, Android package identity and `versionCode`.
+
+Update discovery is user-triggered and trusts only the official
+`ScoreSymphony/AI-Multi-Agent-Platform` GitHub Releases namespace. It:
+
+- considers published, non-prerelease `mobile-v*` releases;
+- requires the expected `AI-Multi-Agent-Mobile-vX.Y.Z.apk` and `mobile-release.json` assets;
+- validates the manifest schema, tag, version, Android package, APK asset name and SHA-256;
+- exposes release notes/checksum where available;
+- rejects release/download URLs outside the official repository provenance;
+- never accepts an APK URL advertised by a connected server;
+- never downloads or installs an APK silently.
+
+Opening the official release or APK is an explicit user action. Android's normal sideload/update
+installation remains authoritative.
+
 ## Offline semantics
 
 The first slice deliberately has no queued mutations.

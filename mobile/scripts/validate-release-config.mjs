@@ -47,6 +47,16 @@ function readJson(name) {
   return JSON.parse(readFileSync(resolve(ROOT, name), "utf8"));
 }
 
+function sourceConstant(source, name) {
+  const match = new RegExp(
+    `export const ${name} = (?:"([^"]+)"|([0-9]+));`,
+  ).exec(source);
+  if (!match) {
+    fail(`mobile/src/appIdentity.ts must declare ${name} as a literal`);
+  }
+  return match[1] ?? Number.parseInt(match[2], 10);
+}
+
 function fail(message) {
   console.error(message);
   process.exit(1);
@@ -54,8 +64,12 @@ function fail(message) {
 
 const packageDocument = readJson("package.json");
 const appDocument = readJson("app.json");
+const appIdentity = readFileSync(resolve(ROOT, "src/appIdentity.ts"), "utf8");
 const expo = appDocument.expo ?? {};
 const android = expo.android ?? {};
+const clientVersion = sourceConstant(appIdentity, "MOBILE_APP_VERSION");
+const clientVersionCode = sourceConstant(appIdentity, "MOBILE_ANDROID_VERSION_CODE");
+const clientPackage = sourceConstant(appIdentity, "MOBILE_ANDROID_PACKAGE");
 
 if (!isValidSemVer(packageDocument.version ?? "")) {
   fail("mobile/package.json must contain a semantic version");
@@ -70,6 +84,15 @@ if (android.package !== EXPECTED_ANDROID_PACKAGE) {
 }
 if (!Number.isInteger(android.versionCode) || android.versionCode < 1) {
   fail("Expo android.versionCode must be a positive integer");
+}
+if (clientVersion !== expo.version) {
+  fail("mobile appIdentity version must match Expo/package version");
+}
+if (clientVersionCode !== android.versionCode) {
+  fail("mobile appIdentity Android versionCode must match Expo android.versionCode");
+}
+if (clientPackage !== android.package) {
+  fail("mobile appIdentity Android package must match Expo android.package");
 }
 
 const expectedVersion = process.env.AI_MAP_MOBILE_EXPECT_VERSION?.trim();

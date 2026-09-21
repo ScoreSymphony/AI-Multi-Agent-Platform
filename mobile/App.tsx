@@ -14,17 +14,36 @@ import {
 } from "react-native";
 
 import {
+  MOBILE_ANDROID_VERSION_CODE,
+  MOBILE_APP_VERSION,
+  SUPPORTED_CONTROL_PLANE_API_VERSION,
+} from "./src/appIdentity";
+import {
   MobileControlPlaneClient,
   MobileControlPlaneError,
   OfflineMutationError,
 } from "./src/client";
+import {
+  classifyConnectionError,
+  connectionStateMessage,
+  initialConnectionState,
+  probeControlPlane,
+  type ControlPlaneCompatibility,
+  type MobileConnectionState,
+} from "./src/connection";
 import { parseMobileDeepLink, type MobileRouteKind } from "./src/deepLinks";
 import { ExpoSecureSecretStorage } from "./src/secureStore";
 import {
   MobileSessionStore,
   parseMobilePairingUri,
   type MobilePairingDescriptor,
+  type ServerProfile,
 } from "./src/session";
+import {
+  discoverOfficialMobileUpdate,
+  requireOfficialUpdateUrl,
+  type MobileUpdateInfo,
+} from "./src/updates";
 import type {
   AuthenticatedActor,
   CanonicalAgent,
@@ -50,7 +69,16 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [stale, setStale] = useState(false);
+  const [connectionState, setConnectionState] =
+    useState<MobileConnectionState>("never_configured");
+  const [compatibility, setCompatibility] =
+    useState<ControlPlaneCompatibility | null>(null);
+  const [profiles, setProfiles] = useState<ServerProfile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<ServerProfile | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<MobileUpdateInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
+  const [profileName, setProfileName] = useState("My platform");
   const [serverUrl, setServerUrl] = useState("https://");
   const [pairingCode, setPairingCode] = useState("");
   const [deviceName, setDeviceName] = useState("My phone");
@@ -76,45 +104,118 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
-  function makeClient(baseUrl: string): MobileControlPlaneClient {
+  function makeClient(profileId: string, baseUrl: string): MobileControlPlaneClient {
     return new MobileControlPlaneClient({
       baseUrl,
-      credentialSource: sessionStore,
+      credentialSource: {
+        getToken: () => sessionStore.getToken(profileId),
+      },
       onUnauthorized: async () => {
-        await sessionStore.clear();
+        await sessionStore.clear(profileId);
         setActor(null);
         setClient(null);
-        setNotice("The credential was revoked or expired. Sign in again.");
+        setConnectionState("authentication_expired");
+        setNotice(connectionStateMessage("authentication_expired"));
       },
     });
   }
 
+  function resetCanonicalProjection(): void {
+    setTasks([]);
+    setRuns([]);
+    setResults([]);
+    setArtifacts([]);
+    setAgents([]);
+    setWorkers([]);
+    setApprovals([]);
+    setVerifications([]);
+    setNotifications([]);
+    setSearchResults([]);
+    setHealth("unknown");
+    setStale(false);
+  }
+
+  async function reloadProfiles(): Promise<ServerProfile[]> {
+    const saved = await sessionStore.listProfiles();
+    setProfiles(saved);
+    return saved;
+  }
+
+  async function connectProfile(profileId: string, announce = true): Promise<void> {
+    setBusy(true);
+    setConnectionState("connecting");
+    setNotice(null);
+    setCompatibility(null);
+    resetCanonicalProjection();
+    setActor(null);
+    setClient(null);
+    try {
+      const profile = await sessionStore.selectProfile(profileId);
+      setActiveProfile(profile);
+      setServerUrl(profile.baseUrl);
+      setProfileName(profile.displayName);
+
+      const compatibilityResult = await probeControlPlane(
+        profile.baseUrl,
+        SUPPORTED_CONTROL_PLANE_API_VERSION,
+      );
+      setCompatibility(compatibilityResult);
+
+      const next = makeClient(profile.id, profile.baseUrl);
+      const currentActor = await next.me();
+      const updated = await sessionStore.recordSuccessfulConnection(
+        profile.id,
+        compatibilityResult,
+      );
+      setActiveProfile(updated);
+      setActor(currentActor);
+      setClient(next);
+      setConnectionState("connected");
+      await reloadProfiles();
+      if (announce) setNotice(`Connected to ${updated.displayName}.`);
+    } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
+      setNotice(connectionStateMessage(state));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void sessionStore.current().then(async (session) => {
-      if (!session || cancelled) {
-        setReady(true);
-        return;
-      }
-      const next = makeClient(session.baseUrl);
+    void (async () => {
       try {
-        const currentActor = await next.me();
-        if (!cancelled) {
-          setServerUrl(session.baseUrl);
-          setActor(currentActor);
-          setClient(next);
+        const saved = await sessionStore.listProfiles();
+        if (cancelled) return;
+        setProfiles(saved);
+
+        const selected = await sessionStore.selectedProfile();
+        if (cancelled) return;
+        if (selected) {
+          setActiveProfile(selected);
+          setServerUrl(selected.baseUrl);
+          setProfileName(selected.displayName);
         }
+
+        const session = await sessionStore.current();
+        if (cancelled) return;
+        if (!session) {
+          setConnectionState(initialConnectionState(Boolean(selected), false));
+          return;
+        }
+        setConnectionState(initialConnectionState(true, true));
+        await connectProfile(session.profileId, false);
       } catch (error) {
-        if (error instanceof MobileControlPlaneError && error.status === 401) {
-          await sessionStore.clear();
-        } else if (!cancelled) {
-          setNotice("Stored session could not be verified. Check network connectivity.");
-          setServerUrl(session.baseUrl);
+        if (!cancelled) {
+          const state = classifyConnectionError(error);
+          setConnectionState(state);
+          setNotice(messageFor(error));
         }
       } finally {
         if (!cancelled) setReady(true);
       }
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -146,23 +247,42 @@ export default function App() {
     descriptor: MobilePairingDescriptor,
   ): Promise<void> {
     setBusy(true);
+    setConnectionState("connecting");
     setNotice(null);
     try {
+      const compatibilityResult = await probeControlPlane(
+        descriptor.baseUrl,
+        SUPPORTED_CONTROL_PLANE_API_VERSION,
+      );
       const currentActor = await sessionStore.pair(
         descriptor,
         deviceName,
         Platform.OS,
+        globalThis.fetch.bind(globalThis),
+        profileName,
       );
       const session = await sessionStore.current();
       if (!session) throw new Error("Secure pairing did not persist");
+      const updated = await sessionStore.recordSuccessfulConnection(
+        session.profileId,
+        compatibilityResult,
+      );
       setPairingCode("");
       setPairingPreview(null);
       setScanning(false);
+      resetCanonicalProjection();
+      setCompatibility(compatibilityResult);
+      setActiveProfile(updated);
       setActor(currentActor);
-      setClient(makeClient(session.baseUrl));
+      setClient(makeClient(session.profileId, session.baseUrl));
       setServerUrl(session.baseUrl);
+      setProfileName(updated.displayName);
+      setConnectionState("connected");
+      await reloadProfiles();
       setNotice("Mobile device paired successfully.");
     } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
@@ -172,22 +292,41 @@ export default function App() {
 
   async function pairFallbackCode(): Promise<void> {
     setBusy(true);
+    setConnectionState("connecting");
     setNotice(null);
     try {
+      const compatibilityResult = await probeControlPlane(
+        serverUrl,
+        SUPPORTED_CONTROL_PLANE_API_VERSION,
+      );
       const currentActor = await sessionStore.pairWithCode(
         serverUrl,
         pairingCode,
         deviceName,
         Platform.OS,
+        globalThis.fetch.bind(globalThis),
+        profileName,
       );
       const session = await sessionStore.current();
       if (!session) throw new Error("Secure pairing did not persist");
+      const updated = await sessionStore.recordSuccessfulConnection(
+        session.profileId,
+        compatibilityResult,
+      );
       setPairingCode("");
+      resetCanonicalProjection();
+      setCompatibility(compatibilityResult);
+      setActiveProfile(updated);
       setActor(currentActor);
-      setClient(makeClient(session.baseUrl));
+      setClient(makeClient(session.profileId, session.baseUrl));
       setServerUrl(session.baseUrl);
+      setProfileName(updated.displayName);
+      setConnectionState("connected");
+      await reloadProfiles();
       setNotice("Mobile device paired successfully.");
     } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
@@ -221,12 +360,47 @@ export default function App() {
   }
 
   async function signOut(): Promise<void> {
-    await sessionStore.clear();
+    if (activeProfile) await sessionStore.clear(activeProfile.id);
     setActor(null);
     setClient(null);
-    setTasks([]);
-    setRuns([]);
-    setNotice("Credential removed from this device.");
+    resetCanonicalProjection();
+    setConnectionState(activeProfile ? "authentication_expired" : "never_configured");
+    setNotice("Credential removed from this device. The non-secret server profile was retained.");
+  }
+
+  async function removeProfile(profileId: string): Promise<void> {
+    const removingActive = activeProfile?.id === profileId;
+    await sessionStore.removeProfile(profileId);
+    const saved = await reloadProfiles();
+    if (removingActive) {
+      setActor(null);
+      setClient(null);
+      setCompatibility(null);
+      setActiveProfile(null);
+      resetCanonicalProjection();
+      setConnectionState(saved.length ? "authentication_expired" : "never_configured");
+    }
+    setNotice("Server profile and its device credential were removed.");
+  }
+
+  async function checkForUpdates(): Promise<void> {
+    setCheckingUpdate(true);
+    const result = await discoverOfficialMobileUpdate(MOBILE_APP_VERSION);
+    setUpdateInfo(result);
+    setCheckingUpdate(false);
+  }
+
+  async function openOfficialUpdate(url: string): Promise<void> {
+    try {
+      await Linking.openURL(requireOfficialUpdateUrl(url));
+    } catch (error) {
+      setNotice(messageFor(error));
+    }
+  }
+
+  function serverSupports(resource: string): boolean {
+    if (!compatibility || compatibility.resources.length === 0) return true;
+    return compatibility.resources.includes(resource);
   }
 
   async function refreshCurrentTab(current: Tab): Promise<void> {
@@ -235,26 +409,26 @@ export default function App() {
     setNotice(null);
     try {
       if (current === "dashboard") {
-        const [healthResult, taskResult, runResult, agentResult, workerResult] =
-          await Promise.all([
-            client.health(),
-            client.listTasks(),
-            client.listRuns(),
-            client.listAgents(),
-            client.listWorkers(),
-          ]);
+        const [healthResult, taskResult, runResult] = await Promise.all([
+          client.health(),
+          client.listTasks(),
+          client.listRuns(),
+        ]);
+        const agentResult = serverSupports("agents") ? await client.listAgents() : null;
+        const workerResult = serverSupports("workers") ? await client.listWorkers() : null;
         setHealth(healthResult.data.status);
         setTasks(taskResult.data.items);
         setRuns(runResult.data.items);
-        setAgents(agentResult.data.items);
-        setWorkers(workerResult.data.items);
-        setStale(
+        setAgents(agentResult?.data.items ?? []);
+        setWorkers(workerResult?.data.items ?? []);
+        const staleNow =
           healthResult.stale ||
-            taskResult.stale ||
-            runResult.stale ||
-            agentResult.stale ||
-            workerResult.stale,
-        );
+          taskResult.stale ||
+          runResult.stale ||
+          Boolean(agentResult?.stale) ||
+          Boolean(workerResult?.stale);
+        setStale(staleNow);
+        setConnectionState(staleNow ? "offline" : "connected");
       } else if (current === "work") {
         const [taskResult, runResult, resultResult, artifactResult] = await Promise.all([
           client.listTasks(),
@@ -266,26 +440,40 @@ export default function App() {
         setRuns(runResult.data.items);
         setResults(resultResult.data.items);
         setArtifacts(artifactResult.data.items);
-        setStale(
+        const staleNow =
           taskResult.stale ||
-            runResult.stale ||
-            resultResult.stale ||
-            artifactResult.stale,
-        );
+          runResult.stale ||
+          resultResult.stale ||
+          artifactResult.stale;
+        setStale(staleNow);
+        setConnectionState(staleNow ? "offline" : "connected");
       } else if (current === "decisions") {
-        const [approvalResult, verificationResult] = await Promise.all([
-          client.listApprovals(),
-          client.listPendingVerification(),
-        ]);
-        setApprovals(approvalResult.data.items);
-        setVerifications(verificationResult.data.items);
-        setStale(approvalResult.stale || verificationResult.stale);
+        const approvalResult = serverSupports("approvals")
+          ? await client.listApprovals()
+          : null;
+        const verificationResult = serverSupports("verification-reviews")
+          ? await client.listPendingVerification()
+          : null;
+        setApprovals(approvalResult?.data.items ?? []);
+        setVerifications(verificationResult?.data.items ?? []);
+        const staleNow = Boolean(approvalResult?.stale || verificationResult?.stale);
+        setStale(staleNow);
+        setConnectionState(staleNow ? "offline" : "connected");
       } else if (current === "notifications") {
+        if (!serverSupports("notifications")) {
+          setNotifications([]);
+          setStale(false);
+          setNotice("This server does not advertise the optional Notifications surface.");
+          return;
+        }
         const notificationResult = await client.listNotifications();
         setNotifications(notificationResult.data.items);
         setStale(notificationResult.stale);
+        setConnectionState(notificationResult.stale ? "offline" : "connected");
       }
     } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
@@ -369,12 +557,20 @@ export default function App() {
 
   async function runSearch(): Promise<void> {
     if (!client) return;
+    if (!serverSupports("search")) {
+      setSearchResults([]);
+      setNotice("This server does not advertise the optional Search surface.");
+      return;
+    }
     setBusy(true);
     try {
       const response = await client.search(searchQuery);
       setSearchResults(response.data.items);
       setStale(response.stale);
+      setConnectionState(response.stale ? "offline" : "connected");
     } catch (error) {
+      const state = classifyConnectionError(error);
+      setConnectionState(state);
       setNotice(messageFor(error));
     } finally {
       setBusy(false);
@@ -399,6 +595,45 @@ export default function App() {
             Pair this phone from an already authenticated Web or CLI session. The QR/code is
             short-lived and single-use; the resulting device credential is kept in OS secure storage.
           </Text>
+          <Text style={styles.muted}>
+            App {MOBILE_APP_VERSION} · Android build {MOBILE_ANDROID_VERSION_CODE} · Control Plane {SUPPORTED_CONTROL_PLANE_API_VERSION}
+          </Text>
+          <Text style={styles.notice}>{connectionStateMessage(connectionState)}</Text>
+
+          {profiles.length ? (
+            <Section title="Saved platforms">
+              {profiles.map((profile) => (
+                <View key={profile.id} style={styles.card}>
+                  <Text style={styles.cardTitle}>{profile.displayName}</Text>
+                  <Text selectable>{profile.baseUrl}</Text>
+                  <Text style={styles.muted}>
+                    API {profile.apiVersion ?? "not checked"} · Last connected {profile.lastSuccessfulConnection ?? "never"}
+                  </Text>
+                  <View style={styles.actions}>
+                    <Button
+                      title={busy && activeProfile?.id === profile.id ? "Connecting…" : "Connect"}
+                      onPress={() => void connectProfile(profile.id)}
+                      disabled={busy}
+                    />
+                    <Button
+                      title="Remove"
+                      onPress={() => void removeProfile(profile.id)}
+                      disabled={busy}
+                    />
+                  </View>
+                </View>
+              ))}
+            </Section>
+          ) : null}
+
+          <Section title="Add or pair platform">
+            <Text style={styles.label}>Profile name</Text>
+            <TextInput
+              value={profileName}
+              onChangeText={setProfileName}
+              style={styles.input}
+              placeholder="Home VPS"
+            />
 
           <Text style={styles.label}>Device name</Text>
           <TextInput
@@ -472,6 +707,38 @@ export default function App() {
             onPress={() => void pairFallbackCode()}
             disabled={busy}
           />
+          </Section>
+
+          <Section title="App updates">
+            <Text style={styles.muted}>
+              Update discovery reads only official GitHub Release metadata. Installation always remains an explicit Android sideload action.
+            </Text>
+            <Button
+              title={checkingUpdate ? "Checking…" : "Check official GitHub releases"}
+              onPress={() => void checkForUpdates()}
+              disabled={checkingUpdate}
+            />
+            {updateInfo ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>{updateInfo.message}</Text>
+                {updateInfo.apkSha256 ? (
+                  <Text selectable>APK SHA-256: {updateInfo.apkSha256}</Text>
+                ) : null}
+                {updateInfo.releasePageUrl ? (
+                  <Button
+                    title="Open official release"
+                    onPress={() => void openOfficialUpdate(updateInfo.releasePageUrl!)}
+                  />
+                ) : null}
+                {updateInfo.state === "update_available" && updateInfo.apkUrl ? (
+                  <Button
+                    title="Download official APK"
+                    onPress={() => void openOfficialUpdate(updateInfo.apkUrl!)}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </Section>
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </ScrollView>
       </SafeAreaView>
@@ -482,8 +749,9 @@ export default function App() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>AI Multi-Agent Platform</Text>
+          <Text style={styles.headerTitle}>{activeProfile?.displayName ?? "AI Multi-Agent Platform"}</Text>
           <Text style={styles.muted}>{actor.actor_type}:{actor.actor_id}</Text>
+          <Text style={styles.muted}>{connectionStateMessage(connectionState)}</Text>
         </View>
         <Button title="Sign out" onPress={() => void signOut()} />
       </View>
@@ -512,6 +780,70 @@ export default function App() {
 
         {tab === "dashboard" ? (
           <>
+            <Section title="Connection">
+              <Text>Profile: {activeProfile?.displayName ?? "unknown"}</Text>
+              <Text selectable>Server: {activeProfile?.baseUrl ?? client.baseUrl}</Text>
+              <Text>App: {MOBILE_APP_VERSION} · Android build {MOBILE_ANDROID_VERSION_CODE}</Text>
+              <Text>Control Plane API: {compatibility?.apiVersion ?? "not checked"}</Text>
+              <Text>
+                Advertised resources: {compatibility?.resources.length ?? 0}
+              </Text>
+              {profiles.length > 1 ? (
+                <>
+                  <Text style={styles.label}>Switch platform</Text>
+                  <View style={styles.actions}>
+                    {profiles
+                      .filter((profile) => profile.id !== activeProfile?.id)
+                      .map((profile) => (
+                        <Button
+                          key={profile.id}
+                          title={profile.displayName}
+                          onPress={() => void connectProfile(profile.id)}
+                          disabled={busy}
+                        />
+                      ))}
+                  </View>
+                </>
+              ) : null}
+            </Section>
+            <Section title="App updates">
+              <Text style={styles.muted}>
+                Official GitHub Release metadata only. No APK is ever installed automatically.
+              </Text>
+              <Button
+                title={checkingUpdate ? "Checking…" : "Check for update"}
+                onPress={() => void checkForUpdates()}
+                disabled={checkingUpdate}
+              />
+              {updateInfo ? (
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>{updateInfo.message}</Text>
+                  {updateInfo.latestVersion ? (
+                    <Text>Latest official mobile version: {updateInfo.latestVersion}</Text>
+                  ) : null}
+                  {updateInfo.apkSha256 ? (
+                    <Text selectable>APK SHA-256: {updateInfo.apkSha256}</Text>
+                  ) : null}
+                  {updateInfo.releaseNotes ? (
+                    <Text>{updateInfo.releaseNotes}</Text>
+                  ) : null}
+                  <View style={styles.actions}>
+                    {updateInfo.releasePageUrl ? (
+                      <Button
+                        title="Release notes"
+                        onPress={() => void openOfficialUpdate(updateInfo.releasePageUrl!)}
+                      />
+                    ) : null}
+                    {updateInfo.state === "update_available" && updateInfo.apkUrl ? (
+                      <Button
+                        title="Download APK"
+                        onPress={() => void openOfficialUpdate(updateInfo.apkUrl!)}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+            </Section>
             <Section title="Status">
               <Text>Control Plane: {health}</Text>
               <Text>Tasks: {tasks.length}</Text>

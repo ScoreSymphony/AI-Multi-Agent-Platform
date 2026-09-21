@@ -59,6 +59,41 @@ describe("MobileControlPlaneClient", () => {
     expect(client.isOffline()).toBe(true);
   });
 
+  it("never shares cached canonical reads between client/server profile instances", async () => {
+    const firstFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [{ id: "run-one", task_id: "task-one", status: "running" }],
+            next_cursor: null,
+            total: 1,
+            limit: 50,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockRejectedValueOnce(new Error("offline"));
+    const secondFetch = vi.fn().mockRejectedValue(new Error("offline"));
+    const first = new MobileControlPlaneClient({
+      baseUrl: "https://one.example",
+      credentialSource,
+      fetchImpl: firstFetch,
+    });
+    const second = new MobileControlPlaneClient({
+      baseUrl: "https://two.example",
+      credentialSource,
+      fetchImpl: secondFetch,
+    });
+
+    await first.listRuns();
+    await expect(first.listRuns()).resolves.toMatchObject({
+      stale: true,
+      data: { items: [{ id: "run-one" }] },
+    });
+    await expect(second.listRuns()).rejects.toThrow("offline");
+  });
+
   it("maps a human authenticated actor to the canonical user Task owner", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "task-1", title: "Task", objective: "Do work", status: "created" }), { status: 201 }),
