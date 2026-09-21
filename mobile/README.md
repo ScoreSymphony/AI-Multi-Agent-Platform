@@ -35,16 +35,23 @@ canonical browser frontend.
 
 ## Authentication and secrets
 
-Mobile uses an already-issued bearer credential. Activation validates the credential through
-`GET /api/v1/auth/me` before it is persisted.
+Mobile pairing starts from an already authenticated Web or CLI session. The server creates a
+five-minute, single-use pairing challenge whose QR payload contains only the HTTPS server origin,
+opaque pairing ID, one-time code and pairing protocol version. The Android app can scan that QR
+with `expo-camera` or use the fallback server-origin/code form, shows the target server before
+trust, consumes the challenge through `POST /api/v1/auth/mobile-pairings:consume`, and validates
+the resulting actor through `GET /api/v1/auth/me`.
 
-The raw credential and server URL are stored through `expo-secure-store`; the credential is
-not written to ordinary application storage. Remote servers require HTTPS. Loopback HTTP is
-accepted only for explicit local development.
+The issued mobile credential is server-owned, independently revocable and carries a restrictive
+credential-scope ceiling for the companion workflows. Its raw secret and server URL are persisted
+only through `expo-secure-store`; the secret is never written to ordinary application storage.
+Remote servers require HTTPS. Loopback HTTP is accepted only for explicit local development.
 
-This first slice does not create/recover/reveal credentials and does not emulate the browser
-HttpOnly-cookie/CSRF session model. Credential issuance and revocation remain canonical server
-operations exposed through existing trusted Web/CLI/operator flows.
+Web Settings and `platform auth mobile ...` use the canonical pairing/device-management API to
+create/cancel challenges and list/rename/revoke paired devices. Revocation takes effect
+server-side; the app clears its secure local credential after explicit sign-out or a canonical
+401/revocation response. Pairing does not emulate the browser HttpOnly-cookie/CSRF session model
+and does not create a second authentication authority.
 
 ## Offline semantics
 
