@@ -968,12 +968,12 @@ try {
     throw new Error(`Desktop mobile pairing returned an incomplete challenge: ${JSON.stringify(desktopPairing)}`);
   }
   const desktopPairingCard = page.getByRole("heading", { name: "Mobile companion pairing", exact: true }).locator("..");
+  const desktopPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
+  await desktopPairingQr.waitFor();
   const desktopPairingText = await desktopPairingCard.innerText();
   for (const label of ["Server", "Fallback code", "Expires", "Time remaining"]) {
     requireText(desktopPairingText, label, "Desktop mobile pairing presentation");
   }
-  const desktopPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
-  await desktopPairingQr.waitFor();
   await assertHorizontallyReachable(page, desktopPairingQr, "Desktop mobile pairing QR");
   await assertNoDocumentHorizontalOverflow(page, "Desktop Settings mobile pairing");
 
@@ -1397,12 +1397,12 @@ try {
     throw new Error(`Narrow mobile pairing creation failed with HTTP ${narrowPairingResponse.status()}`);
   }
   const narrowPairingCard = page.getByRole("heading", { name: "Mobile companion pairing", exact: true }).locator("..");
+  const narrowPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
+  await narrowPairingQr.waitFor();
   const narrowPairingText = await narrowPairingCard.innerText();
   for (const label of ["Server", "Fallback code", "Expires", "Time remaining"]) {
     requireText(narrowPairingText, label, "Narrow mobile pairing presentation");
   }
-  const narrowPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
-  await narrowPairingQr.waitFor();
   await assertHorizontallyReachable(page, narrowPairingQr, "Narrow mobile pairing QR");
   await assertNoDocumentHorizontalOverflow(page, "Narrow Settings pairing challenge");
   const narrowCancelPairingButton = await waitForButton(page, "Cancel pairing");
