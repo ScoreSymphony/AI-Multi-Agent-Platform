@@ -447,6 +447,7 @@ class ControlPlane(BaseControlPlane):
     def apply_openapi_contributions(self, specification: dict[str, Any]) -> dict[str, Any]:
         for _, contributor in self._openapi_contributors:
             contributor(specification)
+        _ensure_method_not_allowed_responses(specification)
         return specification
 
     async def dispatch_registered_route(self, request: HTTPRequest) -> HTTPResponse | None:
@@ -844,6 +845,29 @@ def _command_operation(operation_id: str, commands: tuple[str, ...]) -> dict[str
     }
 
 
+
+def _ensure_method_not_allowed_responses(specification: dict[str, Any]) -> dict[str, Any]:
+    """Add the canonical 405 response to every declared public OpenAPI operation."""
+
+    paths = specification.get("paths")
+    if not isinstance(paths, dict):
+        return specification
+
+    for path_item in paths.values():
+        if not isinstance(path_item, dict):
+            continue
+        for method in ("get", "put", "post", "delete", "options", "head", "patch", "trace"):
+            operation = path_item.get(method)
+            if not isinstance(operation, dict):
+                continue
+            responses = operation.get("responses")
+            if isinstance(responses, dict):
+                responses.setdefault(
+                    "405",
+                    {"$ref": "#/components/responses/Error"},
+                )
+    return specification
+
 def _error_responses() -> dict[str, Any]:
     return {
         status: {"$ref": "#/components/responses/Error"}
@@ -852,6 +876,7 @@ def _error_responses() -> dict[str, Any]:
             "401",
             "403",
             "404",
+            "405",
             "409",
             "413",
             "415",
