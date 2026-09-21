@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ControlPlaneClient } from "../../api/client";
+import { AppLink } from "../../app/router";
 import type { TraceNode, TracePage } from "../../api/trace";
 import {
   CanonicalId,
@@ -376,7 +377,8 @@ function TraceNodeDetail({ node }: { node: TraceNode }) {
   );
 }
 
-function TraceContext({ node }: { node: TraceNode }) {
+export function TraceContext({ node }: { node: TraceNode }) {
+  const workspaceId = node.context.workspace_id;
   const preferred = [
     "step_id",
     "agent_id",
@@ -391,7 +393,17 @@ function TraceContext({ node }: { node: TraceNode }) {
   const visible = preferred.flatMap((key) =>
     node.context[key] ? [`${key.replace("_id", "")}: ${node.context[key]}`] : [],
   );
-  return <>{visible.length > 0 ? visible.join(" · ") : "Task-scoped"}</>;
+  return (
+    <span>
+      {workspaceId ? (
+        <>
+          workspace: <AppLink href={`/workspaces/${workspaceId}`}><CanonicalId value={workspaceId} /></AppLink>
+          {visible.length > 0 ? " · " : ""}
+        </>
+      ) : null}
+      {visible.length > 0 ? visible.join(" · ") : workspaceId ? null : "Task-scoped"}
+    </span>
+  );
 }
 
 function UsageTable({
