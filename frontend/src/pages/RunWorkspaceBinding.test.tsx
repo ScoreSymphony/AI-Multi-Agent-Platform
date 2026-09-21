@@ -55,6 +55,7 @@ describe("#1333 Run Workspace operator provenance", () => {
               category: "execution",
               code: "run_failed",
               message: "controlled failure",
+              retryable: false,
             },
           }}
         />
