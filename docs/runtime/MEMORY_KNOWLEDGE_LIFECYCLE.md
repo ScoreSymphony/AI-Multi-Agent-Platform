@@ -1,6 +1,6 @@
 # Memory and Knowledge content lifecycle
 
-Issue #251 defines the canonical northbound content-management contract for Memory and Knowledge. It builds on the replaceable data-provider boundaries from ADR 0002 and the lifecycle decisions in ADR 0007.
+The canonical northbound content-management contract defines Memory and Knowledge lifecycle behavior. It builds on the replaceable data-provider boundaries from ADR 0002 and the lifecycle decisions in ADR 0007.
 
 ## Boundary
 
@@ -66,7 +66,7 @@ A Knowledge source records at least:
 - content checksum where available
 - metadata
 
-Source inspection is available through provider-neutral `get_source` and `list_sources` operations. Providers predating #251 may explicitly return `unsupported_capability`; callers must not reach into private provider methods as a workaround.
+Source inspection is available through provider-neutral `get_source` and `list_sources` operations. Providers lacking an optional management capability may explicitly return `unsupported_capability`; callers must not reach into private provider methods as a workaround.
 
 ### Metadata update
 
@@ -128,7 +128,7 @@ Authorization policies receive canonical Memory origin/scope information and exa
 
 The Control Plane and CLI depend on the refined Memory/Knowledge provider contracts, not SQLite tables, local filesystem paths, vector-store IDs or provider-private helper methods.
 
-A provider that does not implement an optional #251 management capability fails explicitly with the canonical unsupported-capability error. Silent fallback to provider-private APIs is not allowed.
+A provider that does not implement an optional management capability fails explicitly with the canonical unsupported-capability error. Silent fallback to provider-private APIs is not allowed.
 
 ## CLI
 
