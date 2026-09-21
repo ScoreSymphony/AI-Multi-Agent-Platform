@@ -313,7 +313,9 @@ jobs:
             --rm --no-deps -T --build backup \
             verify "/backups/$AI_MAP_BACKUP_NAME"
 
-          docker compose -f docker-compose.yml down
+          # Destroy the original Compose containers, network and named data volume.
+          # The following restore must therefore depend only on the exported verified backup.
+          docker compose -f docker-compose.yml down -v
 
           if docker volume inspect "$AI_MAP_REPLACEMENT_VOLUME" >/dev/null 2>&1; then
             echo "replacement volume unexpectedly already exists" >&2
