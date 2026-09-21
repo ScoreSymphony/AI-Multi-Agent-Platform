@@ -46,6 +46,7 @@ function validateVersionFixture(version: string): string {
     appDocument.expo.version = version;
 
     mkdirSync(resolve(directory, "scripts"));
+    mkdirSync(resolve(directory, "src"));
     writeFileSync(
       resolve(directory, "package.json"),
       JSON.stringify(packageDocument),
@@ -61,6 +62,11 @@ function validateVersionFixture(version: string): string {
       readFileSync(resolve(ROOT, "scripts/validate-release-config.mjs"), "utf8"),
       "utf8",
     );
+    const identity = readFileSync(resolve(ROOT, "src/appIdentity.ts"), "utf8").replace(
+      /export const MOBILE_APP_VERSION = "[^"]+";/,
+      `export const MOBILE_APP_VERSION = "${version}";`,
+    );
+    writeFileSync(resolve(directory, "src/appIdentity.ts"), identity, "utf8");
 
     return execFileSync(
       process.execPath,
@@ -85,6 +91,10 @@ describe("Android release configuration", () => {
     const config = releaseConfig();
 
     expect(config.androidPackage).toBe("org.scoresymphony.aimultiagentplatform");
+    const identity = readFileSync(resolve(ROOT, "src/appIdentity.ts"), "utf8");
+    expect(identity).toContain(`MOBILE_APP_VERSION = "${config.version}"`);
+    expect(identity).toContain(`MOBILE_ANDROID_VERSION_CODE = ${config.versionCode}`);
+    expect(identity).toContain(`MOBILE_ANDROID_PACKAGE = "${config.androidPackage}"`);
     expect(Number.isInteger(config.versionCode)).toBe(true);
     expect(config.versionCode).toBeGreaterThan(0);
     expect(packageDocument.scripts["validate:release"]).toContain(
