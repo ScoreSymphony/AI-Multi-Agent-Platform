@@ -369,3 +369,130 @@ def test_mobile_fallback_pairing_abuse_is_partitioned_through_control_plane(
         assert valid.body["device"]["user_id"] == admin.user_id
 
     asyncio.run(scenario())
+
+
+def test_mobile_lifecycle_not_found_runtime_matches_openapi(tmp_path: Path) -> None:
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "platform",
+            secure_cookie=False,
+        )
+    )
+    admin = deployment.bootstrap_admin("mobile-not-found-admin", secrets.token_urlsafe(32))
+    credential = deployment.authentication.create_personal_access_token(
+        admin.user_id,
+        purpose="issue-1371",
+    )
+
+    other = deployment.authentication.create_local_user(
+        "mobile-not-found-other",
+        secrets.token_urlsafe(32),
+    )
+    other_pairing = deployment.authentication.mobile_pairing.create_challenge(
+        other.user_id,
+        "https://platform.example",
+    )
+    device_pairing = deployment.authentication.mobile_pairing.create_challenge(
+        other.user_id,
+        "https://platform.example",
+    )
+    other_device, _issued = deployment.authentication.mobile_pairing.consume_challenge(
+        device_pairing.pairing_id,
+        device_pairing.secret,
+        device_name="Other Android",
+        platform="android",
+    )
+
+    async def scenario() -> None:
+        openapi = await _public_request(
+            deployment,
+            "GET",
+            "/api/v1/openapi.json",
+        )
+        assert openapi.status == 200
+        error_ref = {"$ref": "#/components/responses/Error"}
+
+        operation_paths = {
+            "pairing": "/api/v1/auth/mobile-pairings/{pairing_id}:cancel",
+            "rename": "/api/v1/auth/mobile-devices/{device_id}:rename",
+            "revoke": "/api/v1/auth/mobile-devices/{device_id}:revoke",
+        }
+        for path_template in operation_paths.values():
+            path_item = openapi.body["paths"][path_template]
+            assert set(path_item) == {"post"}
+            responses = path_item["post"]["responses"]
+            for status in ("400", "401", "403", "404", "405", "429"):
+                assert responses[status] == error_ref
+
+        expected_mobile_paths = {
+            "/api/v1/auth/mobile-pairings",
+            "/api/v1/auth/mobile-pairings:consume",
+            "/api/v1/auth/mobile-pairings/{pairing_id}:cancel",
+            "/api/v1/auth/mobile-devices",
+            "/api/v1/auth/mobile-devices:revoke-all",
+            "/api/v1/auth/mobile-devices/{device_id}:rename",
+            "/api/v1/auth/mobile-devices/{device_id}:revoke",
+        }
+        assert {
+            path for path in openapi.body["paths"] if path.startswith("/api/v1/auth/mobile-")
+        } == expected_mobile_paths
+
+        unauthenticated = await _public_request(
+            deployment,
+            "POST",
+            "/api/v1/auth/mobile-devices/device_missing:revoke",
+        )
+        assert unauthenticated.status == 401
+        assert unauthenticated.body["code"] == "unauthorized"
+
+        cases = (
+            (
+                operation_paths["pairing"],
+                "/api/v1/auth/mobile-pairings/pairing_missing:cancel",
+                {},
+            ),
+            (
+                operation_paths["pairing"],
+                f"/api/v1/auth/mobile-pairings/{other_pairing.pairing_id}:cancel",
+                {},
+            ),
+            (
+                operation_paths["rename"],
+                "/api/v1/auth/mobile-devices/device_missing:rename",
+                {"display_name": "Missing Android"},
+            ),
+            (
+                operation_paths["rename"],
+                f"/api/v1/auth/mobile-devices/{other_device.device_id}:rename",
+                {"display_name": "Other Android renamed"},
+            ),
+            (
+                operation_paths["revoke"],
+                "/api/v1/auth/mobile-devices/device_missing:revoke",
+                {},
+            ),
+            (
+                operation_paths["revoke"],
+                f"/api/v1/auth/mobile-devices/{other_device.device_id}:revoke",
+                {},
+            ),
+        )
+        for path_template, request_path, body in cases:
+            response = await _request(
+                deployment,
+                credential.secret,
+                "POST",
+                request_path,
+                body=body,
+            )
+            assert response.status == 404, (request_path, response.body)
+            assert response.body["code"] == "not_found"
+            assert response.body["message"] == "authentication resource not found"
+            assert isinstance(response.body["request_id"], str)
+            assert isinstance(response.body["correlation_id"], str)
+            assert (
+                openapi.body["paths"][path_template]["post"]["responses"][str(response.status)]
+                == error_ref
+            )
+
+    asyncio.run(scenario())
