@@ -35,21 +35,15 @@ export function TraceExplorer({
 
   useEffect(() => {
     let active = true;
+    setWorkspaceByRunId({});
     if (!taskId) {
-      setWorkspaceByRunId({});
       return () => {
         active = false;
       };
     }
-    void client
-      .listTaskRuns(taskId, { limit: 100, sort: "created_at", direction: "desc" })
-      .then((page) => {
-        if (!active) return;
-        const bindings: Record<string, string> = {};
-        for (const run of page.items) {
-          if (run.workspace_id) bindings[run.id] = run.workspace_id;
-        }
-        setWorkspaceByRunId(bindings);
+    void loadTaskRunWorkspaceBindings(client, taskId)
+      .then((bindings) => {
+        if (active) setWorkspaceByRunId(bindings);
       })
       .catch(() => {
         if (active) setWorkspaceByRunId({});
@@ -411,6 +405,27 @@ function TraceNodeDetail({
       ) : null}
     </div>
   );
+}
+
+export async function loadTaskRunWorkspaceBindings(
+  client: Pick<ControlPlaneClient, "listTaskRuns">,
+  taskId: string,
+): Promise<Record<string, string>> {
+  const bindings: Record<string, string> = {};
+  let cursor: string | undefined;
+  do {
+    const page = await client.listTaskRuns(taskId, {
+      limit: 100,
+      cursor,
+      sort: "created_at",
+      direction: "desc",
+    });
+    for (const run of page.items) {
+      if (run.workspace_id) bindings[run.id] = run.workspace_id;
+    }
+    cursor = page.next_cursor ?? undefined;
+  } while (cursor);
+  return bindings;
 }
 
 export function TraceContext({
