@@ -1,6 +1,6 @@
 # Handoff async persistence
 
-Issue #892 moves canonical Handoff persistence out of asyncio request, agent, context and Control Plane hotpaths without replacing the #592/#651 Handoff lifecycle.
+Canonical Handoff persistence runs outside asyncio request, agent, context and Control Plane hotpaths without replacing the existing Handoff lifecycle.
 
 ## Runtime boundary
 
