@@ -1,8 +1,6 @@
 # Docker Compose single-server profile
 
-Issue: #1378
-
-This directory implements the existing #39 single-server topology as a replaceable Docker
+This directory implements the maintained single-server topology as a replaceable Docker
 Compose deployment choice. Docker container IDs, service names, networks, image tags and host
 ports are deployment metadata only; they do not become canonical platform identity.
 
