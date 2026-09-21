@@ -1,6 +1,6 @@
 # Single-server reference composition
 
-This directory contains one concrete deployment implementation for issue #39. It is an
+This directory contains the maintained single-server reference composition. It is an
 operator example over the canonical platform contracts, not a new platform architecture.
 
 The reference layout is:
@@ -18,7 +18,7 @@ reverse proxy / static frontend server
 
 The Control Plane remains the only canonical northbound API. SQLite and local file/workspace
 persistence have no network listener. The frontend and reverse proxy are optional: removing
-them returns to the Stage-1 Control-Plane-only profile without changing Task/Run state or
+them returns to the reference single-node Control-Plane-only profile without changing Task/Run state or
 contracts.
 
 ## Files
@@ -58,8 +58,8 @@ sudo install -o root -g ai-map -m 0640 \
 ```
 
 The example contains no secrets. If future deployment configuration needs secret references,
-keep their resolved material out of source control and follow #34 rather than embedding
-plaintext values in this file.
+keep their resolved material out of source control and follow the canonical SecretReference and
+configuration boundary rather than embedding plaintext values in this file.
 
 ## Build the optional frontend
 
@@ -138,7 +138,7 @@ Set CPU, memory, open-file, process and storage limits according to measured wor
 host service manager. A limit failure may make the service degraded/unready, but host resource
 limits do not become canonical Node/Task identity or scheduling metadata.
 
-The Stage-1 profile remains the fallback path: if the optional frontend or proxy is absent,
+The reference single-node profile remains the fallback path: if the optional frontend or proxy is absent,
 the loopback/local Control Plane can still start, pass readiness and execute the canonical
 reference smoke. Multiple schedulable Worker processes are intentionally not defined here;
-#14 owns the shared local/remote Worker and scheduling contracts.
+the canonical Node/Worker and scheduling contracts are documented by the advanced deployment surface.
