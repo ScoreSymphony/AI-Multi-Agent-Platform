@@ -1162,15 +1162,48 @@ try {
   const timelineCard = timelineHeading.locator("..");
   await timelineCard.locator("tbody tr").first().waitFor();
   await timelineCard.getByText(`run:${firstRunRunId}`, { exact: true }).first().waitFor();
-  const traceWorkspaceLink = observabilityRoute.locator(
-    `a[href="/workspaces/${firstRunResult.workspace_id}"]`,
-  ).first();
-  await traceWorkspaceLink.waitFor();
-  if ((await traceWorkspaceLink.getAttribute("href")) !== `/workspaces/${firstRunResult.workspace_id}`) {
-    throw new Error("Task-scoped observability did not retain the canonical Workspace correlation");
-  }
   if ((await timelineCard.getByText("No timeline entries", { exact: true }).count()) !== 0) {
     throw new Error("Observability rendered its empty state for the completed first-run Task");
+  }
+
+  // #1333: the generic first-run Step Runs are not RunWorkspaceBinding records. Re-target
+  // Observability to the real workspace-bound diagnostic Run above and prove that the public
+  // Run binding is surfaced as a canonical Workspace link even when telemetry itself omits it.
+  const diagnosticTimelineResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(
+        `/api/v1/tasks/${encodeURIComponent(diagnosticTask.id)}/timeline`,
+      )
+      && response.request().method() === "GET",
+  );
+  await page.getByLabel("Exact Task ID", { exact: true }).fill(diagnosticTask.id);
+  await (await waitForButton(page, "Open telemetry")).click();
+  const diagnosticTimelineResponse = await diagnosticTimelineResponsePromise;
+  if (!diagnosticTimelineResponse.ok()) {
+    throw new Error(
+      `Diagnostic observability timeline failed with ${diagnosticTimelineResponse.status()}: ${await diagnosticTimelineResponse.text()}`,
+    );
+  }
+  const diagnosticTimelinePayload = await diagnosticTimelineResponse.json();
+  if (
+    !diagnosticTimelinePayload.items?.some(
+      (item) =>
+        item.type === "event"
+        && item.subject_type === "run"
+        && item.subject_id === diagnosticRun.id,
+    )
+  ) {
+    throw new Error(
+      `Public diagnostic timeline did not retain canonical Run ${diagnosticRun.id}: ${JSON.stringify(diagnosticTimelinePayload)}`,
+    );
+  }
+  await observabilityRoute.locator(`code[title="${diagnosticTask.id}"]`).first().waitFor();
+  const traceWorkspaceLink = observabilityRoute.locator(
+    `a[href="/workspaces/${createdWorkspace.id}"]`,
+  ).first();
+  await traceWorkspaceLink.waitFor();
+  if ((await traceWorkspaceLink.getAttribute("href")) !== `/workspaces/${createdWorkspace.id}`) {
+    throw new Error("Task-scoped observability did not retain the bound Run Workspace correlation");
   }
 
   // Finish on the canonical operator status surface and distinguish normal
