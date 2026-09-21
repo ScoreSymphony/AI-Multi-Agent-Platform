@@ -19,6 +19,7 @@ from ai_multi_agent_platform.execution.budgets import (
     BudgetAdmissionOutcome,
     BudgetConsumptionSource,
     BudgetDimension,
+    BudgetReservation,
     InMemoryTaskBudgetStore,
     SQLiteTaskBudgetStore,
     TaskBudgetEnforcementService,
@@ -38,6 +39,29 @@ def _service(
 
 def _policy(*limits: TaskBudgetLimit, task_id: str = "task-a") -> TaskBudgetPolicy:
     return TaskBudgetPolicy(task_id=task_id, limits=limits, started_at=utc_now())
+
+
+class _ReconcileBetweenSnapshotReadsStore(InMemoryTaskBudgetStore):
+    """Deterministically expose the old split-read runtime-counter race."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._reconcile_after_list_id: str | None = None
+
+    def reconcile_after_next_list(self, reservation_id: str) -> None:
+        self._reconcile_after_list_id = reservation_id
+
+    def list_reservations(self, task_id: str) -> tuple[BudgetReservation, ...]:
+        reservations = super().list_reservations(task_id)
+        reservation_id = self._reconcile_after_list_id
+        if reservation_id is not None:
+            self._reconcile_after_list_id = None
+            self.reconcile_reservation(
+                reservation_id,
+                consumed_quantity=1.0,
+                add_to_runtime_counter=True,
+            )
+        return reservations
 
 
 @pytest.mark.asyncio
@@ -167,6 +191,44 @@ async def test_parallel_reservation_race_allows_exactly_one_claim() -> None:
 
     outcomes = await asyncio.gather(reserve(), reserve())
     assert sorted(outcomes) == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_runtime_counter_snapshot_does_not_double_count_reconciled_reservation() -> None:
+    store = _ReconcileBetweenSnapshotReadsStore()
+    service, _ = _service(store)
+    await service.put_policy(
+        _policy(
+            TaskBudgetLimit(
+                dimension=BudgetDimension.MODEL_CALLS,
+                limit=2.0,
+                source=BudgetConsumptionSource.RUNTIME_COUNTER,
+            )
+        )
+    )
+    first = await service.admit(
+        task_id="task-a",
+        action=BudgetActionKind.MODEL_CALL,
+        quantities={BudgetDimension.MODEL_CALLS: 1.0},
+    )
+    assert first.permitted is True
+    assert len(first.reservations) == 1
+
+    store.reconcile_after_next_list(first.reservations[0].id)
+    snapshot = await service.snapshot("task-a")
+    state = snapshot.for_dimension(BudgetDimension.MODEL_CALLS)
+    assert state is not None
+    assert state.consumed == 1.0
+    assert state.reserved == 0.0
+    assert state.remaining == 1.0
+    assert state.exhausted is False
+
+    second = await service.admit(
+        task_id="task-a",
+        action=BudgetActionKind.MODEL_CALL,
+        quantities={BudgetDimension.MODEL_CALLS: 1.0},
+    )
+    assert second.permitted is True
 
 
 @pytest.mark.asyncio
