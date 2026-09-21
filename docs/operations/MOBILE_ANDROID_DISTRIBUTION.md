@@ -1,8 +1,13 @@
 # Android APK distribution
 
 Mobile baseline: optional mobile client profile
-Terminal physical-device acceptance: validated separately from distribution workflow acceptance
-The Android companion is distributed directly through GitHub Releases. Google Play, an app-store
+Distribution status: signed `mobile-v0.1.0` and `mobile-v0.1.1` artifacts have been published
+Terminal physical-device/update acceptance: validated separately from distribution workflow acceptance
+
+The Android companion is distributed directly through GitHub Releases. Published signed APKs prove
+the distribution/signing path; they do not by themselves establish complete data-preserving
+N -> N+1 update support. That support remains acceptance-gated on retained real-device update
+evidence and is not part of the required platform V1 baseline. Google Play, an app-store
 account, Expo EAS and any other paid build/distribution service are not required.
 
 ## Release identity
