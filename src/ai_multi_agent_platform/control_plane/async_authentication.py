@@ -36,6 +36,10 @@ from .authentication import (
 )
 from .http import HTTPRequest, HTTPResponse
 from .models import APIException, api_exception_from_contract
+from .mobile_authentication import (
+    handle_authenticated_mobile_auth_route_async,
+    handle_public_mobile_auth_route_async,
+)
 from .release_api import AuthenticatedControlPlaneHTTP as _ReleaseAuthenticatedControlPlaneHTTP
 
 
@@ -238,6 +242,16 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
         request_id: str,
         correlation_id: str,
     ) -> HTTPResponse:
+        mobile_response = await handle_public_mobile_auth_route_async(
+            self,
+            request,
+            relative,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+        if mobile_response is not None:
+            return mobile_response
+
         if request.method == "POST" and relative == "/auth/bootstrap-admin":
             username = _required_string(request.body, "username")
             password = _required_string(request.body, "password")
@@ -349,6 +363,18 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
                 correlation_id=correlation_id,
             )
         user_id = actor.identity.actor_id
+
+        mobile_response = await handle_authenticated_mobile_auth_route_async(
+            self,
+            request,
+            relative,
+            actor,
+            user_id=user_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+        if mobile_response is not None:
+            return mobile_response
 
         if request.method == "GET" and relative == "/auth/sessions":
             sessions = await self._runtime_authentication.list_sessions(user_id)
