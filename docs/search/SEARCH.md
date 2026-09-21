@@ -303,7 +303,7 @@ The current canonical query supports:
 - pagination and deterministic sorting;
 - explicit unsupported-capability responses for semantic/hybrid modes on the local provider.
 
-Later domains are added only after their owning canonical APIs and privacy contracts are stable. Search must not invent a second schema authority for Memory, Knowledge, Nodes/Workers, Conversations, Notifications, Templates, Repository/Git, Verification, Organizations or other future domains.
+Any additional domain is indexed only through its owning canonical API and privacy contract. Search must not invent a second schema authority for Memory, Knowledge, Nodes/Workers, Conversations, Notifications, Templates, Repository/Git, Verification, Organizations or any other domain.
 
 ## CLI and frontend clients
 
@@ -390,23 +390,10 @@ For registered actor-filtered domains, an internal rebuild enumerator may expose
 - The baseline has no dependency on Registry connectivity, embeddings, vector databases or paid search services.
 - A failed rebuild does not make stale provider state authoritative; the request fails rather than silently serving a potentially incorrect authorization-sensitive snapshot as fresh canonical Search.
 
-## Remaining #45 integrations
+## Extension boundary
 
-The secure Search foundation, Task/reference/Event indexing, progressive registration bridge, Model/Capability inventory support, Automation/Approval/File/Plugin/Usage/Evaluation/Connector discovery, Task-management filtering and CLI/frontend clients now establish one canonical discovery path across the currently stable domains.
+The secure Search foundation, canonical reference/Event indexing, registered-domain bridge, Task-management filtering and shared CLI/frontend clients establish one canonical discovery path. Domain coverage is intentionally derived from the currently composed canonical resources rather than from an issue-status list in this document.
 
-Remaining progressive work is intentionally gated on the owning canonical APIs and privacy contracts:
+Memory/Knowledge and Nodes/Workers rebuild from their canonical northbound resources and preserve authorization-safe discovery. Worker Jobs intentionally remain outside global Search because dispatch/reservation evidence is not a discovery catalog. Other domains may participate only when their owner exposes a privacy-safe canonical projection with correct retention/deletion and authorization semantics.
 
-Memory/Knowledge and Nodes/Workers are no longer remaining integrations: they rebuild from their canonical northbound resources and preserve authorization-safe discovery. Worker Jobs intentionally remain outside global Search because dispatch/reservation evidence is not a discovery catalog.
-
-Additional canonical-domain integrations remain governed by their owning privacy and lifecycle contracts, including:
-
-- Conversations/Messages with retention/deletion propagation (#72);
-- Notifications through the recipient-scoped canonical projection;
-- Templates (#78);
-- Repository/Git and durable external-resource references (#82/#44);
-- Organizations/Memberships with membership-removal/suspension isolation (#87);
-- Organization-scoped Connector Connections after #87 visibility semantics are available;
-- durable/event-driven indexing, batching and stale-index checkpoints for larger deployments as an optimization over the correctness-first rebuild path;
-- optional semantic/hybrid provider adapters without making them baseline requirements.
-
-External Registry/Marketplace search remains a separate optional distribution concern and is not required for local platform Search.
+Durable/event-driven indexing, batching, stale-index checkpoints and optional semantic/hybrid providers are deployment or provider optimizations over the correctness-first rebuild path; none may create a second lifecycle or authorization authority. External Registry/Marketplace search remains a separate optional distribution concern and is not required for local platform Search.
