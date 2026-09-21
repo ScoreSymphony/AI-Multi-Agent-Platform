@@ -210,7 +210,6 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
     ) == ["failed or over-budget lanes: integration"]
 
 
-
 def test_runtime_report_loaders_prefer_latest_rerun_attempt(tmp_path: Path) -> None:
     pytest_reports = tmp_path / "pytest"
     validation_reports = tmp_path / "validation"
