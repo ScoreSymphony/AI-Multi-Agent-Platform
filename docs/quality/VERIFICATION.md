@@ -1,14 +1,14 @@
 # Runtime Verification and Review
 
-Issue #86 introduces a platform-owned verification layer for deciding whether one concrete Task result is acceptable before final completion.
+The platform-owned Verification layer decides whether one concrete Task result is acceptable before final completion.
 
 ## Boundary
 
 Verification is intentionally distinct from two existing concerns:
 
-- **Authorization / Approval (#15):** whether a proposed sensitive action may execute.
-- **Evaluation (#19):** repeatable quality/regression measurement across configurations.
-- **Verification (#86):** whether the exact Result/Artifact revision produced by one runtime Task/Run satisfies its completion policy.
+- **Authorization / Approval:** whether a proposed sensitive action may execute.
+- **Evaluation:** repeatable quality/regression measurement across configurations.
+- **Verification:** whether the exact Result/Artifact revision produced by one runtime Task/Run satisfies its completion policy.
 
 Approval never certifies output quality. Verification never grants permission for a later privileged action.
 
@@ -104,7 +104,7 @@ SQLite is a reference persistence implementation, not a semantic dependency. The
 
 ## Control Plane and human review
 
-`ai_multi_agent_platform.verification.control_plane.register_verification_control_plane(...)` attaches #86 to the generic registration seam owned by #32 instead of creating a second router or API authority. It registers three read collections:
+`ai_multi_agent_platform.verification.control_plane.register_verification_control_plane(...)` attaches Verification to the generic Control Plane registration seam instead of creating a second router or API authority. It registers three read collections:
 
 - `verifications`: canonical request/result history;
 - `verification-reviews`: pending human-review queue;
@@ -118,7 +118,7 @@ It also registers the canonical human-review commands:
 
 The existing Control Plane exposes these registrations through its normal `/api/v1/...` collection routes, generic `/api/v1/commands/...` command route and OpenAPI extension metadata. Verification therefore does not duplicate HTTP, versioning or OpenAPI machinery.
 
-Generic collection authorization is followed by object-scoped authorization against the canonical owning Task. Task owner type/ID and project ID are propagated to the existing #15 authorization provider. Human-review mutations also bind the authorization request to a digest of the submitted command payload. Unauthorized Task resources are filtered from list/queue results and fail closed on direct read or mutation.
+Generic collection authorization is followed by object-scoped authorization against the canonical owning Task. Task owner type/ID and project ID are propagated to the canonical authorization provider. Human-review mutations also bind the authorization request to a digest of the submitted command payload. Unauthorized Task resources are filtered from list/queue results and fail closed on direct read or mutation.
 
 The authenticated Control Plane principal becomes the canonical human verifier identity. Optional review comments become structured findings, and submitted evidence Artifact IDs are preserved on the `VerificationResult`. Human reviewers remain read-only verification actors; recording an accepted result does not itself grant merge/deploy/admin authority.
 
@@ -128,25 +128,25 @@ The Control Plane still does **not** mutate Task completion directly. It records
 
 The Control Plane extension is deliberately imported from the `verification.control_plane` submodule rather than re-exported from `verification.__init__`. The kernel imports the Verification package itself, so a top-level re-export would create an avoidable `verification -> control_plane -> kernel -> verification` import cycle.
 
-## Canonical audit and #16 observability
+## Canonical audit and observability
 
 `VerificationService` appends canonical `VerificationAuditEvent` records for policy registration, initial/reverification requests, observed request expiry and recorded results. These events preserve IDs, exact subject digest/revision, policy/stage, verifier classification, outcome, evidence references and trace context while deliberately excluding human comment text, finding prose and Artifact bodies.
 
 `SqliteVerificationService` persists this audit sequence together with Verification state and validates it on restore. Audit history is therefore restart-safe evidence, not a transient telemetry buffer.
 
-`VerificationTimelineReader` in `ai_multi_agent_platform.verification.observability` projects canonical audit facts into the existing #16 Control Plane timeline seam. The projection is one-way: #16 telemetry/timeline data never feeds completion assessment and is never a substitute for canonical Verification state. Replacing an exporter or observability backend therefore cannot alter acceptance semantics.
+`VerificationTimelineReader` in `ai_multi_agent_platform.verification.observability` projects canonical audit facts into the existing Control Plane timeline seam. The projection is one-way: telemetry/timeline data never feeds completion assessment and is never a substitute for canonical Verification state. Replacing an exporter or observability backend therefore cannot alter acceptance semantics.
 
 The audit and observability submodules are intentionally not made lifecycle authorities. They can expose what happened; only Verification policy evaluates acceptance, and only `PlatformKernel` mutates Task lifecycle state.
 
 ## Reviewer-Agent runtime
 
-`ai_multi_agent_platform.verification.reviewer_agent.ReviewerAgentRuntime` binds one pending Agent verification request to the existing #33 `AgentRuntime`. A reviewer is therefore an ordinary versioned Agent execution rather than a special private review process.
+`ai_multi_agent_platform.verification.reviewer_agent.ReviewerAgentRuntime` binds one pending Agent verification request to the existing `AgentRuntime`. A reviewer is therefore an ordinary versioned Agent execution rather than a special private review process.
 
 Before an AgentRun is created, the runtime resolves the exact Agent revision, selected model/provider and selected capability versions, constructs the canonical `VerifierIdentity`, and calls `VerificationService.validate_verifier()`. Independence rules are therefore enforced before reviewer execution starts rather than only when its result is submitted.
 
 The exact review obligation is snapshotted into `AgentRunRecord.verification_context`, including Verification ID, policy/stage, exact subject type/ID/revision/digest and the resolved reviewer identity. Once non-empty, this verification context cannot be rewritten when the AgentRun is finished. Caller-supplied Task context also cannot override the reserved canonical `verification` context.
 
-When policy requires a read-only reviewer, every selected capability must be provably side-effect-free. With a canonical CapabilityRegistry attached, the reviewer runtime resolves each selected capability and requires `SideEffectClassification.NONE`. If read-only safety cannot be established, reviewer start fails closed. This is a Verification independence check, not a replacement for #15: actual capability use remains subject to normal authorization/approval enforcement.
+When policy requires a read-only reviewer, every selected capability must be provably side-effect-free. With a canonical CapabilityRegistry attached, the reviewer runtime resolves each selected capability and requires `SideEffectClassification.NONE`. If read-only safety cannot be established, reviewer start fails closed. This is a Verification independence check, not a replacement for Authorization: actual capability use remains subject to normal authorization/approval enforcement.
 
 Only a successfully finished, still-canonically-bound AgentRun may submit a reviewer result. `complete_review()` converts that execution identity into the canonical `VerificationResult` through `VerificationService.record_agent_review()`. The reviewer runtime never calls `complete_task()` and cannot turn a waiting Task into succeeded state; the kernel must still re-evaluate completion separately.
 
@@ -184,13 +184,13 @@ Like the reviewer bridge, the repair runtime is imported from its explicit submo
 
 ## Security
 
-Verification records are not security approvals. Reviewer Artifact/Workspace access and all repair side effects must still pass the normal #15 authorization/approval boundary.
+Verification records are not security approvals. Reviewer Artifact/Workspace access and all repair side effects must still pass the normal authorization/approval boundary.
 
 A policy-level `read_only` reviewer requirement is enforced by reviewer-runtime preflight when selected capability safety can be proven from canonical capability definitions. It does not grant access, bypass capability authorization or turn a verification pass into permission for a later privileged action.
 
 ## Current implementation slice
 
-The current #86 implementation provides:
+The current Verification implementation provides:
 
 - canonical models and exact subject binding;
 - policy registration and scoped request creation;
@@ -210,7 +210,7 @@ The current #86 implementation provides:
 - registered Control Plane read/history/review surfaces;
 - authorized human accept/reject/request-changes commands with Task owner/project scope and payload digest binding;
 - retry-safe human review identity/evidence/history behavior;
-- canonical content-safe Verification audit history and #16 timeline projection;
+- canonical content-safe Verification audit history and observability timeline projection;
 - reviewer-Agent runtime binding with pre-start independence/read-only enforcement and immutable exact-subject context;
 - canonical bounded repair execution through ordinary Plan/Step/Run kernel operations;
 - end-to-end repair-to-new-subject-to-reverification coverage;
@@ -219,7 +219,7 @@ The current #86 implementation provides:
 - replacement-conformance coverage across replaceable orchestrators, reviewer models/providers and external Verification providers;
 - focused regression tests for core, kernel-gate, persistence/recovery, Control Plane authorization, observability, reviewer-Agent, repair and replacement semantics.
 
-The implementation work owned directly by #86 is complete. Follow-up integrations remain intentionally owned by their respective issues, including #19 evaluation consumption, #75 review notifications, #82 repository diff/test evidence and #78 reusable policy templates. Those integrations may consume canonical Verification facts but do not own Verification or Task completion semantics.
+Evaluation consumption, review notifications, repository diff/test evidence and reusable policy templates may consume canonical Verification facts through their maintained domain boundaries, but they do not own Verification or Task completion semantics.
 
 ## Team reviewer semantics
 
