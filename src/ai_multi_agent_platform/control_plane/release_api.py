@@ -9,11 +9,7 @@ from uuid import uuid4
 from ai_multi_agent_platform.contracts.errors import ContractError
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .extensions import (
-    ControlPlaneModule,
-    ControlPlaneRoute,
-    _ensure_method_not_allowed_responses,
-)
+from .extensions import ControlPlaneModule, ControlPlaneRoute
 from .http import (
     ASGIReceive,
     ASGISend,
@@ -25,6 +21,7 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException
+from .openapi_errors import ensure_method_not_allowed_responses
 from .module_registry import install_control_plane_modules
 from .northbound_errors import api_exception_for_boundary, log_unexpected_boundary_error
 from .task_project_reassignment import (
@@ -351,7 +348,7 @@ def build_openapi(
     )
     _augment_openapi(specification)
     _augment_generated_transport_contract(specification)
-    return _ensure_method_not_allowed_responses(specification)
+    return ensure_method_not_allowed_responses(specification)
 
 
 __all__ = [
