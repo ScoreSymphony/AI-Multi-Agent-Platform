@@ -18,7 +18,7 @@ from ai_multi_agent_platform.security.first_user_bootstrap import (
 from .async_authentication import AuthenticatedControlPlaneHTTP as _AuthenticatedControlPlaneHTTP
 from .authentication import _header, _relative_path, _required_string
 from .http import HTTPRequest, HTTPResponse
-from .models import APIException, api_exception_from_contract
+from .models import API_VERSION, APIException, api_exception_from_contract
 
 BOOTSTRAP_STATUS_PATH = "/auth/bootstrap-status"
 
@@ -44,13 +44,17 @@ class AuthenticatedControlPlaneHTTP(_AuthenticatedControlPlaneHTTP):
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
         relative = _relative_path(request.path)
-        if (
-            self._first_user_bootstrap is not None
-            and request.method == "GET"
-            and relative == BOOTSTRAP_STATUS_PATH
-        ):
+        if self._first_user_bootstrap is not None and relative == BOOTSTRAP_STATUS_PATH:
             request_id = _header(request.headers, "x-request-id") or f"request_{uuid4()}"
             correlation_id = _header(request.headers, "x-correlation-id") or request_id
+            if request.method != "GET":
+                return self._error(
+                    status=405,
+                    code="method_not_allowed",
+                    message="method not allowed",
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
             try:
                 status = await self._first_user_bootstrap.status()
                 return self._response(
@@ -75,7 +79,20 @@ class AuthenticatedControlPlaneHTTP(_AuthenticatedControlPlaneHTTP):
             except APIException as exc:
                 return self._error_response(exc, request_id, correlation_id)
 
-        return await super().handle(request)
+        response = await super().handle(request)
+        if (
+            self._first_user_bootstrap is not None
+            and request.method == "GET"
+            and relative == "/openapi.json"
+            and response.status == 200
+            and isinstance(response.body, dict)
+        ):
+            return HTTPResponse(
+                status=response.status,
+                body=_augment_first_user_bootstrap_openapi(response.body),
+                headers=response.headers,
+            )
+        return response
 
     async def _public_auth_route_async(
         self,
@@ -129,6 +146,24 @@ class AuthenticatedControlPlaneHTTP(_AuthenticatedControlPlaneHTTP):
             request_id=request_id,
             correlation_id=correlation_id,
         )
+
+
+def _augment_first_user_bootstrap_openapi(specification: dict[str, Any]) -> dict[str, Any]:
+    document = dict(specification)
+    paths = dict(document.get("paths", {}))
+    paths[f"/api/{API_VERSION}{BOOTSTRAP_STATUS_PATH}"] = {
+        "get": {
+            "operationId": "getFirstUserBootstrapStatus",
+            "description": "Return public first-user initialization state.",
+            "security": [],
+            "responses": {
+                "200": {"description": "First-user bootstrap status"},
+                "500": {"$ref": "#/components/responses/Error"},
+            },
+        }
+    }
+    document["paths"] = paths
+    return document
 
 
 __all__ = ["BOOTSTRAP_STATUS_PATH", "AuthenticatedControlPlaneHTTP"]

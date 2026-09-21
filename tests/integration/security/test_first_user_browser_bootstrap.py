@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from ai_multi_agent_platform.control_plane.first_user_bootstrap import AuthenticatedControlPlaneHTTP
-from ai_multi_agent_platform.control_plane.http import HTTPRequest
+from ai_multi_agent_platform.control_plane.http import ControlPlaneASGI, HTTPRequest
 from ai_multi_agent_platform.security import LocalAuthenticationService, ScryptPasswordHasher
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
@@ -181,3 +181,64 @@ def test_setup_resources_and_mutations_remain_authenticated_during_bootstrap(tmp
 
     assert setup_status.status == 401
     assert provision.status == 401
+
+
+def test_bootstrap_status_route_preserves_405_and_openapi_ownership(tmp_path) -> None:
+    http, _authentication, _authorization = _http(tmp_path)
+    headers = {
+        "x-request-id": "request-1330-bootstrap",
+        "x-correlation-id": "correlation-1330-bootstrap",
+    }
+
+    wrong_method = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/bootstrap-status",
+                headers=headers,
+            )
+        )
+    )
+    assert wrong_method.status == 405
+    assert wrong_method.body["code"] == "method_not_allowed"
+    assert wrong_method.body["request_id"] == "request-1330-bootstrap"
+    assert wrong_method.body["correlation_id"] == "correlation-1330-bootstrap"
+
+    openapi = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
+    assert openapi.status == 200
+    status_route = openapi.body["paths"]["/api/v1/auth/bootstrap-status"]
+    assert set(status_route) == {"get"}
+    assert status_route["get"]["security"] == []
+
+
+def test_bootstrap_status_asgi_pre_body_classification_returns_405(tmp_path) -> None:
+    http, _authentication, _authorization = _http(tmp_path)
+    app = ControlPlaneASGI(http)
+    messages = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"{", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    _run(
+        app(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/v1/auth/bootstrap-status",
+                "query_string": b"",
+                "headers": [
+                    (b"x-request-id", b"request-1330-bootstrap-asgi"),
+                    (b"x-correlation-id", b"correlation-1330-bootstrap-asgi"),
+                    (b"content-type", b"application/json"),
+                ],
+            },
+            receive,
+            send,
+        )
+    )
+
+    start = next(message for message in messages if message["type"] == "http.response.start")
+    assert start["status"] == 405
