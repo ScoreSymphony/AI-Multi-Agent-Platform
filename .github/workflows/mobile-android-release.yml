@@ -1,0 +1,461 @@
+name: Mobile Android release
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-android-release.yml"
+      - "docs/operations/MOBILE_ANDROID_DISTRIBUTION.md"
+      - "tests/release/test_mobile_android_release_contract.py"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic mobile app version already configured in mobile/app.json
+        required: true
+        type: string
+      publish:
+        description: Publish the verified APK as an official GitHub Release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-android-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+
+      - name: Install mobile dependencies from committed lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate release configuration and dependency graph
+        env:
+          AI_MAP_MOBILE_EXPECT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/mobile
+          node scripts/validate-release-config.mjs | tee .artifacts/mobile/release-config.json
+          npm ls --all --json > .artifacts/mobile/npm-dependency-tree.json
+
+      - name: Typecheck and test mobile client
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm test
+          npm run check:expo
+
+      - name: Generate native Android project
+        env:
+          CI: "1"
+        run: npm run prebuild:android
+
+      - name: Keep release assembly unsigned until the signing job
+        run: npm run prepare:android-release
+
+      - name: Assemble production release APK
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Verify unsigned APK metadata
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -x "$BUILD_TOOLS/aapt"
+
+          mapfile -t APKS < <(
+            find android/app/build/outputs/apk/release -maxdepth 1 -type f -name "*.apk" -print
+          )
+          test "${#APKS[@]}" -eq 1
+
+          APK="${APKS[0]}"
+          EXPECTED_PACKAGE="$(node -p "require('./app.json').expo.android.package")"
+          EXPECTED_VERSION="$(node -p "require('./app.json').expo.version")"
+          EXPECTED_CODE="$(node -p "require('./app.json').expo.android.versionCode")"
+          BADGING="$("$BUILD_TOOLS/aapt" dump badging "$APK")"
+          PACKAGE_LINE="$(sed -n '1p' <<<"$BADGING")"
+          EXPECTED_MIN_SDK="24"
+          ACTUAL_MIN_SDK="$(
+            sed -n "s/^sdkVersion:'\\([0-9][0-9]*\\)'$/\\1/p" <<<"$BADGING" | head -n 1
+          )"
+
+          grep -F "name='${EXPECTED_PACKAGE}'" <<<"$PACKAGE_LINE"
+          grep -F "versionName='${EXPECTED_VERSION}'" <<<"$PACKAGE_LINE"
+          grep -F "versionCode='${EXPECTED_CODE}'" <<<"$PACKAGE_LINE"
+          if [ "$ACTUAL_MIN_SDK" != "$EXPECTED_MIN_SDK" ]; then
+            echo "::error::APK minimum SDK mismatch: expected API $EXPECTED_MIN_SDK (Android 7), got ${ACTUAL_MIN_SDK:-missing}"
+            exit 1
+          fi
+
+          cp "$APK" .artifacts/mobile/android-release-unsigned.apk
+          printf '%s\n' "$BADGING" > .artifacts/mobile/aapt-badging.txt
+          sha256sum .artifacts/mobile/android-release-unsigned.apk             > .artifacts/mobile/android-release-unsigned.sha256
+
+      - name: Upload unsigned build and provenance evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-android-unsigned-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            mobile/.artifacts/mobile/android-release-unsigned.apk
+            mobile/.artifacts/mobile/android-release-unsigned.sha256
+            mobile/.artifacts/mobile/aapt-badging.txt
+            mobile/.artifacts/mobile/release-config.json
+            mobile/.artifacts/mobile/npm-dependency-tree.json
+
+  test-signing:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download unsigned APK
+        uses: actions/download-artifact@v5
+        with:
+          name: mobile-android-unsigned-${{ github.sha }}
+          path: .artifacts/mobile
+
+      - name: Sign and verify with an ephemeral CI identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          test -x "$APKSIGNER"
+          test -x "$ZIPALIGN"
+
+          KEYSTORE="$RUNNER_TEMP/mobile-ci-test.p12"
+          WRONG_KEYSTORE="$RUNNER_TEMP/mobile-ci-wrong.p12"
+          keytool -genkeypair -noprompt             -keystore "$KEYSTORE" -storetype PKCS12             -storepass changeit -keypass changeit -alias mobile-ci             -keyalg RSA -keysize 2048 -validity 30             -dname "CN=Mobile CI Test Signer,O=AI Multi-Agent Platform,C=DE"
+          keytool -genkeypair -noprompt             -keystore "$WRONG_KEYSTORE" -storetype PKCS12             -storepass changeit -keypass changeit -alias mobile-ci-wrong             -keyalg RSA -keysize 2048 -validity 30             -dname "CN=Wrong Mobile CI Test Signer,O=AI Multi-Agent Platform,C=DE"
+
+          "$ZIPALIGN" -f -p 4             .artifacts/mobile/android-release-unsigned.apk             .artifacts/mobile/android-release-aligned.apk
+          "$APKSIGNER" sign             --ks "$KEYSTORE" --ks-key-alias mobile-ci             --ks-pass pass:changeit --key-pass pass:changeit             --out .artifacts/mobile/android-release-ci-signed.apk             .artifacts/mobile/android-release-aligned.apk
+          "$APKSIGNER" verify --verbose --print-certs             .artifacts/mobile/android-release-ci-signed.apk             | tee .artifacts/mobile/ci-signature-verification.txt
+
+          "$APKSIGNER" sign             --ks "$WRONG_KEYSTORE" --ks-key-alias mobile-ci-wrong             --ks-pass pass:changeit --key-pass pass:changeit             --out .artifacts/mobile/android-release-wrong-signer.apk             .artifacts/mobile/android-release-aligned.apk
+
+          GOOD_FINGERPRINT="$(
+            "$APKSIGNER" verify --print-certs .artifacts/mobile/android-release-ci-signed.apk               | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1
+          )"
+          WRONG_FINGERPRINT="$(
+            "$APKSIGNER" verify --print-certs .artifacts/mobile/android-release-wrong-signer.apk               | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1
+          )"
+
+          test -n "$GOOD_FINGERPRINT"
+          test -n "$WRONG_FINGERPRINT"
+          test "$GOOD_FINGERPRINT" != "$WRONG_FINGERPRINT"
+          printf '%s\n' "$GOOD_FINGERPRINT" > .artifacts/mobile/ci-signer-sha256.txt
+          sha256sum .artifacts/mobile/android-release-ci-signed.apk             > .artifacts/mobile/ci-SHA256SUMS.txt
+
+      - name: Upload safe signing evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-android-ci-signed-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            .artifacts/mobile/android-release-ci-signed.apk
+            .artifacts/mobile/ci-SHA256SUMS.txt
+            .artifacts/mobile/ci-signature-verification.txt
+            .artifacts/mobile/ci-signer-sha256.txt
+
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish &&
+      github.ref == 'refs/heads/main'
+    needs:
+      - build
+      - test-signing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mobile-production
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download exact unsigned APK
+        uses: actions/download-artifact@v5
+        with:
+          name: mobile-android-unsigned-${{ github.sha }}
+          path: .artifacts/mobile
+
+      - name: Production sign, verify lineage and prepare release assets
+        id: prepare
+        shell: bash
+        env:
+          MOBILE_ANDROID_KEYSTORE_B64: ${{ secrets.MOBILE_ANDROID_KEYSTORE_B64 }}
+          MOBILE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.MOBILE_ANDROID_KEYSTORE_PASSWORD }}
+          MOBILE_ANDROID_KEY_ALIAS: ${{ secrets.MOBILE_ANDROID_KEY_ALIAS }}
+          MOBILE_ANDROID_KEY_PASSWORD: ${{ secrets.MOBILE_ANDROID_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          set +x
+
+          for REQUIRED in             MOBILE_ANDROID_KEYSTORE_B64             MOBILE_ANDROID_KEYSTORE_PASSWORD             MOBILE_ANDROID_KEY_ALIAS             MOBILE_ANDROID_KEY_PASSWORD
+          do
+            if [ -z "${!REQUIRED:-}" ]; then
+              echo "::error::Missing required production signing secret: $REQUIRED"
+              exit 1
+            fi
+          done
+
+          echo "::add-mask::$MOBILE_ANDROID_KEYSTORE_PASSWORD"
+          echo "::add-mask::$MOBILE_ANDROID_KEY_PASSWORD"
+
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          test -x "$APKSIGNER"
+          test -x "$ZIPALIGN"
+
+          VERSION="$(python -c 'import json; print(json.load(open("mobile/app.json"))["expo"]["version"])')"
+          VERSION_CODE="$(python -c 'import json; print(json.load(open("mobile/app.json"))["expo"]["android"]["versionCode"])')"
+          PACKAGE="$(python -c 'import json; print(json.load(open("mobile/app.json"))["expo"]["android"]["package"])')"
+          test "$VERSION" = "${{ inputs.version }}"
+          test "$PACKAGE" = "org.scoresymphony.aimultiagentplatform"
+
+          TAG="mobile-v$VERSION"
+          ASSET="AI-Multi-Agent-Mobile-v$VERSION.apk"
+          RELEASE_DIR=".release-mobile"
+          mkdir -p "$RELEASE_DIR"
+
+          RELEASE_MODE="create"
+          EXISTING_RELEASE="$RUNNER_TEMP/mobile-existing-release.json"
+          if gh release view "$TAG" --json isDraft,tagName,targetCommitish > "$EXISTING_RELEASE" 2>/dev/null
+          then
+            if [ "$(jq -r '.isDraft' "$EXISTING_RELEASE")" != "true" ]; then
+              echo "::error::Published release $TAG already exists"
+              exit 1
+            fi
+            if [ "$(jq -r '.tagName' "$EXISTING_RELEASE")" != "$TAG" ]; then
+              echo "::error::Existing draft release tag does not match $TAG"
+              exit 1
+            fi
+            if [ "$(jq -r '.targetCommitish' "$EXISTING_RELEASE")" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing draft release $TAG targets a different source commit"
+              exit 1
+            fi
+            RELEASE_MODE="resume"
+          fi
+
+          TAG_REFS="$RUNNER_TEMP/mobile-tag-refs.json"
+          gh api --paginate \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG?per_page=100" \
+            > "$TAG_REFS"
+          TAG_SHA="$(
+            jq -sr --arg ref "refs/tags/$TAG" \
+              '[.[][] | select(.ref == $ref)][0].object.sha // ""' "$TAG_REFS"
+          )"
+          if [ "$RELEASE_MODE" = "resume" ]; then
+            if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing draft tag $TAG points to a different source commit"
+              exit 1
+            fi
+          elif [ -n "$TAG_SHA" ]; then
+            echo "::error::Git tag $TAG already exists without a matching resumable draft"
+            exit 1
+          fi
+
+          KEYSTORE="$RUNNER_TEMP/mobile-production.p12"
+          printf '%s' "$MOBILE_ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          "$ZIPALIGN" -f -p 4             .artifacts/mobile/android-release-unsigned.apk             "$RUNNER_TEMP/mobile-release-aligned.apk"
+          "$APKSIGNER" sign             --ks "$KEYSTORE"             --ks-key-alias "$MOBILE_ANDROID_KEY_ALIAS"             --ks-pass env:MOBILE_ANDROID_KEYSTORE_PASSWORD             --key-pass env:MOBILE_ANDROID_KEY_PASSWORD             --out "$RELEASE_DIR/$ASSET"             "$RUNNER_TEMP/mobile-release-aligned.apk"
+          "$APKSIGNER" verify --verbose --print-certs "$RELEASE_DIR/$ASSET"             | tee "$RELEASE_DIR/apk-signature-verification.txt"
+
+          SIGNER_FINGERPRINT="$(
+            "$APKSIGNER" verify --print-certs "$RELEASE_DIR/$ASSET"               | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1
+          )"
+          test -n "$SIGNER_FINGERPRINT"
+
+          DEPENDENCY_TREE_ASSET="npm-dependency-tree.json"
+          cp .artifacts/mobile/npm-dependency-tree.json "$RELEASE_DIR/$DEPENDENCY_TREE_ASSET"
+          DEPENDENCY_TREE_SHA256="$(sha256sum "$RELEASE_DIR/$DEPENDENCY_TREE_ASSET" | cut -d' ' -f1)"
+          test -n "$DEPENDENCY_TREE_SHA256"
+
+          RELEASE_HISTORY="$RUNNER_TEMP/github-releases.json"
+          gh api --paginate \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RELEASE_HISTORY"
+          PREVIOUS_TAG="$(
+            jq -sr \
+              '[.[][] | select((.tag_name | startswith("mobile-v")) and (.draft == false))][0].tag_name // ""' \
+              "$RELEASE_HISTORY"
+          )"
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            PREVIOUS_DIR="$RUNNER_TEMP/previous-mobile-release"
+            mkdir -p "$PREVIOUS_DIR"
+            gh release download "$PREVIOUS_TAG"               --pattern mobile-release.json               --dir "$PREVIOUS_DIR"
+            CURRENT_CODE="$VERSION_CODE"             CURRENT_PACKAGE="$PACKAGE"             CURRENT_SIGNER="$SIGNER_FINGERPRINT"             PREVIOUS_MANIFEST="$PREVIOUS_DIR/mobile-release.json"             python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          previous = json.loads(
+              Path(os.environ["PREVIOUS_MANIFEST"]).read_text(encoding="utf-8")
+          )
+          current_code = int(os.environ["CURRENT_CODE"])
+          previous_code = int(previous["android_version_code"])
+          if current_code <= previous_code:
+              raise SystemExit(
+                  f"android versionCode must increase: current={current_code}, previous={previous_code}"
+              )
+          if os.environ["CURRENT_PACKAGE"] != previous["android_package"]:
+              raise SystemExit("Android package identity changed from the previous official release")
+          if (
+              os.environ["CURRENT_SIGNER"].lower()
+              != previous["signing_certificate_sha256"].lower()
+          ):
+              raise SystemExit(
+                  "Android signing identity changed from the previous official release"
+              )
+          PY
+          fi
+
+          (
+            cd "$RELEASE_DIR"
+            sha256sum "$ASSET" "$DEPENDENCY_TREE_ASSET" > SHA256SUMS.txt
+          )
+          APK_SHA256="$(head -n 1 "$RELEASE_DIR/SHA256SUMS.txt" | cut -d' ' -f1)"
+
+          VERSION="$VERSION"           VERSION_CODE="$VERSION_CODE"           PACKAGE="$PACKAGE"           TAG="$TAG"           ASSET="$ASSET"           APK_SHA256="$APK_SHA256"           DEPENDENCY_TREE_ASSET="$DEPENDENCY_TREE_ASSET"           DEPENDENCY_TREE_SHA256="$DEPENDENCY_TREE_SHA256"           SIGNER_FINGERPRINT="$SIGNER_FINGERPRINT"           PREVIOUS_TAG="$PREVIOUS_TAG"           python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          document = {
+              "schema_version": 1,
+              "release_kind": "android-apk",
+              "tag": os.environ["TAG"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "version": os.environ["VERSION"],
+              "android_version_code": int(os.environ["VERSION_CODE"]),
+              "android_package": os.environ["PACKAGE"],
+              "minimum_android": "7",
+              "minimum_android_api": 24,
+              "apk_asset": os.environ["ASSET"],
+              "apk_sha256": os.environ["APK_SHA256"],
+              "dependency_set": {
+                  "kind": "resolved_set",
+                  "asset": os.environ["DEPENDENCY_TREE_ASSET"],
+                  "sha256": os.environ["DEPENDENCY_TREE_SHA256"],
+              },
+              "signing_certificate_sha256": os.environ["SIGNER_FINGERPRINT"].lower(),
+              "previous_mobile_release_tag": os.environ["PREVIOUS_TAG"] or None,
+              "workflow_run": (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              ),
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+          }
+          Path(".release-mobile/mobile-release.json").write_text(
+              json.dumps(document, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          {
+            printf 'AI Multi-Agent Mobile %s\n\n' "$VERSION"
+            printf -- '- Android package: %s\n' "$PACKAGE"
+            printf -- '- Android versionCode: %s\n' "$VERSION_CODE"
+            printf -- '- Source commit: %s\n' "$GITHUB_SHA"
+            printf -- '- Signing certificate SHA-256: %s\n' "$SIGNER_FINGERPRINT"
+            printf -- '- Dependency resolution SHA-256: %s\n' "$DEPENDENCY_TREE_SHA256"
+            printf -- '- Minimum supported Android: Android 7\n\n'
+            printf 'Download %s, %s and SHA256SUMS.txt, then verify both checksums.\n' "$ASSET" "$DEPENDENCY_TREE_ASSET"
+            printf 'Installation is direct Android sideloading; no app-store account or paid build service is required.\n'
+          } > "$RELEASE_DIR/release-notes.md"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Retain production release evidence before publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-production-release-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            .release-mobile/AI-Multi-Agent-Mobile-*.apk
+            .release-mobile/SHA256SUMS.txt
+            .release-mobile/mobile-release.json
+            .release-mobile/npm-dependency-tree.json
+            .release-mobile/apk-signature-verification.txt
+            .release-mobile/release-notes.md
+            .artifacts/mobile/release-config.json
+            .artifacts/mobile/npm-dependency-tree.json
+            .artifacts/mobile/aapt-badging.txt
+
+      - name: Publish verified GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.prepare.outputs.tag }}"
+          if [ "${{ steps.prepare.outputs.release_mode }}" = "resume" ]; then
+            gh release upload "$TAG" \
+              ".release-mobile/${{ steps.prepare.outputs.asset }}" \
+              ".release-mobile/SHA256SUMS.txt" \
+              ".release-mobile/mobile-release.json" \
+              ".release-mobile/npm-dependency-tree.json" \
+              --clobber
+            gh release edit "$TAG" \
+              --draft=false \
+              --title "AI Multi-Agent Mobile ${{ inputs.version }}" \
+              --notes-file ".release-mobile/release-notes.md"
+          else
+            gh release create "$TAG" \
+              ".release-mobile/${{ steps.prepare.outputs.asset }}" \
+              ".release-mobile/SHA256SUMS.txt" \
+              ".release-mobile/mobile-release.json" \
+              ".release-mobile/npm-dependency-tree.json" \
+              --target "$GITHUB_SHA" \
+              --draft \
+              --title "AI Multi-Agent Mobile ${{ inputs.version }}" \
+              --notes-file ".release-mobile/release-notes.md"
+            gh release edit "$TAG" --draft=false
+          fi

@@ -243,9 +243,9 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm run build
-      - name: Install optional mobile client dependencies
+      - name: Install optional mobile client dependencies from committed lockfile
         working-directory: mobile
-        run: npm install --no-audit --no-fund --package-lock=false
+        run: npm ci --no-audit --no-fund
       - name: Typecheck optional mobile client
         working-directory: mobile
         run: npm run typecheck
