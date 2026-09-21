@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ControlPlaneClient } from "../../api/client";
+import { AppLink } from "../../app/router";
 import type { TraceNode, TracePage } from "../../api/trace";
 import {
   CanonicalId,
@@ -30,6 +31,27 @@ export function TraceExplorer({
   const [selectedNode, setSelectedNode] = useState<TraceNode | null>(null);
   const [nodeLoading, setNodeLoading] = useState(false);
   const [nodeError, setNodeError] = useState<unknown>(null);
+  const [workspaceByRunId, setWorkspaceByRunId] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    setWorkspaceByRunId({});
+    if (!taskId) {
+      return () => {
+        active = false;
+      };
+    }
+    void loadTaskRunWorkspaceBindings(client, taskId)
+      .then((bindings) => {
+        if (active) setWorkspaceByRunId(bindings);
+      })
+      .catch(() => {
+        if (active) setWorkspaceByRunId({});
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, taskId]);
 
   const loadTrace = useCallback(
     async (cursor?: string, append = false) => {
@@ -189,6 +211,7 @@ export function TraceExplorer({
             items={trace.items}
             selectedNodeId={selectedNode?.id ?? null}
             onInspect={inspectNode}
+            workspaceByRunId={workspaceByRunId}
           />
         )}
         {trace?.next_cursor ? (
@@ -214,7 +237,7 @@ export function TraceExplorer({
             />
           ) : null}
           {!nodeLoading && !nodeError && selectedNode ? (
-            <TraceNodeDetail node={selectedNode} />
+            <TraceNodeDetail node={selectedNode} workspaceByRunId={workspaceByRunId} />
           ) : null}
         </Card>
       ) : null}
@@ -226,10 +249,12 @@ function TraceTable({
   items,
   selectedNodeId,
   onInspect,
+  workspaceByRunId,
 }: {
   items: TraceNode[];
   selectedNodeId: string | null;
   onInspect: (nodeId: string) => void | Promise<void>;
+  workspaceByRunId: Record<string, string>;
 }) {
   const byId = new Map(items.map((item) => [item.id, item]));
   return (
@@ -274,7 +299,7 @@ function TraceTable({
                 </td>
                 <td>{formatDuration(item.duration_seconds)}</td>
                 <td>
-                  <TraceContext node={item} />
+                  <TraceContext node={item} workspaceId={item.context.run_id ? workspaceByRunId[item.context.run_id] : undefined} />
                 </td>
                 <td>
                   {item.usage.length > 0 ? (
@@ -301,7 +326,13 @@ function TraceTable({
   );
 }
 
-function TraceNodeDetail({ node }: { node: TraceNode }) {
+function TraceNodeDetail({
+  node,
+  workspaceByRunId,
+}: {
+  node: TraceNode;
+  workspaceByRunId: Record<string, string>;
+}) {
   return (
     <div>
       <p>
@@ -329,7 +360,7 @@ function TraceNodeDetail({ node }: { node: TraceNode }) {
           : ""}
       </p>
       <p>
-        <TraceContext node={node} />
+        <TraceContext node={node} workspaceId={node.context.run_id ? workspaceByRunId[node.context.run_id] : undefined} />
       </p>
       {node.failure ? (
         <p>
@@ -376,7 +407,35 @@ function TraceNodeDetail({ node }: { node: TraceNode }) {
   );
 }
 
-function TraceContext({ node }: { node: TraceNode }) {
+export async function loadTaskRunWorkspaceBindings(
+  client: Pick<ControlPlaneClient, "listTaskRuns">,
+  taskId: string,
+): Promise<Record<string, string>> {
+  const bindings: Record<string, string> = {};
+  let cursor: string | undefined;
+  do {
+    const page = await client.listTaskRuns(taskId, {
+      limit: 100,
+      cursor,
+      sort: "created_at",
+      direction: "desc",
+    });
+    for (const run of page.items) {
+      if (run.workspace_id) bindings[run.id] = run.workspace_id;
+    }
+    cursor = page.next_cursor ?? undefined;
+  } while (cursor);
+  return bindings;
+}
+
+export function TraceContext({
+  node,
+  workspaceId,
+}: {
+  node: TraceNode;
+  workspaceId?: string;
+}) {
+  const canonicalWorkspaceId = node.context.workspace_id ?? workspaceId;
   const preferred = [
     "step_id",
     "agent_id",
@@ -391,7 +450,17 @@ function TraceContext({ node }: { node: TraceNode }) {
   const visible = preferred.flatMap((key) =>
     node.context[key] ? [`${key.replace("_id", "")}: ${node.context[key]}`] : [],
   );
-  return <>{visible.length > 0 ? visible.join(" · ") : "Task-scoped"}</>;
+  return (
+    <span>
+      {canonicalWorkspaceId ? (
+        <>
+          workspace: <AppLink href={`/workspaces/${canonicalWorkspaceId}`}><CanonicalId value={canonicalWorkspaceId} /></AppLink>
+          {visible.length > 0 ? " · " : ""}
+        </>
+      ) : null}
+      {visible.length > 0 ? visible.join(" · ") : canonicalWorkspaceId ? null : "Task-scoped"}
+    </span>
+  );
 }
 
 function UsageTable({
