@@ -15,7 +15,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -599,8 +599,6 @@ def _execute_approval(
 
 
 def _endpoint_origin(endpoint: str) -> str:
-    from urllib.parse import urlsplit
-
     parsed = urlsplit(endpoint)
     if not parsed.scheme or not parsed.netloc:
         raise ProfileError("profile endpoint must be an absolute URL")
