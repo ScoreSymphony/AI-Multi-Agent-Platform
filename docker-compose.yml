@@ -40,6 +40,36 @@ services:
     networks:
       - platform
 
+
+  backup:
+    profiles:
+      - operations
+    build:
+      context: .
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    restart: "no"
+    init: true
+    entrypoint:
+      - platform-backup
+    volumes:
+      - type: volume
+        source: platform-data
+        target: /var/lib/ai-multi-agent-platform
+        read_only: true
+      - type: bind
+        source: ${AI_MAP_BACKUP_DIR:-./backups}
+        target: /backups
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+
   web:
     build:
       context: .
