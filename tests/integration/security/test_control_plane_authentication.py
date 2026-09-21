@@ -386,7 +386,6 @@ def test_auth_openapi_documents_revoke_not_found_runtime_outcomes() -> None:
     assert credential_operation["responses"][str(missing_credential.status)] == error_ref
 
 
-
 def test_browser_control_plane_login_csrf_session_listing_and_logout() -> None:
     auth = _service()
     auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
