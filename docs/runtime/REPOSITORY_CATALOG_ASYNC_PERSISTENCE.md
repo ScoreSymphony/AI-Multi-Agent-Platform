@@ -1,6 +1,6 @@
 # Async repository binding catalog persistence
 
-Issue #892 requires runtime-critical async services to depend on awaitable, backend-neutral
+Runtime-critical async services depend on awaitable, backend-neutral
 persistence semantics rather than executing synchronous `sqlite3` work on the event-loop thread.
 The repository integration keeps its existing durable SQLite catalog for local/single-node
 persistence, but runtime callers now use the `RepositoryBindingCatalog` async contract.
@@ -65,7 +65,7 @@ stale repository routing records, but the SQLite cleanup no longer blocks the ev
 
 `restore_managed_local_repositories()` remains intentionally synchronous because it is an explicit
 single-node startup/bootstrap function. Constructor-time SQLite schema initialization likewise
-remains synchronous setup work and is outside the runtime awaitable path targeted by #892.
+remains synchronous setup work and is outside the runtime awaitable path targeted by the async-persistence boundary.
 
 ## Regression coverage
 
