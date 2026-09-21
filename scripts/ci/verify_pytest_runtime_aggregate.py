@@ -27,14 +27,23 @@ def _load_reports(
     kind: str,
 ) -> dict[str, dict[str, Any]]:
     reports: dict[str, dict[str, Any]] = {}
+    attempts: dict[str, int] = {}
     for path in sorted(root.rglob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         lane = payload.get("lane")
         if not isinstance(lane, str) or lane not in expected:
             continue
-        if lane in reports:
-            raise ValueError(f"duplicate {kind} runtime report for lane: {lane}")
+        attempt = int(payload.get("workflow_run_attempt", 1))
+        current_attempt = attempts.get(lane)
+        if current_attempt is not None:
+            if attempt < current_attempt:
+                continue
+            if attempt == current_attempt:
+                raise ValueError(
+                    f"duplicate {kind} runtime report for lane {lane} at workflow attempt {attempt}"
+                )
         reports[lane] = payload
+        attempts[lane] = attempt
     return reports
 
 
