@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ControlPlaneClient } from "../api/client";
 import {
   isTelemetryEntry,
@@ -37,6 +37,7 @@ export function ObservabilityPage({
   const [timelineTotal, setTimelineTotal] = useState<number | null>(null);
   const [taskError, setTaskError] = useState<unknown>(null);
   const [timelineError, setTimelineError] = useState<unknown>(null);
+  const taskScopeEditedRef = useRef(Boolean(initialTaskId));
 
   const loadTasks = useCallback(async () => {
     try {
@@ -47,8 +48,21 @@ export function ObservabilityPage({
       });
       setTasks(next);
       setTaskError(null);
-      setSelectedTaskId((current) => current || next.items[0]?.id || "");
-      setTaskIdDraft((current) => current || next.items[0]?.id || "");
+      const recentTaskId = next.items[0]?.id || "";
+      setSelectedTaskId((current) =>
+        preserveTaskScopeDuringRecentTaskLoad(
+          current,
+          recentTaskId,
+          taskScopeEditedRef.current,
+        ),
+      );
+      setTaskIdDraft((current) =>
+        preserveTaskScopeDuringRecentTaskLoad(
+          current,
+          recentTaskId,
+          taskScopeEditedRef.current,
+        ),
+      );
     } catch (error) {
       setTaskError(error);
     }
@@ -78,6 +92,7 @@ export function ObservabilityPage({
   }, [client, selectedTaskId]);
 
   useEffect(() => {
+    taskScopeEditedRef.current = Boolean(initialTaskId);
     setSelectedTaskId(initialTaskId);
     setTaskIdDraft(initialTaskId);
   }, [initialTaskId]);
@@ -100,6 +115,7 @@ export function ObservabilityPage({
 
   const applyTaskId = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    taskScopeEditedRef.current = true;
     setSelectedTaskId(taskIdDraft.trim());
   };
 
@@ -128,7 +144,10 @@ export function ObservabilityPage({
             Exact Task ID
             <input
               value={taskIdDraft}
-              onChange={(event) => setTaskIdDraft(event.target.value)}
+              onChange={(event) => {
+                taskScopeEditedRef.current = true;
+                setTaskIdDraft(event.target.value);
+              }}
               placeholder="task_…"
             />
           </label>
@@ -145,6 +164,7 @@ export function ObservabilityPage({
             <select
               value={tasks.items.some((task) => task.id === selectedTaskId) ? selectedTaskId : ""}
               onChange={(event) => {
+                taskScopeEditedRef.current = true;
                 setSelectedTaskId(event.target.value);
                 setTaskIdDraft(event.target.value);
               }}
@@ -287,4 +307,14 @@ function formatDuration(value: number | null): string {
   if (value === null) return "—";
   if (value < 1) return `${Math.round(value * 1000)} ms`;
   return `${value.toFixed(2)} s`;
+}
+
+
+export function preserveTaskScopeDuringRecentTaskLoad(
+  current: string,
+  recentTaskId: string,
+  edited: boolean,
+): string {
+  if (current || edited) return current;
+  return recentTaskId;
 }
