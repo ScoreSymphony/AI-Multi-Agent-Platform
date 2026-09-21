@@ -155,10 +155,14 @@ class MobilePairingService:
         supplied = _normalize_code(code)
         if not supplied:
             raise MobilePairingError("pairing code must not be blank")
+        rate_key = f"mobile-pairing:{pairing_id or 'fallback'}"
+        if not self.authentication.rate_limiter.allow(rate_key, now=current):
+            raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
 
         with self._lock:
             challenge = self._challenge_for_proof(pairing_id, supplied, current)
             if challenge is None:
+                self.authentication.rate_limiter.record(rate_key, success=False, now=current)
                 raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
             pairing_id = challenge.pairing_id
             if challenge.cancelled_at is not None:
@@ -185,10 +189,16 @@ class MobilePairingService:
                     correlation_id=correlation_id,
                     metadata={"failure": "invalid_proof", "failed_attempts": failed},
                 )
+                self.authentication.rate_limiter.record(
+                    rate_key,
+                    success=False,
+                    now=current,
+                )
                 if failed >= self.max_failed_attempts:
                     raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
                 raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
 
+            self.authentication.rate_limiter.record(rate_key, success=True, now=current)
             # Mark the proof consumed before issuing the durable bearer credential. The lock
             # keeps concurrent in-process replays from both succeeding.
             self.store.mobile_pairings[pairing_id] = replace(
