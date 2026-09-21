@@ -356,21 +356,21 @@ def test_asgi_route_semantics_precede_malformed_json_validation() -> None:
         assert run_cancel_wrong_method_status == 405
         assert run_cancel_wrong_method["code"] == "method_not_allowed"
 
-        unknown_model_command_status, unknown_model_command = await invoke(
+        colon_model_item_wrong_method_status, colon_model_item_wrong_method = await invoke(
             "POST",
             "/api/v1/models/model_1:does-not-exist",
             b"{",
         )
-        assert unknown_model_command_status == 404
-        assert unknown_model_command["code"] == "not_found"
+        assert colon_model_item_wrong_method_status == 405
+        assert colon_model_item_wrong_method["code"] == "method_not_allowed"
 
-        unknown_provider_command_status, unknown_provider_command = await invoke(
+        colon_provider_item_wrong_method_status, colon_provider_item_wrong_method = await invoke(
             "POST",
             "/api/v1/model-providers/provider_1:does-not-exist",
             b"{",
         )
-        assert unknown_provider_command_status == 404
-        assert unknown_provider_command["code"] == "not_found"
+        assert colon_provider_item_wrong_method_status == 405
+        assert colon_provider_item_wrong_method["code"] == "method_not_allowed"
 
         colon_model_identifier_status, colon_model_identifier = await invoke(
             "GET",
