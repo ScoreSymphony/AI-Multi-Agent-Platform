@@ -547,6 +547,7 @@ def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
             "post": _operation(
                 "cancelMobilePairing",
                 "Cancel an unused mobile pairing challenge owned by the current user.",
+                error_statuses=("404",),
                 parameters=(
                     {
                         "name": "pairing_id",
@@ -576,6 +577,7 @@ def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
                 "renameMobileDevice",
                 "Rename paired-device display metadata.",
                 request_fields=("display_name",),
+                error_statuses=("404",),
                 parameters=(path_parameter, csrf_parameter),
             )
         },
@@ -583,6 +585,7 @@ def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
             "post": _operation(
                 "revokeMobileDevice",
                 "Revoke one paired mobile device credential.",
+                error_statuses=("404",),
                 parameters=(path_parameter, csrf_parameter),
             )
         },
@@ -676,18 +679,23 @@ def _operation(
     public: bool = False,
     request_fields: tuple[str, ...] = (),
     status: str = "200",
+    error_statuses: tuple[str, ...] = (),
     parameters: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
+    responses: dict[str, Any] = {
+        status: {"description": "Authentication operation result"},
+        "400": {"$ref": "#/components/responses/Error"},
+        "401": {"$ref": "#/components/responses/Error"},
+        "403": {"$ref": "#/components/responses/Error"},
+        "429": {"$ref": "#/components/responses/Error"},
+    }
+    for error_status in error_statuses:
+        responses.setdefault(error_status, {"$ref": "#/components/responses/Error"})
+
     operation: dict[str, Any] = {
         "operationId": operation_id,
         "description": description,
-        "responses": {
-            status: {"description": "Authentication operation result"},
-            "400": {"$ref": "#/components/responses/Error"},
-            "401": {"$ref": "#/components/responses/Error"},
-            "403": {"$ref": "#/components/responses/Error"},
-            "429": {"$ref": "#/components/responses/Error"},
-        },
+        "responses": responses,
     }
     if public:
         operation["security"] = []
