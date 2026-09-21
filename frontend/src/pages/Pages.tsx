@@ -275,7 +275,7 @@ export function RunDetailPage({ client, runId }: { client: ControlPlaneClient; r
         {canCancel ? <button type="button" disabled={busy} onClick={() => void cancel()}>{busy ? "Cancelling…" : "Cancel Run"}</button> : null}
         <button type="button" disabled={busy} onClick={() => void load()}>Refresh</button>
       </div>
-      {run.error ? <DegradedState title={`${run.error.category}: ${run.error.code}`} detail={run.error.message} /> : null}
+      <RunFailureDiagnostics run={run} />
       {run.recovery_required ? <DegradedState title="Recovery required" detail={run.recovery_reason ?? "The canonical Run is marked for recovery."} /> : null}
       <div className="grid-two">
         <Card title="Run details">
@@ -290,6 +290,24 @@ export function RunDetailPage({ client, runId }: { client: ControlPlaneClient; r
         <RunWorkspaceBinding run={run} />
       </Card>
       <Card title="Output"><pre>{prettyJson(run.output)}</pre></Card>
+    </div>
+  );
+}
+
+export function RunFailureDiagnostics({
+  run,
+}: {
+  run: Pick<CanonicalRun, "status" | "task_id" | "error">;
+}) {
+  if (!run.error) return null;
+  return (
+    <div className="stack">
+      <DegradedState title={`${run.error.category}: ${run.error.code}`} detail={run.error.message} />
+      {run.status === "failed" ? (
+        <p>
+          Supported next action: <AppLink href={`/tasks/${run.task_id}`}>Open Task for retry</AppLink>.
+        </p>
+      ) : null}
     </div>
   );
 }
