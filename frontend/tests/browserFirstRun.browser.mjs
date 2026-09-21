@@ -968,12 +968,14 @@ try {
     throw new Error(`Desktop mobile pairing returned an incomplete challenge: ${JSON.stringify(desktopPairing)}`);
   }
   const desktopPairingCard = page.getByRole("heading", { name: "Mobile companion pairing", exact: true }).locator("..");
+  const desktopPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
+  // The successful POST resolves before React necessarily commits the pairing challenge.
+  // Wait for challenge-only UI before asserting the card copy to avoid a response/render race.
+  await desktopPairingQr.waitFor();
   const desktopPairingText = await desktopPairingCard.innerText();
   for (const label of ["Server", "Fallback code", "Expires", "Time remaining"]) {
     requireText(desktopPairingText, label, "Desktop mobile pairing presentation");
   }
-  const desktopPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
-  await desktopPairingQr.waitFor();
   await assertHorizontallyReachable(page, desktopPairingQr, "Desktop mobile pairing QR");
   await assertNoDocumentHorizontalOverflow(page, "Desktop Settings mobile pairing");
 
