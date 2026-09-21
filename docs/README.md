@@ -11,7 +11,7 @@ The following cross-cutting documents stay at the `docs/` root because they defi
 - [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) — canonical platform domain model.
 - [`CONTRACTS.md`](CONTRACTS.md) — replaceable provider and adapter contracts.
 - [`KERNEL.md`](KERNEL.md) — Task/Run lifecycle ownership and recovery.
-- [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md) — dependency-driven implementation plan and current convergence work.
+- [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md) — maintained pointers to current architecture, maturity, conformance and release guidance, with the dated issue roadmap retained under `history/issues/`.
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — development setup and validation entry point.
 - [`SECURITY_THREAT_MODEL.md`](SECURITY_THREAT_MODEL.md) — cross-cutting threat model.
 - [`UPSTREAMS.md`](UPSTREAMS.md) — architecture-significant upstream inventory and provenance overview.
