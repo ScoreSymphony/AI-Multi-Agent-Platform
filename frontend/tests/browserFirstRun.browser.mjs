@@ -1397,12 +1397,14 @@ try {
     throw new Error(`Narrow mobile pairing creation failed with HTTP ${narrowPairingResponse.status()}`);
   }
   const narrowPairingCard = page.getByRole("heading", { name: "Mobile companion pairing", exact: true }).locator("..");
+  const narrowPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
+  // The successful POST resolves before React necessarily commits the pairing challenge.
+  // Wait for challenge-only UI before asserting the card copy to avoid a response/render race.
+  await narrowPairingQr.waitFor();
   const narrowPairingText = await narrowPairingCard.innerText();
   for (const label of ["Server", "Fallback code", "Expires", "Time remaining"]) {
     requireText(narrowPairingText, label, "Narrow mobile pairing presentation");
   }
-  const narrowPairingQr = page.getByRole("img", { name: "Mobile pairing QR code", exact: true });
-  await narrowPairingQr.waitFor();
   await assertHorizontallyReachable(page, narrowPairingQr, "Narrow mobile pairing QR");
   await assertNoDocumentHorizontalOverflow(page, "Narrow Settings pairing challenge");
   const narrowCancelPairingButton = await waitForButton(page, "Cancel pairing");
