@@ -370,7 +370,12 @@ class MobilePairingService:
         )
         return count
 
-    def safe_device(self, device: PairedMobileDevice, *, now=None) -> dict[str, JsonValue]:
+    def safe_device(
+        self,
+        device: PairedMobileDevice,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, JsonValue]:
         credential = self.store.credentials.get(device.credential_id)
         current = authentication_now(now)
         active = credential is not None and credential.active(now=current)
