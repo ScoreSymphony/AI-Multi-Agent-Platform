@@ -511,7 +511,8 @@ def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
         f"/api/{API_VERSION}/auth/mobile-pairings:consume": {
             "post": _operation(
                 "consumeMobilePairing",
-                "Consume a short-lived single-use mobile pairing proof and issue one device credential.",
+                "Consume a short-lived single-use mobile pairing proof and issue one "
+                "device credential.",
                 public=True,
                 request_fields=("code", "device_name", "protocol_version"),
                 status="201",
@@ -520,7 +521,8 @@ def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
         f"/api/{API_VERSION}/auth/mobile-pairings": {
             "post": _operation(
                 "createMobilePairing",
-                "Create a short-lived mobile pairing challenge after manage-credentials authorization.",
+                "Create a short-lived mobile pairing challenge after manage-credentials "
+                "authorization.",
                 request_fields=("server_origin",),
                 status="201",
                 parameters=(csrf_parameter,),
