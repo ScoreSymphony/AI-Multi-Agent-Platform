@@ -15,20 +15,29 @@
     "typecheck": "tsc --noEmit --pretty false",
     "test": "vitest run",
     "check:expo": "expo config --type public",
+    "validate:release": "node scripts/validate-release-config.mjs",
+    "prebuild:android": "expo prebuild --platform android --clean --no-install",
+    "prepare:android-release": "node scripts/prepare-android-release.mjs",
+    "build:android:release": "npm run validate:release && npm run prebuild:android && npm run prepare:android-release && cd android && ./gradlew --no-daemon assembleRelease",
     "smoke:android": "expo export --platform android --output-dir dist/android",
     "smoke:ios": "expo export --platform ios --output-dir dist/ios"
   },
   "dependencies": {
     "expo": "57.0.17",
-    "expo-camera": "~57.0.5",
     "expo-secure-store": "57.0.4",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "expo-camera": "~57.0.5"
   },
   "devDependencies": {
     "@types/node": "22.20.3",
     "@types/react": "19.2.18",
     "typescript": "6.0.3",
     "vitest": "5.0.0"
+  },
+  "overrides": {
+    "xcode": {
+      "uuid": "11.1.1"
+    }
   }
 }
