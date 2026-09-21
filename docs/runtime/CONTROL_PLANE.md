@@ -93,7 +93,7 @@ These commands delegate to canonical kernel behavior. The foundation does not re
 
 ## Extension contract for later domains
 
-Later issues extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
+Additional canonical domains extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
 
 ### Resource registration
 
@@ -234,7 +234,7 @@ Every API error has both a stable specific `code` and a stable broader `category
 
 `RequestContext` carries actor identity, owner context, request/correlation IDs and idempotency metadata. Sensitive Control Plane operations call the configured `AuthorizationProvider` using canonical action/resource references.
 
-Authentication transport remains replaceable and is completed by its dedicated security issue. The Control Plane does not define a second policy domain.
+Authentication is composed as a replaceable northbound boundary over the canonical authentication, session and credential services. The Control Plane does not define a second identity or policy domain.
 
 ## Live updates
 
