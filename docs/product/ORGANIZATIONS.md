@@ -130,7 +130,7 @@ Organization-sensitive mutations receive an owner-scoped Authorization check. Sc
 
 `invitation.accept` is usable before Membership exists only for an authenticated principal matching `intended_identity_ref`; the invited actor gains Membership when acceptance succeeds. Email-only records require a future canonical one-time credential flow before they can be redeemable. Authentication and the generic Authorization command boundary still apply.
 
-Global Search indexes privacy-minimal Organization, Team and Membership projections only. Live Organization visibility is rechecked before results, totals or exact-ID existence are returned, then the canonical Authorization authorization provider still makes the final action decision. The same visibility hook enables organization-scoped Connection discovery without changing canonical Connection ownership. Invitations, ownership/share records, IdP mappings and Organization audit events remain outside global Search.
+Global Search indexes privacy-minimal Organization, Team and Membership projections only. Live Organization visibility is rechecked before results, totals or exact-ID existence are returned, then the canonical Authorization provider still makes the final action decision. The same visibility hook enables organization-scoped Connection discovery without changing canonical Connection ownership. Invitations, ownership/share records, IdP mappings and Organization audit events remain outside global Search.
 
 ## Frontend
 
@@ -178,9 +178,9 @@ The Organization domain is covered by dedicated domain, Control Plane, persisten
 - Team create/update/configuration;
 - invitation accept/expire/revoke;
 - Membership add/assignment/suspend/remove/leave and authentication-identity changes;
-- role/policy projection into the canonical Authorization authorization path;
+- role/policy projection into the canonical Authorization path;
 - ownership/share/revoke behavior and default cross-Organization isolation;
-- explicit Authorization authorization for requested cross-Organization sharing;
+- explicit Authorization for requested cross-Organization sharing;
 - historical Task/Event provenance after Membership removal;
 - service and automation Membership identities;
 - reversible external IdP group mappings;
