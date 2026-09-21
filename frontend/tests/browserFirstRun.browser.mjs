@@ -719,6 +719,11 @@ try {
   if ((await taskLink.getAttribute("href")) !== `/tasks/${firstRunResult.task_id}`) {
     throw new Error("Official browser result did not deep-link the canonical Task ID");
   }
+  const firstRunWorkspaceLink = resultCard.getByRole("link", { name: "Open Workspace", exact: true });
+  await firstRunWorkspaceLink.waitFor();
+  if ((await firstRunWorkspaceLink.getAttribute("href")) !== `/workspaces/${firstRunResult.workspace_id}`) {
+    throw new Error("Official browser result did not deep-link the canonical Workspace ID");
+  }
   const producedResultLink = resultCard.getByRole("link", { name: "Open produced Result", exact: true });
   await producedResultLink.waitFor();
   if ((await resultCard.getByRole("link", { name: "Run", exact: true }).count()) < 4) {
