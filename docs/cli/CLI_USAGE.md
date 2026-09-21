@@ -1,7 +1,6 @@
 # Canonical usage inspection CLI
 
-Issue: #38
-Domain: #76 Usage and resource accounting
+Usage and resource accounting is the canonical owner of the collections exposed here.
 
 The CLI exposes the three read-only accounting collections already registered on the versioned Control Plane and consumed by the Web UI.
 

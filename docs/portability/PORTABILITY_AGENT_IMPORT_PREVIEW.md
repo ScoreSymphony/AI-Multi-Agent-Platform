@@ -1,6 +1,6 @@
 # Agent/Team portability and import preview
 
-This document extends the portable package foundation from issue #79 with the first concrete canonical resource codecs and a mutation-free import planner.
+This document defines canonical resource codecs and the mutation-free import planner used by the portability package workflow.
 
 ## Agent and Agent Team resource shape
 
@@ -93,7 +93,7 @@ When the source ID uses the platform's canonical `<prefix>_<uuid>` shape, the ge
 
 ## Mutation boundary
 
-This slice intentionally stops before repository mutation. A later issue #79 slice must consume only a successful preview and add:
+This preview stage intentionally stops before repository mutation. The canonical import workflow consumes only a successful preview and then adds:
 
 - authorization/privacy validation;
 - dependency/version compatibility enforcement beyond presence checks;

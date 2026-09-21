@@ -1,6 +1,6 @@
 # Portability Control Plane and CLI workflow
 
-Issue #79 exposes canonical import/export through the same versioned northbound boundary used by the rest of the platform. Clients never construct trusted import mappings or mutation order themselves.
+The Portability domain exposes canonical import/export through the same versioned northbound boundary used by the rest of the platform. Clients never construct trusted import mappings or mutation order themselves.
 
 ## Control Plane resources
 
@@ -54,11 +54,11 @@ platform portability report import_<digest>
 
 ## Current production composition
 
-The single-node deployment composes canonical Agent, Agent Team, Project, Template and EvaluationSuite export/import against their owning-domain repositories/services. Template portability reuses the canonical #78 Template repository and immutable revision model rather than defining a second Template lifecycle inside #79.
+The single-node deployment composes canonical Agent, Agent Team, Project, Template and EvaluationSuite export/import against their owning-domain repositories/services. Template portability reuses the canonical Template repository and immutable revision model rather than defining a second Template lifecycle inside Portability.
 
-Project portability reuses the canonical `ScopeStore`/`SqliteScopeStore` persistence completed by #308. The portable snapshot preserves the complete canonical Project identity, owner, timestamps, schema version, provenance and external references. Import writes the complete snapshot through `ScopeStore.store_project_snapshot(...)`; it does not reconstruct a reduced Project or create a portability-specific Project store.
+Project portability reuses the canonical `ScopeStore`/`SqliteScopeStore` persistence provided by the canonical ScopeStore. The portable snapshot preserves the complete canonical Project identity, owner, timestamps, schema version, provenance and external references. Import writes the complete snapshot through `ScopeStore.store_project_snapshot(...)`; it does not reconstruct a reduced Project or create a portability-specific Project store.
 
-Project rollback is deliberately fail-closed. The #308 compensation seam refuses deletion unless cross-domain dependency safety is explicitly proven and also rejects deletion when Workspace dependencies exist. A deployment that cannot provide a complete cross-domain dependency audit therefore reports incomplete compensation rather than risking deletion of a referenced Project.
+Project rollback is deliberately fail-closed. The Project compensation seam refuses deletion unless cross-domain dependency safety is explicitly proven and also rejects deletion when Workspace dependencies exist. A deployment that cannot provide a complete cross-domain dependency audit therefore reports incomplete compensation rather than risking deletion of a referenced Project.
 
 EvaluationSuite portability likewise reuses an owning-domain seam rather than a portability database. Imported exact suite versions are created through `EvaluationService.create_suite(...)` and persisted by `EvaluationSuiteAssetRepository` in `evaluation.sqlite3`; rollback goes through `EvaluationService.delete_suite(...)`, is bound to the imported checksum and refuses deletion after durable run history references that suite version. The suite codec remaps canonical Agent targets through the server-owned preview and declares model/capability/fixture dependencies explicitly. Fixture dependencies currently remain fail-closed in single-node until a canonical portable EvaluationFixture owner is composed.
 

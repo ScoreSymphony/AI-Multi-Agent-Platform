@@ -1,3 +1,5 @@
+> Historical integration handoff. Superseded after Issue #589 was completed and closed on 2026-09-19. The active-branch and keep-open instructions below are retained only as historical provenance and do not describe current repository work or operator requirements.
+
 # Research governance and portability handoff (#589)
 
 This active branch prepares the remaining governed Research-to-Decision and portability boundaries

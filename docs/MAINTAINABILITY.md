@@ -1,6 +1,6 @@
 # Maintainability signals and oversized-module review
 
-Status: repository quality policy and review guide for #896. This extends the responsibility-first decomposition completed in #723; it does not replace [`BACKEND_RESPONSIBILITY_MAP.md`](BACKEND_RESPONSIBILITY_MAP.md) or change canonical ownership.
+Status: repository quality policy and review guide. This extends the responsibility-first decomposition captured in the backend responsibility map; it does not replace [`BACKEND_RESPONSIBILITY_MAP.md`](BACKEND_RESPONSIBILITY_MAP.md) or change canonical ownership.
 
 ## Purpose
 
@@ -13,7 +13,7 @@ The policy is intentionally asymmetric:
 - CI rejects only **newly introduced unexempt extreme outliers**;
 - an existing large module is not forced through a mechanical split merely to make unrelated PRs green.
 
-This lets #896 reduce existing hotspots incrementally without converting historical debt into a repository-wide merge freeze.
+This lets maintainability work reduce existing hotspots incrementally without converting historical debt into a repository-wide merge freeze.
 
 ## Reproducible inventory
 
@@ -53,7 +53,7 @@ These values are review heuristics, not canonical architecture constraints. Resp
 
 ## Baseline snapshot
 
-The first #896 inventory generated on 2026-09-15 for PR #1035 measured:
+The first maintainability inventory generated on 2026-09-15 measured:
 
 | Metric | Count |
 | --- | ---: |
@@ -78,7 +78,7 @@ The seven current module-level extremes are:
 
 The largest individual function in that baseline is `deployment.single_node.build_single_node_deployment` at 511 lines. The highest measured branch complexity is `PlanningProposalValidator.validate` at 69. These are separate signals from module size and should be reviewed even when their containing module is below the module-level extreme threshold.
 
-This snapshot is historical evidence, not a checked golden file. The generated CI inventory is authoritative for the current tree and is expected to improve as #896 refactors land.
+This snapshot is historical evidence, not a checked golden file. The generated CI inventory is authoritative for the current tree and is expected to improve as refactors land.
 
 ## CI delta guard
 
@@ -93,7 +93,7 @@ Exemptions are exact. Module exemptions identify a path. Function exemptions ide
 
 ## Responsibility-first refactor rules
 
-The #723 invariants remain in force:
+The backend responsibility invariants remain in force:
 
 - preserve canonical domain ownership and supported public façades;
 - prefer focused modules under the existing top-level package owner;
@@ -135,6 +135,6 @@ reason = "Generated from the canonical schema definition; hand decomposition wou
 
 A module exemption omits `symbol`. Exemptions for ordinary hand-written orchestration or business logic should be exceptional; a large number of exemptions is itself a maintainability signal.
 
-## Ongoing use after the #896 completion
+## Ongoing use
 
-Issue #896 is complete; the checked maintainability guardrail and responsibility-first review process remain active repository policy. The historical baseline above is evidence, not a current outlier count. Future refactor cohorts should continue using the generated inventory, preserve behavior through existing/new regression tests, and leave ownership clearer than before each split.
+the checked maintainability guardrail and responsibility-first review process remain active repository policy. The historical baseline above is evidence, not a current outlier count. Future refactor cohorts should continue using the generated inventory, preserve behavior through existing/new regression tests, and leave ownership clearer than before each split.

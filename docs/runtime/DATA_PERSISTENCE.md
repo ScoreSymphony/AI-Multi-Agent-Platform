@@ -1,6 +1,6 @@
 # Persistence, Files, Scoped Memory and Knowledge
 
-This document defines the data boundaries introduced for issue #13. The architecture deliberately separates canonical platform state, durable files/artifacts, memory and source-backed knowledge. A concrete database, object store, vector engine or cloud product is an adapter choice, not a canonical platform concept.
+This document defines the canonical data-provider boundaries. The architecture deliberately separates canonical platform state, durable files/artifacts, memory and source-backed knowledge. A concrete database, object store, vector engine or cloud product is an adapter choice, not a canonical platform concept.
 
 ## Responsibility split
 
@@ -28,7 +28,7 @@ Provider-private identifiers may be retained only as adapter metadata when a fut
 
 ## Provider layering
 
-Issue #5 established coarse platform-wide provider seams. The `ai_multi_agent_platform.data` package refines the `FileProvider`, `MemoryProvider` and `KnowledgeProvider` contracts without changing the shared coarse interfaces. The refined contracts subclass the core interfaces, so a data provider is still usable wherever the core provider type is expected.
+The platform-wide provider seams are refined by the `ai_multi_agent_platform.data` package into `FileProvider`, `MemoryProvider` and `KnowledgeProvider` contracts without changing the shared coarse interfaces. The refined contracts subclass the core interfaces, so a data provider is still usable wherever the core provider type is expected.
 
 `DataProviderSet` is the dependency-injection hook for a future Control Plane. The Control Plane depends on provider contracts, never `LocalFileProvider`, `LocalMemoryProvider` or `LocalKnowledgeProvider` directly.
 
@@ -42,9 +42,9 @@ These logical/provider boundaries do not prescribe one physical database layout.
 |---|---|---|---|---|---|
 | Short-Term Context | session/execution reference | Optional; local reference persists with mandatory expiry | max 24 hours | actor/task/run context | may be copied into another explicit scope; no silent promotion |
 | Task Memory | canonical `task_…` | durable | task lifetime | task/project authorization | provenance may point to task/run/tool/model/event evidence |
-| Agent Memory | canonical `agent_…` | durable | durable unless policy overrides | agent/revision/team policy in #33/#15 | supersession rather than destructive history rewrite |
-| Project / Workspace Memory | canonical `project_…` | durable | project lifetime | hard project scope check + future #15 policy | inherited by tasks only through explicit policy |
-| User Memory | user principal scope ID | durable | user lifetime | owner separation hook + future #15 policy | cross-project use only when policy explicitly permits |
+| Agent Memory | canonical `agent_…` | durable | durable unless policy overrides | Agent/revision/team authorization policy | supersession rather than destructive history rewrite |
+| Project / Workspace Memory | canonical `project_…` | durable | project lifetime | hard project scope check + canonical authorization policy | inherited by tasks only through explicit policy |
+| User Memory | user principal scope ID | durable | user lifetime | owner separation hook + canonical authorization policy | cross-project use only when policy explicitly permits |
 | Historical Memory | explicit history scope reference | durable | durable/audit-derived policy | project/user policy | provenance is mandatory and must point back to canonical evidence |
 
 Every memory entry records: canonical scope and scope ID, owner, creator, timestamp, retention/expiry, provenance, optional supersession links, classification hook and provider-neutral metadata. Embedding/vector metadata is not required.
@@ -163,7 +163,7 @@ Legal/audit retention policy enforcement remains outside this issue.
 - classification hook;
 - audit metadata.
 
-The local provider enforces project isolation and user-owner separation where enough identity context exists. Issue #15 remains responsible for final authorization/approval decisions. Data providers must preserve this context so #15 can enforce policy without redesigning storage contracts.
+The local provider enforces project isolation and user-owner separation where enough identity context exists. The canonical authorization/approval layer remains responsible for final decisions. Data providers preserve this context so policy can be enforced without redesigning storage contracts.
 
 ## Baseline configuration
 

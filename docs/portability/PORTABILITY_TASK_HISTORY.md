@@ -54,7 +54,7 @@ Historical Task identity is preserved. `ImportPreviewService` therefore reports 
 
 ## Rollback
 
-`TaskHistoryImportMutationHandler` participates in the standard #79 `ImportExecutor` transaction model. A completed archive write returns the Task ID as its rollback token; if a later package resource fails, reverse compensation deletes the imported archive entry.
+`TaskHistoryImportMutationHandler` participates in the standard Portability `ImportExecutor` transaction model. A completed archive write returns the Task ID as its rollback token; if a later package resource fails, reverse compensation deletes the imported archive entry.
 
 Rollback never mutates the live kernel because the live kernel is not an import target for `task_history`.
 
@@ -65,4 +65,4 @@ After importing a `task_history` resource into an otherwise empty installation:
 - the historical archive contains the terminal Task history; and
 - the live kernel still contains no Task stream for that imported history.
 
-This invariant is covered by the issue #79 regression tests and is the concrete meaning of “task-history import remains historical.”
+This invariant is covered by the Portability regression tests and is the concrete meaning of “task-history import remains historical.”

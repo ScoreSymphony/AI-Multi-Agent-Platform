@@ -1,6 +1,6 @@
 # Template portability
 
-Issue #79 provides cross-deployment portability for the canonical Template domain owned by #78. It does not redefine Template creation, publishing, preview/application or instantiation semantics.
+Portability provides cross-deployment transport for the canonical Template domain. It does not redefine Template creation, publishing, preview/application or instantiation semantics.
 
 ## Portable resource
 
@@ -42,17 +42,12 @@ The repository exposes a guarded compensation seam for portability transactions.
 
 ## Security boundary
 
-Every exported and imported revision is checked by the canonical #78 Template configuration validator. Plaintext secret fields and runtime-private configuration therefore remain rejected before a Template becomes portable or is written to the destination repository.
+Every exported and imported revision is checked by the canonical Template configuration validator. Plaintext secret fields and runtime-private configuration therefore remain rejected before a Template becomes portable or is written to the destination repository.
 
-Template portability never installs plugins, creates connector credentials, resolves secret values or silently invents missing policy/routing domains. Missing required dependencies remain visible in the #79 dry-run/preview and block mutation.
+Template portability never installs plugins, creates connector credentials, resolves secret values or silently invents missing policy/routing domains. Missing required dependencies remain visible in the Portability dry-run/preview and block mutation.
 
 ## Current dependency ownership
 
-Template portability is complete for the canonical #78 contracts. References whose canonical domains are not yet available remain deliberately fail-closed:
+Template portability uses the registered canonical portability owners for dependencies whose domains are available. The current composition includes Project, Model Routing Profile, Authorization Policy Profile and EvaluationSuite portability.
 
-- Project portability depends on #308;
-- durable model-routing-policy portability depends on #309;
-- reusable authorization-policy portability depends on #310;
-- Evaluation suite/result portability depends on #19.
-
-Those issues own their canonical persistence contracts. #79 integrates them only after those contracts exist rather than introducing shadow stores inside portability.
+Dependencies without a registered canonical owner/codec remain visible in preview and fail closed. Portability never invents shadow persistence merely to make a Template import succeed.

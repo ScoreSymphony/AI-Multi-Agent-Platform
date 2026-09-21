@@ -1,6 +1,6 @@
 # Task execution budgets
 
-Issue #902 adds a platform-owned admission boundary for bounded autonomous Task execution. It is deliberately separate from #76 Accounting: Accounting remains the sole ledger for canonical usage and cost records, while Task execution budgets own only policy, reservations, runtime counters for non-accounting dimensions, and admission decisions.
+The Task Execution Budget domain adds a platform-owned admission boundary for bounded autonomous Task execution. It is deliberately separate from Accounting: Accounting remains the sole ledger for canonical usage and cost records, while Task execution budgets own only policy, reservations, runtime counters for non-accounting dimensions, and admission decisions.
 
 ## Authority split
 

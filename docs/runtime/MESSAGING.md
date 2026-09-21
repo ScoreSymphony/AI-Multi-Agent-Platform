@@ -1,7 +1,7 @@
 # Event Transport and Internal Messaging
 
 This document defines the platform-owned message-transport boundary introduced by
-Issue #35. It is intentionally broker-neutral and does not select Redis, NATS,
+The MessageTransport boundary is intentionally broker-neutral and does not select Redis, NATS,
 Kafka, RabbitMQ or another permanent transport technology.
 
 ## Ownership and terminology
@@ -10,7 +10,7 @@ The platform keeps canonical history and delivery mechanics separate.
 
 | Concept | Meaning | Authority |
 | --- | --- | --- |
-| Domain Event | Canonical statement that something happened in platform state/history | Canonical kernel/event persistence from #6 through `EventProvider` |
+| Domain Event | Canonical statement that something happened in platform state/history | Canonical kernel/event persistence through the canonical `EventProvider` |
 | Transport Message | Versioned delivery envelope used to move data between components | `MessageTransport`; never canonical history |
 | Command | Request for a component to attempt an action | Becomes authoritative only through resulting canonical state/events |
 | Notification / Signal | Non-authoritative communication that may trigger processing | Transport-only unless a canonical state change is later committed |
@@ -245,7 +245,7 @@ canonical state or canonical event history.
 
 ## Security hooks
 
-Issue #35 establishes the transport boundary; authentication/authorization and
+The MessageTransport domain establishes the transport boundary; authentication/authorization and
 remote-transport hardening remain follow-up work. Every distributed adapter must
 be able to add, without changing the canonical envelope ownership model:
 
@@ -343,12 +343,11 @@ This architecture does not:
 
 - select a permanent broker;
 - make transport storage canonical history;
-- replace #6 event persistence;
-- implement worker scheduling (#14);
-- implement automation triggers (#18);
-- implement final service authentication (#36);
+- replace canonical event persistence;
+- implement worker scheduling;
+- implement automation triggers;
+- implement final service authentication;
 - claim exactly-once processing.
 
 Distributed scheduling, full distributed tracing, automation, authenticated
-service identities and transport-security hardening integrate later through #14,
-#16, #18, #36 and #43 without changing this ownership split.
+service identities and transport-security hardening integrate through the Node/Worker, Observability, Automation, Authentication and Security domains without changing this ownership split.

@@ -1,8 +1,8 @@
 # Control Plane high availability
 
-Issue #89 adds optional Control Plane failover without changing the canonical Task/Run architecture.
+The optional Control Plane high-availability profile adds failover without changing the canonical Task/Run architecture.
 
-> **Maturity:** **Optional / Advanced + Experimental** under [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The #89 fencing, promotion and reconciliation semantics are accepted architecture, but the production-shaped independent-process/host profile remains owned by #566. Deterministic or exact-revision conformance evidence does not by itself create a forward compatibility guarantee for this Experimental public surface.
+> **Maturity:** **Optional / Advanced + Experimental** under [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The fencing, promotion and reconciliation semantics are accepted architecture, but the production-shaped independent-process/host profile remains owned by the advanced HA deployment profile. Deterministic or exact-revision conformance evidence does not by itself create a forward compatibility guarantee for this Experimental public surface.
 
 The governing invariant is:
 
@@ -69,10 +69,10 @@ If reconciliation fails, the candidate is fenced and releases the lease when pos
 is not restored by skipping reconciliation.
 
 `FailoverReconciler` remains the generic integration point. `DistributedRuntimeFailoverReconciler`
-is the concrete #14 adapter: it invokes the existing `DistributedRuntime.reconcile()` state machine,
+is the concrete distributed-runtime adapter: it invokes the existing `DistributedRuntime.reconcile()` state machine,
 validates the same fencing epoch before and after that potentially asynchronous recovery pass, and
 reports changed ownership plus expired reservations. It intentionally does not redispatch lost work
-during promotion; ordinary fenced #14 failover/redispatch happens only after the Control Plane is
+during promotion; ordinary fenced distributed failover/redispatch happens only after the Control Plane is
 active.
 
 ## Authority-bearing runtime boundaries
@@ -168,7 +168,7 @@ canonical architecture.
 
 ## Provider-neutral active/passive deployment profile example
 
-The #89 deployment deliverable is a logical profile, not a mandate for one infrastructure product.
+The HA deployment deliverable is a logical profile, not a mandate for one infrastructure product.
 A conforming advanced deployment may be arranged as follows:
 
 ```text
@@ -216,8 +216,8 @@ Conformance rules for this profile:
 
 A deployment can place A and B on separate machines, VMs, containers or other hosts. Their physical
 hostnames and infrastructure IDs remain operational metadata. Concrete packaged multi-host examples
-and infrastructure automation may evolve under deployment work such as #240 without changing this
-#89 contract.
+and infrastructure automation may evolve under advanced deployment work without changing this
+HA contract.
 
 ### Redundancy health interpretation
 
@@ -226,7 +226,7 @@ lease/renewal timing and reconciliation/error state. Deployment monitoring deriv
 those provider-neutral instance facts: an active/passive installation is degraded when its active
 instance is healthy but no independent standby is reachable/eligible, and unavailable for writes when
 no instance can prove active authority. This aggregate is deployment state, not canonical Task/Run
-state; #89 deliberately does not infer an imaginary standby from the leader lease alone.
+state; the HA contract deliberately does not infer an imaginary standby from the leader lease alone.
 
 ## Operator failover runbook
 
@@ -263,13 +263,13 @@ HA is not backup. After a disaster restore, stale live leases and runtime reserv
 blindly revived. Restore reconstructs canonical state first, then starts HA coordination from a safe
 reconciled state according to the selected backend.
 
-## Issue #89 acceptance matrix
+## High-availability acceptance matrix
 
 The acceptance criteria are satisfied by the following platform contracts and tests:
 
 | Acceptance criterion | Evidence |
 | --- | --- |
-| Single-node production remains supported without HA dependencies | `tests/integration/control_plane/test_control_plane_ha.py::test_single_node_remains_active_without_ha_coordination` plus #39 single-node smoke |
+| Single-node production remains supported without HA dependencies | `tests/integration/control_plane/test_control_plane_ha.py::test_single_node_remains_active_without_ha_coordination` plus the single-node smoke profile |
 | Process/host identity is not canonical | ADR 0009, this ownership model, Worker restart/re-registration identity assertions |
 | Active/passive or warm-standby reference path | `ControlPlaneFailoverService`, `InMemoryCoordinationProvider`, simultaneous acquisition and promotion tests |
 | Split-brain/stale leader fails closed | stale-leader, simultaneous-acquisition, Worker-epoch and coordination-outage tests |
@@ -297,16 +297,16 @@ The required test plan maps as follows:
 | coordination backend unavailable | `test_coordination_outage_fails_authority_closed` |
 | single-node mode without HA components | `test_single_node_remains_active_without_ha_coordination` |
 
-## Completed #89 implementation boundary
+## Completed implementation boundary
 
-Issue #89 now provides:
+The HA implementation now provides:
 
 - ADR 0009 for the active/passive HA decision and fencing model;
 - platform-owned availability/coordination/fencing contracts;
 - deterministic active/passive/warm-standby reference semantics;
 - single-node operation with no HA dependency;
 - explicit `PROMOTING` state and narrow reconciliation authority;
-- concrete distributed-runtime promotion reconciliation reusing #14 recovery semantics;
+- concrete distributed-runtime promotion reconciliation reusing distributed-runtime recovery semantics;
 - restart reconciliation of running Worker Jobs without duplicate redispatch;
 - stale reservation expiry and same-ID Worker/Node re-registration;
 - Control Plane, Automation, distributed-runtime and Worker-transport authority gates;
@@ -318,6 +318,6 @@ Issue #89 now provides:
 - backend capability requirements, provider-neutral deployment profile and operator failover runbook;
 - deterministic integration/chaos-style coverage for the complete required test matrix.
 
-This completes the #89 architecture and acceptance contract. It does not make active/active safe, make
+This completes the HA architecture and acceptance contract. It does not make active/active safe, make
 HA mandatory, choose a production database/coordination vendor, or replace backup/restore. Concrete
 infrastructure packaging can add conforming implementations without reopening canonical HA semantics.

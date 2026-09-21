@@ -1,6 +1,6 @@
 # Usage and resource accounting
 
-Issue #76 owns durable, attributable usage/resource/cost accounting. Observability (#16) remains a separate derived operational view: it may emit measurements, but it is not the accounting source of truth.
+The Accounting domain owns durable, attributable usage/resource/cost accounting. Observability remains a separate derived operational view: it may emit measurements, but it is not the accounting source of truth.
 
 ## Foundation
 
@@ -19,7 +19,7 @@ Measurement quality is always one of:
 
 `AccountingService` structurally implements the `MeasurementSink` expected by `AccountingBridgeExporter`. Translation is an explicit whitelist. Unknown telemetry metrics are ignored instead of being silently reinterpreted.
 
-Mappings cover Task/Run/Executor counts, outcomes, durations, queue wait and retry measurements, reliable model/tool measurements, and the canonical #14 Node/Worker gauges described below. Model token usage is separated into input, output, total, cached and reasoning semantics so those values are never silently added together. Provider-reported usage remains `reported` and keeps provider/config provenance.
+Mappings cover Task/Run/Executor counts, outcomes, durations, queue wait and retry measurements, reliable model/tool measurements, and the canonical Node/Worker gauges described below. Model token usage is separated into input, output, total, cached and reasoning semantics so those values are never silently added together. Provider-reported usage remains `reported` and keeps provider/config provenance.
 
 Metric ingestion uses a deterministic usage ID derived from the source `MetricRecord`, making exact repeated delivery idempotent.
 
@@ -46,13 +46,13 @@ A broad `latest` query keeps one current sample per exact canonical `UsageScope`
 
 `UsageBudget` defines metric, unit, scope, limit, soft/hard kind, warning fraction, optional rolling window, action, owner attribution and whether estimated measurements may count. Supported canonical scopes include user, organization, team, project, workspace, task, run, agent, capability, model provider, Worker and Node. Budget revisions are immutable and advance monotonically; both reference stores retain version history so policy changes remain auditable.
 
-Accounting computes `BudgetState` but does not itself deny work. Authorization/admission enforcement remains owned by #15/#14. Low-confidence estimated usage is excluded unless the budget explicitly opts in.
+Accounting computes `BudgetState` but does not itself deny work. Authorization/admission enforcement remains owned by Authorization and distributed admission/scheduling. Low-confidence estimated usage is excluded unless the budget explicitly opts in.
 
-Crossing warning/exceeded levels emits a canonical `BudgetThresholdEvent`. The store persists both the current threshold level and a monotonically increasing threshold generation. Warning→exceeded remains one episode; falling below threshold ends the active episode without deleting its generation; a later fresh crossing advances the generation. #75 uses that generation in notification aggregation identity, so restart recovery reconstructs the same attention while a legitimate later re-cross can create new attention. Archived/dismissed historical notifications therefore remain dedupe evidence for their episode only.
+Crossing warning/exceeded levels emits a canonical `BudgetThresholdEvent`. The store persists both the current threshold level and a monotonically increasing threshold generation. Warning→exceeded remains one episode; falling below threshold ends the active episode without deleting its generation; a later fresh crossing advances the generation. Notifications use that generation in notification aggregation identity, so restart recovery reconstructs the same attention while a legitimate later re-cross can create new attention. Archived/dismissed historical notifications therefore remain dedupe evidence for their episode only.
 
-## #14 Node/Worker resource semantics
+## Node/Worker resource semantics
 
-The distributed runtime exposes explicit point-in-time resource facts through #16 telemetry, which #76 normalizes as `reported` + `latest` usage records:
+The distributed runtime exposes explicit point-in-time resource facts through Observability telemetry, which Accounting normalizes as `reported` + `latest` usage records:
 
 - `platform.node.cpu_cores_total` → `node.cpu.cores.capacity`;
 - `platform.node.cpu_cores_available` → `node.cpu.cores.available`;
@@ -65,13 +65,13 @@ The distributed runtime exposes explicit point-in-time resource facts through #1
 - `platform.worker.active_jobs` → `worker.jobs.active`;
 - `platform.worker.concurrency_limit` → `worker.jobs.capacity`.
 
-The pre-existing `platform.node.accelerator_memory_available_bytes` metric remains a scheduler placement fact representing the maximum on one accelerator and is not normalized as total available VRAM. Scheduler reservation metrics likewise remain reservation facts and are not treated as consumed usage. CPU/GPU time and utilization are not fabricated when #14 does not supply authoritative measurements.
+The pre-existing `platform.node.accelerator_memory_available_bytes` metric remains a scheduler placement fact representing the maximum on one accelerator and is not normalized as total available VRAM. Scheduler reservation metrics likewise remain reservation facts and are not treated as consumed usage. CPU/GPU time and utilization are not fabricated when the distributed runtime does not supply authoritative measurements.
 
 Canonical `node_id` and `worker_id` come from `TelemetryContext`, so provider/backend replacement does not redefine resource identity.
 
 ## Workspace and physical storage semantics
 
-`FileStorageAccounting` consumes the completed #13 `FileProvider` boundary and records project-level physical `storage.file.bytes.current`. It sums only READY canonical `FileRecord.size_bytes` values visible through the provider's scoped `list_files()` call. Tombstoned or pending files are not counted.
+`FileStorageAccounting` consumes the completed `FileProvider` boundary and records project-level physical `storage.file.bytes.current`. It sums only READY canonical `FileRecord.size_bytes` values visible through the provider's scoped `list_files()` call. Tombstoned or pending files are not counted.
 
 Physical FileProvider storage refuses Workspace attribution. A single canonical File can be referenced by several Workspace snapshots, so assigning those same physical bytes to every Workspace would double-count storage.
 
@@ -86,28 +86,28 @@ Storage reconciliation does not infer usage ownership from `DataAccessContext.ac
 
 Provider errors may record an unavailable latest measurement but are re-raised. An unavailable gauge never becomes a fabricated zero.
 
-## #33 Agent/Team attribution
+## Agent/Team attribution
 
-`AgentRunUsageAttributor` enriches already-attributed runtime usage with exact executed revision provenance from canonical #33 `AgentRunRecord` state.
+`AgentRunUsageAttributor` enriches already-attributed runtime usage with exact executed revision provenance from canonical `AgentRunRecord` state.
 
 It requires both canonical `run_id` and `agent_id` to already be present in the usage scope. Team revision is added only when `team_id` is also already present. If no exact canonical run matches, or more than one match would be possible, the record is left unchanged. Planning assignments, UI selections and guessed team membership never become accounting identity.
 
 The UsageScope remains the runtime-supplied identity; provenance may add `agent_run_id`, `agent_revision`, `team_revision` and `orchestrator_adapter_id`.
 
-## #87 Organization/Team visibility
+## Organization/Team visibility
 
-The base `accounting_resource_services()` keeps exact owner isolation. `organizations.accounting` adds an optional membership-aware read composition for deployments that configure #87 Organization/Team semantics.
+The base `accounting_resource_services()` keeps exact owner isolation. `organizations.accounting` adds an optional membership-aware read composition for deployments that configure Organization/Team semantics.
 
 Personal raw usage remains exact-owner isolated. Cross-member Organization or Team aggregate visibility requires either canonical Organization owner/administrator status or an active Membership carrying the explicit `accounting.aggregate.read` policy reference. Suspended, revoked or left Memberships no longer grant future aggregate visibility. Historical usage provenance is never rewritten when membership changes.
 
-The membership-aware layer narrows visibility only; #15 remains the request authorization gate. It does not grant a request that #15 denied and it does not invent cross-Organization access.
+The membership-aware layer narrows visibility only; Authorization remains the request authorization gate. It does not grant a request that Authorization denied and it does not invent cross-Organization access.
 
 ## Control Plane
 
-`accounting_resource_services()` supplies three explicit #32 extension collections:
+`accounting_resource_services()` supplies three explicit Control Plane extension collections:
 
 - `usage-records` — attributable raw records;
 - `usage-aggregates` — grouped metric/unit totals with quality breakdown;
 - `usage-budgets` — configured limits and current consumed/remaining state.
 
-Workspace, Node/Worker and executed Agent/Team records use the same canonical collections and query model; #171 does not introduce a second accounting API or persistence model.
+Workspace, Node/Worker and executed Agent/Team records use the same canonical collections and query model; the cross-domain accounting integration does not introduce a second accounting API or persistence model.

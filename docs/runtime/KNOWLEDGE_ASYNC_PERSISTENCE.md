@@ -1,6 +1,6 @@
 # Async Knowledge SQLite persistence
 
-Issue #892 requires awaitable runtime services to avoid synchronous SQLite work on the asyncio event-loop thread. The local Knowledge provider remains SQLite-backed while the existing `KnowledgeProvider` application contract remains backend-neutral and awaitable.
+Awaitable runtime services avoid synchronous SQLite work on the asyncio event-loop thread. The local Knowledge provider remains SQLite-backed while the `KnowledgeProvider` application contract remains backend-neutral and awaitable.
 
 ## Runtime boundary
 
@@ -39,4 +39,4 @@ Existing domain errors retain their canonical codes. SQLite `busy`/`locked` oper
 
 Service callers continue to depend only on `KnowledgeProvider`, so a future Postgres implementation can satisfy the same contract without changing callers. Existing Knowledge lifecycle/restart/search tests remain applicable.
 
-Issue #892 integration coverage additionally verifies event-loop responsiveness, worker-thread connection ownership, bounded worker concurrency, isolation from asyncio's shared default executor, repeated cancellation through reindex completion, same-source concurrent reindex serialization, retryable busy mapping with terminal FAILED state, rollback of a partially attempted ingest, and restart-visible search/index semantics.
+Knowledge async-persistence integration coverage additionally verifies event-loop responsiveness, worker-thread connection ownership, bounded worker concurrency, isolation from asyncio's shared default executor, repeated cancellation through reindex completion, same-source concurrent reindex serialization, retryable busy mapping with terminal FAILED state, rollback of a partially attempted ingest, and restart-visible search/index semantics.

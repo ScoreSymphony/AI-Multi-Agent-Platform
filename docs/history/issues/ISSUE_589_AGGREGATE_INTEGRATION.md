@@ -1,3 +1,5 @@
+> Historical integration handoff. Superseded after Issue #589 was completed and closed on 2026-09-19. The branch, PR, validation-deferment, and keep-open instructions below are retained only as historical provenance and do not describe current repository work or operator requirements.
+
 # Issue #589 aggregate integration map
 
 This document is the handoff for consolidating all active #589 branches into the later unified

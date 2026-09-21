@@ -1,11 +1,11 @@
 # Platform upgrades and database/schema migrations
 
-Issue #41 owns **cross-release deployment migration**. It coordinates persistent canonical data,
+The Upgrade domain owns **cross-release deployment migration**. It coordinates persistent canonical data,
 API/domain contracts, plugins/adapters, portable packages and recovery requirements when an
 installed platform moves between supported releases.
 
-It does **not** redefine the portable package format from #79 and it does not replace the
-backup/restore semantics from #40.
+It does **not** redefine the portable package format from Portability and it does not replace the
+backup/restore semantics from the Backup/Restore domain.
 
 ## Version dimensions are independent
 
@@ -20,9 +20,9 @@ A deployment records the following dimensions separately:
 | Plugin manifest | `plugins.PLUGIN_MANIFEST_VERSION` | Plugin metadata contract |
 | Plugin interface versions | installed extension metadata | Extension contract compatibility |
 | Adapter versions | deployment/adapter metadata | Concrete adapter/upstream compatibility |
-| Portable package format | `portability.PORTABLE_FORMAT_VERSION` | #79 canonical import/export envelope |
+| Portable package format | `portability.PORTABLE_FORMAT_VERSION` | canonical Portability import/export envelope |
 | Template portable schema | template portability codec | Stored/portable Template interpretation |
-| Backup format | `backup.BACKUP_FORMAT_VERSION` | #40 recovery artifact interpretation |
+| Backup format | `backup.BACKUP_FORMAT_VERSION` | canonical Backup/Restore artifact interpretation |
 | Worker protocol | `distributed.WORKER_PROTOCOL_VERSION` | Worker registration/dispatch compatibility |
 | Message protocol | `messaging.ENVELOPE_VERSION` | Distributed message-envelope compatibility |
 
@@ -101,7 +101,7 @@ Supported evolution follows these rules:
 
 The existing Control Plane rules remain authoritative: additive compatible evolution can occur
 inside the current API major namespace, while incompatible semantics require a new API namespace.
-#41 does not declare mixed-version API operation merely because two server versions can start.
+The Upgrade domain does not declare mixed-version API operation merely because two server versions can start.
 
 Upgrade preflight fails closed on an API major/version transition unless that release adds an
 explicit compatibility policy.
@@ -123,14 +123,14 @@ warning and must remain disabled until compatible. The target `PluginRegistry` v
 and extension-interface compatibility again on `enable()`, so an incompatible optional plugin cannot
 silently reactivate after restart.
 
-Plugin-owned state migrations are invoked only through the controlled #20 lifecycle hook. They are
+Plugin-owned state migrations are invoked only through the controlled Plugin lifecycle hook. They are
 included in the durable maintenance attempt, are replayed only through the idempotent/version-aware
 plugin migrator on explicit resume, and are conservatively classified as `restore_required`; preflight
 therefore requires a verified source-release backup whenever plugin-owned state must move forward.
 
-## Portable import/export compatibility (#79)
+## Portable import/export compatibility
 
-#79 owns the current portable package contract. #41 owns whether a package produced by an older
+Portability owns the current portable package contract. The Upgrade domain owns whether a package produced by an older
 release remains acceptable after a platform upgrade.
 
 Rules:
@@ -139,13 +139,13 @@ Rules:
 2. an older format is accepted only when an explicit translator chain exists;
 3. translation is deterministic and version-to-version; there is no best-effort reinterpretation;
 4. an unsupported format is rejected before import mutation;
-5. translators preserve #79 canonical ID/reference semantics and do not introduce backend-private
+5. translators preserve canonical Portability ID/reference semantics and do not introduce backend-private
    runtime state;
 6. previously exported packages are not rewritten in place simply because the platform upgrades.
 
-`FormatTranslatorRegistry` implements this cross-release policy without redefining #79 serializers.
+`FormatTranslatorRegistry` implements this cross-release policy without redefining Portability serializers.
 
-## Template compatibility (#78/#79)
+## Template and Portability compatibility
 
 Template packages follow the same explicit translator rule. Existing resources instantiated from an
 older Template remain independent of later Template revisions. Stored Template definitions are
@@ -184,20 +184,20 @@ Preflight evaluates before mutation:
 - historical Event schema interpretability;
 - portable/template format translator availability;
 - API, Worker and message protocol changes;
-- backup presence and #40 integrity verification when platform or plugin state requires it.
+- backup presence and Backup/Restore integrity verification when platform or plugin state requires it.
 
 Warnings do not become hidden assumptions: they remain in the report. Errors make `report.ok=false`
 and prevent `UpgradeService` from mutating state.
 
 ## Backup/restore integration
 
-The #40 single-node durable-store inventory includes these #41 files whenever they exist:
+The single-node durable-store inventory includes these Upgrade-domain files whenever they exist:
 
 - `db/platform-upgrade.json` — activated deployment version vector;
 - `db/migration-history.json` — deterministic per-step history;
 - `db/upgrade-history.json` — completed upgrade attempts.
 
-They are optional only for the 0.0.1 transition because pre-#41 deployments must be able to adopt the
+They are optional only for the 0.0.1 transition because deployments from before this Upgrade contract must be able to adopt the
 baseline explicitly. Once present, they are recovery evidence and move with the rest of the durable
 data root.
 
@@ -255,7 +255,7 @@ read the new schema.
 ### `restore_required`
 
 The transformation is forward-only, or plugin-owned state moved without a proven reverse migration.
-Preflight requires a verified #40 backup produced by the source release. Recovery is
+Preflight requires a verified Backup/Restore artifact produced by the source release. Recovery is
 restore-from-backup; the platform never labels this path reversible.
 
 A backup created under the source release is retained as the recovery artifact even when the target
@@ -267,7 +267,7 @@ For a real release upgrade:
 
 1. stop and inspect the current deployment; run `platform-upgrade ... versions`;
 2. run `platform-upgrade ... preflight` with the intended source backup/package evidence;
-3. create a quiesced backup with `platform-backup create` and verify it with #40 tooling;
+3. create a quiesced backup with `platform-backup create` and verify it with Backup/Restore tooling;
 4. pause new Task/Automation dispatch and drain/cancel active work according to policy;
 5. stop old processes and ensure the deployment is quiesced;
 6. install the target release without deleting the durable data root;
@@ -295,7 +295,7 @@ A release that changes persistent/domain state must:
 6. update plugin/adapter/API/Worker/message compatibility evidence where those contracts change;
 7. preserve historical Event interpretation or ship an explicit translator/backfill;
 8. document unsupported direct upgrade paths rather than guessing;
-9. run #40 backup/restore and the release acceptance suite before claiming upgrade compatibility;
+9. run Backup/Restore and the release acceptance suite before claiming upgrade compatibility;
 10. verify `platform-server` rejects both maintenance state and executable/data version mismatch.
 
 The first implementation release (`0.0.1`) contains the migration framework and one-time baseline

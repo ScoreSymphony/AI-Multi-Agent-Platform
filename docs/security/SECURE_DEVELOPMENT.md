@@ -35,7 +35,7 @@ This checklist applies to maintainers, contributors and coding agents making sec
 - Reject absolute paths and parent traversal where relative paths are required.
 - Protect against symlink/junction escapes; use `resolve_within(...)` where applicable.
 - Remember path validation alone does not eliminate TOCTOU races; hostile-code execution needs OS/container sandboxing and least privilege.
-- Do not add arbitrary shell/command execution to the default path unless a later issue explicitly defines the capability, policy and sandbox model.
+- Do not add arbitrary shell/command execution to the default path unless an explicitly supported capability, policy and sandbox model define that execution boundary.
 - Filter environment variables; never inherit broad host credentials into executor contexts by default.
 - Treat produced artifacts as untrusted input when later consumed.
 

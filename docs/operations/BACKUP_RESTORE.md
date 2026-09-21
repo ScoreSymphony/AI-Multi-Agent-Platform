@@ -1,6 +1,6 @@
 # Backup, restore, and disaster recovery
 
-This document defines the production-shaped backup boundary for the single-node deployment profile introduced by issue #39. It is vendor-neutral and relocatable.
+This document defines the production-shaped backup boundary for the single-node deployment profile provided by the single-server deployment. It is vendor-neutral and relocatable.
 
 ## Consistency model
 
@@ -95,7 +95,7 @@ V1 restore requires an exact platform release version through the installed `pla
 
 A pinned backup is restored only when the running build commit matches. Older v1 backups whose historical manifest contains `platform.commit=null` remain schema-valid, but the operator CLI refuses to restore them silently. A trusted legacy backup requires the explicit `--allow-unpinned-backup` opt-in. This preserves format-v1 readability while keeping new disaster-recovery operations deterministic.
 
-The per-database `PRAGMA user_version` values are not treated as decorative metadata: backup verification compares them with the actual payload databases, and restore compares them again with the restored SQLite files before publishing the restored data root. Cross-version migrations and supported translation between different database revisions belong to #41 rather than being silently inferred by #40.
+The per-database `PRAGMA user_version` values are not treated as decorative metadata: backup verification compares them with the actual payload databases, and restore compares them again with the restored SQLite files before publishing the restored data root. Cross-version migrations and supported translation between different database revisions belong to the Upgrade domain rather than being silently inferred by Backup/Restore.
 
 ## Operator commands
 

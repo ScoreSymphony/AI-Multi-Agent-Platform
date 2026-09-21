@@ -1,6 +1,6 @@
 # Memory and Knowledge in global Search
 
-Issue #290 integrates the canonical Memory and Knowledge lifecycles from #251 into the global Search foundation from #45.
+Global Search integrates the canonical Memory and Knowledge lifecycles through the shared search foundation.
 
 ## Authority boundary
 

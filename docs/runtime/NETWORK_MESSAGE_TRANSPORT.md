@@ -3,7 +3,7 @@
 The platform provides a dependency-free network-capable implementation of the existing
 `MessageTransport` contract. It lets canonical Worker transport cross process and host boundaries
 without making a broker product, cloud provider, VPS class or orchestration system part of platform
-identity. Historical context: issue #388 introduced this adapter and its real two-host acceptance
+identity. Historical context: the initial network adapter work introduced this adapter and its real two-host acceptance
 campaign.
 
 ## Components

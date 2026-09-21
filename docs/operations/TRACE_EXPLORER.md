@@ -1,6 +1,6 @@
 # Multi-Agent Trace Explorer
 
-Issue #901 productizes the canonical observability foundation from #16 as a Task-scoped trace explorer. The explorer is a **read projection** only: it does not own Task, Run, Step, AgentRun, Approval, Verification, Result, Artifact or accounting lifecycle state, and it does not create a second telemetry store.
+The Trace Explorer productizes the canonical Observability foundation as a Task-scoped trace explorer. The explorer is a **read projection** only: it does not own Task, Run, Step, AgentRun, Approval, Verification, Result, Artifact or accounting lifecycle state, and it does not create a second telemetry store.
 
 ## Surfaces
 
@@ -32,7 +32,7 @@ Missing telemetry is explicit. `telemetry_state` is `available`, `degraded` or `
 
 ## Usage and cost
 
-Issue #76 remains the durable accounting authority. When Accounting is configured, the trace explorer reads canonical `UsageRecord`s and preserves:
+Accounting remains the durable accounting authority. When Accounting is configured, the trace explorer reads canonical `UsageRecord`s and preserves:
 
 - metric type and unit;
 - measured/reported/estimated/unavailable quality;
@@ -44,7 +44,7 @@ Observability does not recalculate provider cost or convert an unavailable measu
 
 ## Security and content visibility
 
-The trace explorer inherits #16 capture/redaction policy and adds a projection-level defense in depth:
+The trace explorer inherits the Observability capture/redaction policy and adds a projection-level defense in depth:
 
 - prompts, messages, request/response bodies, tool inputs/outputs, file content and other content-bearing payload fields are omitted from the trace read model;
 - secrets, credentials, passwords, cookies, authorization material and token-like secrets are redacted;
@@ -62,6 +62,6 @@ Filtering is performed on the derived node model after canonical Task authorizat
 
 ## Multi-agent acceptance
 
-The maintained #889 reference multi-agent golden path is the acceptance anchor for the product experience. #901 tests additionally cover hierarchy, parallel siblings, model/tool children, failure/retry classification, Verification events, Handoff/Context/Artifact references where telemetry supplies them, missing accounting data, redaction and pagination semantics.
+The maintained reference multi-agent golden path is the acceptance anchor for the product experience. Trace Explorer tests additionally cover hierarchy, parallel siblings, model/tool children, failure/retry classification, Verification events, Handoff/Context/Artifact references where telemetry supplies them, missing accounting data, redaction and pagination semantics.
 
-The important boundary is intentional: #889 and the owning domains remain the authority for whether a Plan revision was activated, a Handoff was consumed or a Result was accepted. #901 only makes the corresponding canonical telemetry and references inspectable.
+The important boundary is intentional: The reference golden path and the owning domains remain the authority for whether a Plan revision was activated, a Handoff was consumed or a Result was accepted. The Trace Explorer only makes the corresponding canonical telemetry and references inspectable.

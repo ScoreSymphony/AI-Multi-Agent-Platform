@@ -1,13 +1,13 @@
 # Canonical Skills and reproducible Skill Bundles
 
-Issue #588 introduces the platform-owned Skill layer for reusable task methods.
+The platform-owned Skill layer provides for reusable task methods.
 A Skill answers **how** work should be performed. It is deliberately separate from:
 
-- Agents/Agent Teams (#33), which own execution identity and profile policy;
-- Capabilities/Tools (#12), which own executable operations and invocation policy;
-- authorization/Approval (#15), which owns permissions and sensitive-action approval;
-- Plugins (#20), which package/integrate implementations;
-- Verification (#86), which decides whether work satisfies completion policy.
+- Agents/Agent Teams, which own execution identity and profile policy;
+- Capabilities/Tools, which own executable operations and invocation policy;
+- authorization/Approval, which owns permissions and sensitive-action approval;
+- Plugins, which package/integrate implementations;
+- Verification, which decides whether work satisfies completion policy.
 
 A Skill never grants itself a Capability, permission, Approval, secret, or verification result.
 Provider/orchestrator formats are presentation adapters only.
@@ -52,7 +52,7 @@ Capability/model property.
 
 Capability requirements are checked against the server-resolved Agent/Run capability scope. A Skill
 cannot widen that scope. When a canonical `CapabilityRegistry` is attached, exact/compatible versions,
-permissions and worker requirements are resolved through #12. Model requirements are checked against
+permissions and worker requirements are resolved through the Capability domain. Model requirements are checked against
 a server-selected canonical `ModelConfiguration`; provider-native model names remain outside the Skill
 schema.
 

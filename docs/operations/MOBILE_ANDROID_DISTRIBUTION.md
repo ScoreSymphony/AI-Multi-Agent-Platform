@@ -1,9 +1,7 @@
 # Android APK distribution
 
-Issue: #1319  
-Mobile baseline: #1240  
-Terminal physical-device acceptance: #1322
-
+Mobile baseline: optional mobile client profile
+Terminal physical-device acceptance: validated separately from distribution workflow acceptance
 The Android companion is distributed directly through GitHub Releases. Google Play, an app-store
 account, Expo EAS and any other paid build/distribution service are not required.
 
@@ -196,5 +194,5 @@ checksum generation and expected GitHub Release assets.
 
 Clean install/launch against a remote Control Plane and N -> N+1 data-preserving update are retained
 as real-device evidence. The terminal physical Android/VPS journey, including a wrong-signature
-update rejection on a real device, is tracked by #1322 so the distribution workflow is not confused
+update rejection on a real device, is validated separately so the distribution workflow is not confused
 with product-level device acceptance.

@@ -17,6 +17,6 @@ Public-surface maturity is classified separately in [`../FEATURE_CLASSIFICATION.
 
 ## Initial version
 
-The initial canonical domain schemas introduced by issue #4 use `1.0`.
+The initial canonical domain schemas use `1.0`.
 
 HTTP/API and adapter protocol versioning are separate version spaces. Their current role/stability classifications and compatibility policies are documented in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md) and their owning contract documentation.

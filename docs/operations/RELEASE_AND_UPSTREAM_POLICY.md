@@ -1,6 +1,6 @@
 # Release and upstream update policy
 
-Status: normative operator policy for issue #42.
+Status: normative operator policy for releases and upstream updates.
 
 ## 1. Versioning model
 
@@ -94,7 +94,7 @@ binds the complete canonical `VersionSnapshot` to the reviewed upstream combinat
 - deployment-specific plugin-interface versions where claimed;
 - exact reviewed Hermes, LiteLLM or other currently claimed upstream revisions.
 
-Historical Forge provenance remains recorded separately after #991 and is not an active release-compatibility input.
+Historical Forge provenance remains recorded separately after executable Forge retirement and is not an active release-compatibility input.
 
 The packaged baseline may contain empty adapter/plugin-interface maps when it makes no
 installation-specific claim; a deployment-specific compatibility claim must populate those maps
@@ -182,7 +182,7 @@ other hosted provider to be reachable during release validation.
 
 ## 9. Rollback and upgrade ownership
 
-Issue #41's upgrade/migration layer remains the authority for persisted version state, migration
+The canonical upgrade/migration layer remains the authority for persisted version state, migration
 preflight and maintenance-mode activation. The release layer records and gates compatibility; it
 must not bypass migration preflight or write deployment version state directly.
 

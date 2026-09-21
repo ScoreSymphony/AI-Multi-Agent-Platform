@@ -1,7 +1,5 @@
 # Conversation interaction shell
 
-Issue: #72
-
 ## Purpose
 
 The conversation domain provides a durable user-facing interaction shell over canonical
@@ -184,7 +182,7 @@ for Tasks not linked to the Conversation are rejected.
 
 Conversation SSE is composed above the current public Notification/Plugin/Automation/
 Terminal ASGI stack. Existing lifespan handling, terminal WebSockets and authenticated
-stream preparation therefore remain intact rather than being reimplemented by #72.
+stream preparation therefore remain intact rather than being reimplemented by the Conversation domain.
 
 ## Approval and input attention
 
@@ -233,12 +231,7 @@ Both are explicitly `tentative: true` and `authoritative: false`. They are prese
 state only and cannot queue/start/resume Tasks, invoke privileged tools or mutate the
 canonical lifecycle.
 
-The Conversation response contract is chunk/SSE-capable and replacement providers may
-emit multiple chunks. The current reference `ModelRuntime` adapter still falls back to the
-whole-response `generate` seam because the canonical ModelProvider runtime does not yet
-expose native provider streaming. Native provider streaming is owned by #10; #72 does not
-create a provider-specific streaming/session API to work around that missing lower-level
-seam.
+The Conversation response contract is chunk/SSE-capable and replacement providers may emit multiple chunks. The canonical `ModelProvider.stream(...)` / `ModelRuntime.stream(...)` boundary now supports provider-neutral incremental events, with a generate-based compatibility fallback for providers that do not implement native streaming. The Conversation domain translates those canonical model events into its own conversation/SSE contract without exposing provider-native stream or session types.
 
 Only after successful completion is one Assistant `ConversationMessage` persisted. The
 stream then emits `conversation.response.committed` with `durable: true`. The committed
@@ -288,7 +281,7 @@ export returns Conversation-owned state plus canonical references without recurs
 copying referenced resources or provider-private data.
 
 This distinction also keeps conversation history separate from long-term memory. Nothing
-in #72 automatically promotes a message into memory or Knowledge; a later memory policy
+in the Conversation domain automatically promotes a message into memory or Knowledge; a later memory policy
 must make such promotion explicit.
 
 ## Web Chat area
@@ -315,7 +308,7 @@ stream cannot be accidentally rendered into another thread.
 
 ## Security boundary
 
-The completed #36 authentication/session contract and existing #15 authorization layer
+The canonical authentication/session contract and authorization layer
 remain the authoritative identity and permission boundaries. Conversation operations do
 not invent a second auth/session model.
 
@@ -336,7 +329,7 @@ Chat cannot create an alternate approval decision path.
 
 ## Acceptance coverage
 
-The #72 implementation covers:
+The Conversation implementation covers:
 
 - canonical Conversation/Message contracts;
 - Agent/AgentTeam targets with exact, creation-time-pinned canonical revisions;

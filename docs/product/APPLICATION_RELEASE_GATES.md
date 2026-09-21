@@ -1,6 +1,6 @@
 # Application release gates
 
-Application release gates are a projection owned by application distribution. They do not replace canonical Verification (#86), Evaluation (#19), execution (#7), File/Artifact (#13), or Approval (#15).
+Application release gates are a projection owned by application distribution. They do not replace canonical Verification, Evaluation, execution, File/Artifact, or Approval.
 
 The release path is:
 

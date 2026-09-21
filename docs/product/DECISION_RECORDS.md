@@ -1,6 +1,6 @@
 # Decision Records
 
-Issue #598 adds a canonical, lightweight record of **why** the platform chose an option. A Decision Record is evidence-backed governance history, not an execution or permission primitive.
+The Decision Record domain provides a canonical, lightweight record of **why** the platform chose an option. A Decision Record is evidence-backed governance history, not an execution or permission primitive.
 
 ## Boundary
 

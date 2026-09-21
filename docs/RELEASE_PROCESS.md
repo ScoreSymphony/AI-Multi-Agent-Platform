@@ -2,8 +2,8 @@
 
 ## Version policy
 
-- `0.1.0` is the first usable single-node prototype and requires the M2 acceptance gate in #252.
-- `1.0.0` is the operational baseline and requires the full platform-conformance gate, historically tracked under issue #46.
+- `0.1.0` is the first usable single-node prototype and requires the usable-prototype acceptance gate.
+- `1.0.0` is the operational baseline and requires the full platform-conformance gate.
 - Patch versions contain backward-compatible fixes and must not intentionally break documented public surfaces except for unavoidable security/correctness remediation.
 - While the repository remains `0.x`, a minor version may contain a documented incompatible change to an explicitly Beta or Experimental surface under [`FEATURE_CLASSIFICATION.md`](FEATURE_CLASSIFICATION.md), but any stricter surface-specific API/schema/format major-version or migration mechanism still applies; Stable surfaces remain protected by their own major-version/deprecation rules.
 - At and after `1.0.0`, minor versions remain backward-compatible for the Stable public compatibility set. Beta/Experimental surfaces remain outside that Stable compatibility set and may evolve only under their explicitly documented maturity rules and any stricter surface-specific versioning mechanism.
@@ -19,17 +19,17 @@ The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, 
 
 > Status snapshot: 2026-09-20
 
-The #252 usable single-node prototype gate has passed and is maintained by the repository's
+The usable single-node prototype gate has passed and is maintained by the repository's
 prototype-acceptance profiles. The planned `0.1.0` prototype milestone was never formally
 published or tagged.
 
-Issue #46, the full platform-conformance gate required by the version policy for the operational
+The full platform-conformance gate required by the version policy for the operational
 baseline, is complete. Because the repository has progressed beyond the prototype gate without an
-intervening formal release, the first formal publication tracked by #1237 now targets **`1.0.0`**.
+intervening formal release, the first formal publication now targets **`1.0.0`**.
 The project will not create a retroactive `0.1.0` release merely to preserve the old planned
 sequence.
 
-Publication is still blocked until the terminal #747 product-readiness audit passes for the exact
+Publication is still blocked until the terminal product-readiness audit passes for the exact
 release candidate, all release-blocking V1/M3 findings are resolved or explicitly reclassified as
 non-blocking, and the complete release checklist below is green for that exact source commit.
 
@@ -40,18 +40,18 @@ the accepted candidate across package metadata, runtime `__version__`, canonical
 release-manifest metadata and the Git tag/release identity. Historical migration/adoption evidence
 that deliberately names `0.0.1` must not be rewritten as part of that projection.
 
-The release/update system itself is no longer only policy documentation. The merged #42 work
+The release/update system itself is no longer only policy documentation. The release/update foundation
 provides release-manifest validation, compatibility inventory, advisory upstream discovery,
 fail-closed adoption/release gates, operator-visible release status and the upstream review
-workflow. PR #492 further hardened this foundation with manifest schema v2, cryptographic
+workflow. A later hardening pass strengthened this foundation with manifest schema v2, cryptographic
 dependency/artifact provenance, typed gate evidence, exact source-commit binding and complete
 canonical `VersionSnapshot` compatibility state.
 
-The remaining #42 operationalization is implemented through deterministic
+The remaining release operationalization is implemented through deterministic
 `platform-release generate`, restart-persistent reviewed advisory discovery, explicit schema-v2
 browser types and an optional provider-neutral scheduled Git discovery workflow. Discovery remains
 advisory: it cannot mutate production pins, approve or merge changes, deploy a release or replace
-#41 as the authority for persisted upgrade/version state.
+the Upgrade domain as the authority for persisted upgrade/version state.
 
 ## Release candidate checklist
 
@@ -87,7 +87,7 @@ advisory: it cannot mutate production pins, approve or merge changes, deploy a r
 
 ## Upstream discovery
 
-The optional scheduled discovery workflow resolves Git remote HEADs without cloning or mutating the production baseline, emits provider-neutral observation JSON and evaluates it through the same advisory discovery contract. Changed revisions remain `unknown` until reviewed. A reviewed report can be persisted explicitly with `platform-release upstream-check --data-dir <path> --reviewed-at <timestamp>` so the Control Plane and Settings UI retain candidate state across restarts. This persistence is separate from #41 version state and never performs update adoption.
+The optional scheduled discovery workflow resolves Git remote HEADs without cloning or mutating the production baseline, emits provider-neutral observation JSON and evaluates it through the same advisory discovery contract. Changed revisions remain `unknown` until reviewed. A reviewed report can be persisted explicitly with `platform-release upstream-check --data-dir <path> --reviewed-at <timestamp>` so the Control Plane and Settings UI retain candidate state across restarts. This persistence is separate from Upgrade-domain version state and never performs update adoption.
 
 ## Rollback
 

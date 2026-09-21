@@ -1,7 +1,5 @@
 # Connector persistence and restart recovery
 
-Issue: #416
-
 ## Runtime storage
 
 The normal single-node and shipped `platform-server` composition use `SqliteConnectorRepository`
@@ -45,7 +43,7 @@ that path. Connection endpoint metadata remains subject to the existing credenti
 rejection before persistence, and `SecretReference` metadata is serialized through its redacted
 canonical representation.
 
-Secret-provider storage remains an independent #34 concern and must be backed up/restored according
+Secret-provider storage remains an independent Secrets/Configuration concern and must be backed up/restored according
 to the selected secret provider's own policy. Restoring `connectors.sqlite3` restores references, not
 the secret material those references address.
 

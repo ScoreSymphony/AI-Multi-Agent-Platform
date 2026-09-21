@@ -1,7 +1,6 @@
 # Optional mobile client
 
 **Public stability: Beta**  
-Issue: #1240
 
 This directory contains the optional Android/iOS client profile for the AI Multi-Agent Platform.
 

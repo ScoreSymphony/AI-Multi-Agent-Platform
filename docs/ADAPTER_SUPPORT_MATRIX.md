@@ -1,6 +1,5 @@
 # Adapter support matrix
 
-Issue: #904
 
 The machine-readable source of truth is [`ADAPTER_SUPPORT_MATRIX.toml`](ADAPTER_SUPPORT_MATRIX.toml). This document defines how those entries are interpreted and records the consolidation decisions behind them.
 
@@ -30,7 +29,7 @@ Support tier is a **product/maintenance policy**, not provider runtime state. It
 
 ## Audited scope
 
-The #904 audit covers product-facing replaceable implementation boundaries:
+This support audit covers product-facing replaceable implementation boundaries:
 
 - planner and orchestrator;
 - executor;
@@ -79,7 +78,7 @@ The complete entry-by-entry inventory, owner, burden, security surface, upstream
 | Security evidence | — | `security-evidence.skillspector` | — |
 | Deployment lifecycle | — | `deployment.distributed-lifecycle` | — |
 
-`executor.forge` was removed under #991 after its explicit #889/#46 removal gates passed. That removal does not promote an experimental executor or change the canonical `Executor` contract. The guarantee-preservation audit and retained historical provenance are recorded in `docs/integrations/FORGE_RETENTION_DECISION.md` and ADR 0013.
+`executor.forge` was removed after its explicit reference-golden-path and backend-neutral conformance removal gates passed. That removal does not promote an experimental executor or change the canonical `Executor` contract. The guarantee-preservation audit and retained historical provenance are recorded in `docs/integrations/FORGE_RETENTION_DECISION.md` and ADR 0013.
 
 ## Consolidation decisions
 
@@ -89,9 +88,9 @@ The complete entry-by-entry inventory, owner, burden, security surface, upstream
 
 Bifrost and SGLang do not justify dedicated first-party `ModelProvider` implementations while their supported behavior is expressible through the OpenAI-compatible boundary. A dedicated adapter may be added only when a reviewed, supported capability cannot be represented cleanly through that standard boundary.
 
-### 2. Forge retirement completed under #991
+### 2. Forge retirement completed
 
-The former `ForgeExecutor` compatibility surface and its `ForgeClient`/HTTP sidecar transport were removed after the #889 reference golden path and #46 backend-neutral conformance gates proved the required generic guarantees outside Forge-specific code.
+The former `ForgeExecutor` compatibility surface and its `ForgeClient`/HTTP sidecar transport were removed after the reference golden path and backend-neutral conformance gates proved the required generic guarantees outside Forge-specific code.
 
 `ReferenceExecutor` remains the baseline migration target. The removal deleted the executable adapter/transport, Forge-only tests, sidecar CI and current support/release claims together while preserving historical audit/provenance records. Reintroducing Forge would require a new adoption/support decision and fresh evidence; the old pin does not constitute a current compatibility claim.
 
@@ -125,7 +124,7 @@ This preserves the architectural rule that logical repository ownership is indep
 
 ### 9. SkillSpector is supported only in the evaluated static evidence profile
 
-#868 implemented the production integration justified by the completed evaluation: a pinned, isolated `static_no_llm_network_none` SecurityEvidence provider. That makes `security-evidence.skillspector` `supported`, not merely experimental.
+The completed SkillSpector production integration provides a pinned, isolated `static_no_llm_network_none` SecurityEvidence provider. That makes `security-evidence.skillspector` `supported`, not merely experimental.
 
 The support claim remains deliberately narrow. SkillSpector is advisory evidence only: it does not become Skill trust, Approval, install, enable, or activation authority, and the reference platform does not require it.
 
@@ -153,12 +152,12 @@ Treating these as separate providers would inflate the support matrix without cr
 
 An implementation can be `supported` only when the matrix names an evidence path. For external/upstream-backed implementations, the claim is scoped to the tested profile/revision; “adapter exists” is not enough.
 
-The platform-wide conformance layer remains the aggregator for end-to-end compatibility claims. Issue #46 is retained as the historical tracking record for that gate. Focused contract/integration tests remain owned by their subsystem. #904 does not duplicate those suites: it maps support claims to them and fails closed when a supported entry lacks evidence.
+The platform-wide conformance layer remains the aggregator for end-to-end compatibility claims. Focused contract/integration tests remain owned by their subsystem. This support matrix does not duplicate those suites: it maps support claims to them and fails closed when a supported entry lacks evidence.
 
 In particular:
 
 - the reference baseline remains deterministic, local-first and free from mandatory paid services;
-- Hermes support requires its prepared external profile; Forge has no current compatibility profile after #991;
+- Hermes support requires its prepared external profile; Forge has no current compatibility profile after its executable retirement;
 - LiteLLM requires its dedicated compatibility lane;
 - stable MCP claims require protocol and platform evidence for the same profile;
 - SkillSpector support is limited to the pinned static/no-LLM/network-none evidence profile;
@@ -178,7 +177,7 @@ When a future audit moves an entry to `deprecated`, the same change must add:
 
 Only after those conditions are satisfied may the implementation and obsolete CI lane be removed.
 
-For `executor.forge`, #991 and `docs/integrations/FORGE_RETENTION_DECISION.md` record the completed application of this procedure: deprecation first, explicit removal gates, then coordinated removal of executable code and obsolete CI/support claims after those gates passed.
+For `executor.forge`, `docs/integrations/FORGE_RETENTION_DECISION.md` records the completed application of this procedure: deprecation first, explicit removal gates, then coordinated removal of executable code and obsolete CI/support claims after those gates passed.
 
 ## CI policy
 
@@ -190,7 +189,7 @@ CI follows support policy rather than repository file count:
 - `deprecated`: migration/compatibility evidence only until removal;
 - `external`: core contract conformance tooling, not first-party upstream maintenance.
 
-The Forge sidecar lane was removed with the #991 executable retirement. Other required lanes remain unchanged. Future obsolete compatibility lanes should likewise be removed in the same retirement sequence rather than retained indefinitely.
+The Forge sidecar lane was removed with the executable retirement. Other required lanes remain unchanged. Future obsolete compatibility lanes should likewise be removed in the same retirement sequence rather than retained indefinitely.
 
 ## Extension rule
 

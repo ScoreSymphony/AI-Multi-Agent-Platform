@@ -1,6 +1,6 @@
 # Release metadata
 
-This directory contains operator-facing, machine-readable release metadata for issue #42.
+This directory contains operator-facing, machine-readable release metadata for the platform release/update system.
 
 - `compatibility.json` is the reviewed compatibility snapshot for the current platform release and
   is mirrored into the Python package so installed deployments can query it without a repository
@@ -12,13 +12,13 @@ This directory contains operator-facing, machine-readable release metadata for i
 - `upstream-validation-evidence.example.json` documents the revision-bound validation evidence
   required before a reviewed upstream candidate can be recorded into a new compatibility snapshot.
 - `hermes-v0.21.1-observation.json` and `hermes-v0.21.1-validation-evidence.json` are the concrete
-  #733 observation/evidence pair for the accepted Hermes Agent v0.21.1 immutable revision. Their
+  reviewed observation/evidence pair for the accepted Hermes Agent v0.21.1 immutable revision. Their
   adoption path is reproduced by `tests/release/test_hermes_v0_21_1_adoption_evidence.py`.
 - `release-generation-input.example.json` documents the reviewed inputs consumed by deterministic
   release-manifest generation. It is a template: placeholder evidence must be replaced before a
   release candidate can pass validation.
-- `1.0.0-release-notes.md` is the maintained pre-publication release-note/evidence draft for #1237.
-  It must not be treated as a published release claim until #747 passes on the exact candidate and
+- `1.0.0-release-notes.md` is the maintained pre-publication release-note/evidence draft.
+  It must not be treated as a published release claim until the product-readiness audit passes on the exact candidate and
   all placeholders/blockers are reconciled.
 - Runtime release manifests use release-manifest schema v2 shipped with
   `ai_multi_agent_platform.release`.
@@ -47,7 +47,7 @@ reviewed pins. `--disabled` and `--offline` make those states explicit without c
 upstream is current. Supplying `--data-dir <AI_MAP_DATA_DIR> --reviewed-at <RFC3339>` explicitly
 persists the evaluated advisory report under the deployment data root. The operator service reloads
 the latest persisted report after restart; malformed advisory state becomes an operator warning and
-does not change production pins or #41 upgrade/version state.
+does not change production pins or Upgrade-domain version state.
 
 A candidate that is ready for review still cannot be recorded from bare `passed` strings alone.
 Create a validation-evidence document bound to the exact candidate revision and run

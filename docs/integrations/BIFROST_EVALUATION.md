@@ -20,7 +20,7 @@ The evaluation is now sufficient to make a bounded decision:
 - DNS-rebinding runtime evidence is still being completed after the first isolated harness run failed during Bifrost startup because the controlled resolver suppressed unrelated DNS traffic. The fixture now forwards non-target queries to Docker's resolver while preserving controlled answers for the rebinding hostname.
 - Bifrost-native advanced routing/fallback/governance remains outside the approved support profile. The platform `ModelRouter` remains authoritative and the first admissible profile uses an explicit provider/model target with hidden cross-provider fallback disabled.
 
-Therefore #799 must **not** present Bifrost as recommended/default infrastructure. If exposed before a later promotion, it may only be presented as an **Advanced / experimental** optional gateway. Promotion to `supported_optional` requires the remaining DNS-rebinding runtime gate plus a separately reviewed decision for any Bifrost-native routing/fallback features that would be enabled.
+Therefore the component catalog must **not** present Bifrost as recommended/default infrastructure. If exposed before a later promotion, it may only be presented as an **Advanced / experimental** optional gateway. Promotion to `supported_optional` requires the remaining DNS-rebinding runtime gate plus a separately reviewed decision for any Bifrost-native routing/fallback features that would be enabled.
 
 ## Reviewed upstream
 
@@ -87,7 +87,7 @@ These caveats do not reject Bifrost itself. They reject treating Bifrost-native 
 | Path | Platform role | Status | Extra hop | Routing owner |
 | --- | --- | --- | --- | --- |
 | Direct provider | baseline/reference | supported | no | platform |
-| LiteLLM | optional compatibility path from #11 | supported optional | proxy mode: yes | platform; advanced LiteLLM routing not baseline |
+| LiteLLM | optional compatibility path | supported optional | proxy mode: yes | platform; advanced LiteLLM routing not baseline |
 | Bifrost | optional HTTP gateway candidate | `experimental_only` | yes | platform |
 
 ## Real same-backend performance evidence
@@ -179,10 +179,10 @@ Encoded/alternative host syntax is only applicable where the enabled Bifrost URL
 
 Supported operation preserves these rules:
 
-- provider credentials come from #34 secret/environment integration;
+- provider credentials come from the canonical secret/environment integration;
 - plaintext credentials stay out of canonical configuration, evidence, normal logs, and diagnostics;
 - virtual keys/governance do not grant platform authorization;
-- #15 authorization/approval remains authoritative;
+- canonical authorization/approval remains authoritative;
 - plugin code is a separate trust boundary;
 - benchmark evidence contains timings, aggregate errors, component/version/model metadata, and prompt fingerprint/length only, not raw prompts, responses, URLs, headers, or credentials.
 
@@ -236,7 +236,7 @@ Failed calls do not contribute to latency distributions or successful-operation 
 | Exact upstream revision/version | `transports/v2.1.1`, `c193745...`, core `v1.8.6`, framework `v1.6.2` | complete |
 | Apache-2.0 verification | reviewed at pinned commit | complete |
 | Security advisory / patch posture | GHSA/CVE and upstream patch policy reviewed | complete |
-| Canonical #10 architecture fit | generic OpenAI-compatible provider; platform router remains authority | complete |
+| Canonical model architecture fit | generic OpenAI-compatible provider; platform router remains authority | complete |
 | Bifrost absent from normal route | direct-only `ModelRegistry` / `ModelRuntime` regression | complete |
 | Canonical identity preservation | deterministic tests + real three-target benchmark | complete |
 | Secret/error redaction | unit coverage + synthetic gateway log check | complete |
@@ -263,4 +263,4 @@ Promotion from `experimental_only` to `supported_optional` requires:
 4. any Bifrost-native routing/fallback/governance feature proposed for enablement to receive separate policy-conformance evidence proving it cannot escape platform locality/capability/authorization constraints;
 5. the gateway to remain removable without canonical state migration.
 
-Even after promotion, #799 should surface Bifrost only as an **Advanced optional gateway**. `ModelRouter` remains the canonical routing and policy authority.
+Even after promotion, the component catalog should surface Bifrost only as an **Advanced optional gateway**. `ModelRouter` remains the canonical routing and policy authority.

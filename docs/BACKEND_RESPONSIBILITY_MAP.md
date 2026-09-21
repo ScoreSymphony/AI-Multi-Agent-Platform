@@ -1,20 +1,20 @@
-# Backend Responsibility Map (#723)
+# Backend Responsibility Map
 
-Status: implementation and review guide for issue #723. This document records responsibility boundaries and the completed decomposition behind stable façades. It is intentionally about ownership and coupling rather than line-count targets.
+Status: implementation and review guide. This document records responsibility boundaries and the completed decomposition behind stable façades. It is intentionally about ownership and coupling rather than line-count targets.
 
 ## Rules for this refactor
 
-1. Public package façades and existing contracts remain stable unless a separate issue explicitly changes them.
+1. Public package façades and existing contracts remain stable unless an explicit architecture change updates them.
 2. Canonical ownership must not move as a side effect of file extraction.
 3. New modules must have one named responsibility; no generic `utils.py`, `helpers.py`, or catch-all `common.py` modules.
-4. Internal services may depend on narrow protocols, but issue #723 must not reopen private kernel command primitives to external callers. The encapsulation established by #567 remains authoritative.
+4. Internal services may depend on narrow protocols, but backend decomposition must not reopen private kernel command primitives to external callers. The supported kernel mutation boundary remains authoritative.
 5. Restart, retry, idempotency, ordering, cancellation, authorization, and fail-closed behavior are invariants, not implementation details.
-6. Responsibility-specific module naming is governed by #727 and [`PYTHON_MODULE_NAMING.md`](PYTHON_MODULE_NAMING.md); compatibility façades remain only where supported imports require them.
+6. Responsibility-specific module naming is governed by the Python module-naming policy and [`PYTHON_MODULE_NAMING.md`](PYTHON_MODULE_NAMING.md); compatibility façades remain only where supported imports require them.
 7. File size is diagnostic only. A large cohesive module may remain large; a smaller module with unrelated ownership must still be split.
 
 ## Hotspot map
 
-| Hotspot | Responsibilities audited | Focused internal boundaries | Stable façade / ownership preserved | Primary regression focus | Status in #723 |
+| Hotspot | Responsibilities audited | Focused internal boundaries | Stable façade / ownership preserved | Primary regression focus | Status |
 | --- | --- | --- | --- | --- | --- |
 | `kernel/kernel.py` | Task commands; Run commands; reads; active-run selection; lifecycle dispatch/reconciliation; recovery; event/command commits; completion integration | `queries.py`, `recovery.py`, `task_commands.py`, `run_commands.py`, `lifecycle.py`, `commit_support.py` | public `PlatformKernel`; kernel remains canonical Task/Run/Event lifecycle authority; `OutputObservingPlatformKernel` remains compatible | lifecycle transitions, idempotency, event history, cancellation races, recovery/restart, completion verification | **implemented** |
 | `distributed/workspace_transport.py` | worker materialization; chunk staging/commit; result collection; path/symlink safety; control client; worker endpoint; workspace-bound routing; wire codecs/checksums | materialization store, wire codec/contract, remote materializer, worker endpoint, workspace-bound worker | `RemoteWorkspaceMaterializer` contract; canonical Workspace/Snapshot/File identity stays control-plane owned; worker paths remain local deployment detail | interrupted transfers, duplicate chunks, checksum failure, cache replay, result collection, cleanup, read-only enforcement, request/reply correlation | **implemented** |
@@ -143,16 +143,16 @@ Architecture tests enforce the decomposition rather than relying on convention a
 
 ## Integration / parallel-branch policy
 
-The #723 branch starts from `main` and must stay free of unrelated issue changes. Each cohort is kept as responsibility-focused commits so it can be reviewed and merged onto `main` once the complete branch passes CI.
+Responsibility-focused refactors should start from the current accepted baseline and stay free of unrelated changes. Each cohort should remain reviewable as focused commits and pass the required CI before integration.
 
-When another active issue touches one of these hotspot files:
+When concurrent work touches one of these hotspot files:
 
-- do not merge that issue into #723 merely to reduce local conflicts;
+- do not merge unrelated work into the responsibility refactor merely to reduce local conflicts;
 - rebase/merge accepted `main` prerequisites only when necessary;
 - apply semantic/package naming work only after responsibility boundaries are stable;
 - preserve compatibility shims at package façades when extraction would otherwise force broad downstream edits.
 
-## Acceptance evidence required before #723 can close
+## Maintained acceptance evidence
 
 - all seven hotspot audits above are reflected in code;
 - `PlatformKernel` no longer directly implements every Task command, Run command, query, recovery, lifecycle and commit-support concern in one object/file;

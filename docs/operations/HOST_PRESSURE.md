@@ -1,10 +1,10 @@
 # Host resource pressure and admission
 
-Issue #500 adds a portable resource-pressure layer beside the existing #14 capacity model.
+The Host Pressure domain adds a portable resource-pressure layer beside the existing Node/Worker capacity model.
 
 The distinction is intentional:
 
-- #14 answers whether a Node/Worker can satisfy a Job's declared capability and resource requirements;
+- Node/Worker scheduling answers whether a Node/Worker can satisfy a Job's declared capability and resource requirements;
 - host-pressure admission answers whether an otherwise eligible Node/Worker is healthy enough **right now** to accept additional work safely.
 
 Host-pressure admission never owns placement, reservations, dispatch, Task/Run lifecycle or retry state. The canonical `DeterministicScheduler` remains the only scheduling authority and consults pressure only after its ordinary eligibility filters and before reservation.
@@ -45,7 +45,7 @@ Protected headroom is deployment configuration, not a hard-coded machine/VPS SKU
 
 ## Scheduler integration
 
-Pressure support is opt-in. Constructing `DeterministicScheduler` without a pressure policy preserves the existing #14 behavior.
+Pressure support is opt-in. Constructing `DeterministicScheduler` without a pressure policy preserves the existing scheduler behavior.
 
 When enabled, the scheduler:
 
@@ -57,11 +57,11 @@ When enabled, the scheduler:
 
 One pressure snapshot is sampled per Node for one scheduler evaluation and shared by otherwise-eligible Workers on that Node. This keeps delta-based providers such as paging/throttling collectors deterministic across candidates without turning the cache into durable scheduler state. A later evaluation samples again.
 
-`pressure_admission()` exposes the structured decision for diagnostics/tests without reserving or dispatching work. Diagnostic calls do not count as scheduler admission telemetry. The scheduler maps a non-admitted result conservatively onto the existing #14 rejection vocabulary while the precise action/reason remains available through `AdmissionDecision`.
+`pressure_admission()` exposes the structured decision for diagnostics/tests without reserving or dispatching work. Diagnostic calls do not count as scheduler admission telemetry. The scheduler maps a non-admitted result conservatively onto the existing scheduler rejection vocabulary while the precise action/reason remains available through `AdmissionDecision`.
 
-## #16 observability integration
+## Observability integration
 
-Pressure telemetry is emitted through the existing #16 `Telemetry` facade; issue #500 does not create a second metrics, timeline or exporter system.
+Pressure telemetry is emitted through the existing `Telemetry` facade; Host Pressure does not create a second metrics, timeline or exporter system.
 
 For actual pressure-aware scheduler candidate evaluations the integration exposes:
 
@@ -72,7 +72,7 @@ For actual pressure-aware scheduler candidate evaluations the integration expose
 - correlated scheduler pressure-admission timeline entries;
 - Node pressure transitions and explicit recovery from `elevated`/`critical` to `healthy`.
 
-The integration deliberately excludes `HostPressureSnapshot.source_ref` and `provider_metadata` from canonical telemetry. Linux proc/sys/cgroup paths, zRAM device names and other provider-private evidence therefore remain behind their adapter namespace instead of leaking into ordinary #16 records.
+The integration deliberately excludes `HostPressureSnapshot.source_ref` and `provider_metadata` from canonical telemetry. Linux proc/sys/cgroup paths, zRAM device names and other provider-private evidence therefore remain behind their adapter namespace instead of leaking into ordinary Observability records.
 
 Repeated use of the same Node observation is de-duplicated for Node-level observation/signal telemetry while admission decisions remain per candidate. This preserves explainability for multi-Worker Nodes without multiplying identical host measurements.
 
@@ -84,7 +84,7 @@ Missing pressure support does not make a non-Linux or otherwise unsupported Work
 
 ## Authenticated remote pressure reporting
 
-Remote Workers reuse the existing authenticated #14 Worker protocol and its `WorkerRecord.adapter_metadata` transport. No second pressure transport or credential model is introduced.
+Remote Workers reuse the existing authenticated Worker protocol and its `WorkerRecord.adapter_metadata` transport. No second pressure transport or credential model is introduced.
 
 A reporting Worker may attach `platform.host-pressure-report.v1` metadata containing only the portable pressure state, observation timestamp and normalized signals. `pressure_report_metadata()` intentionally omits provider-private source references, Linux metadata and any Worker-supplied trust assertion. `attach_pressure_report()` also removes stale report/provenance copies before attaching the current portable report.
 
@@ -126,7 +126,7 @@ Provider thresholds are deployment-overridable normalization inputs, not canonic
 
 ## Deployment composition and doctor visibility
 
-`HostPressureDeploymentConfig` is the deployment-owned opt-in boundary. The advanced #240 distributed Control Plane composes pressure admission only when `PLATFORM_HOST_PRESSURE_ENABLED=true`. Disabled deployments retain the existing #14 scheduler and do not register the optional diagnostic collection.
+`HostPressureDeploymentConfig` is the deployment-owned opt-in boundary. The advanced distributed Control Plane composes pressure admission only when `PLATFORM_HOST_PRESSURE_ENABLED=true`. Disabled deployments retain the existing scheduler and do not register the optional diagnostic collection.
 
 The deployment settings are intentionally machine-neutral:
 
@@ -141,15 +141,15 @@ No setting configures swap, zRAM, cgroups, sysctls or kernel limits. The composi
 
 When enabled, the Control Plane registers the read-only `node-pressure` collection. `GET /api/v1/node-pressure` and `GET /api/v1/node-pressure/{node_id}` expose only portable state, observation time, trust and normalized signals. Provider-private `source_ref`, proc/sys/cgroup paths and `provider_metadata` remain excluded.
 
-`platform doctor` consults this collection after ordinary Node/Worker health checks. The collection is optional: a `404` is treated as a valid pressure-disabled profile. `elevated` or `critical` pressure degrades the doctor result; `healthy` and explicit `unknown` remain valid diagnostic states. This preserves #500's rule that unsupported pressure telemetry must not make otherwise valid workers unusable unless deployment policy explicitly requires reports.
+`platform doctor` consults this collection after ordinary Node/Worker health checks. The collection is optional: a `404` is treated as a valid pressure-disabled profile. `elevated` or `critical` pressure degrades the doctor result; `healthy` and explicit `unknown` remain valid diagnostic states. This preserves the Host Pressure rule that unsupported pressure telemetry must not make otherwise valid workers unusable unless deployment policy explicitly requires reports.
 
-A #39 composition that creates a `DistributedRuntime` may use the same `HostPressureDeploymentConfig` and `configure_distributed_host_pressure()` helper. The ordinary non-distributed single-node profile has no #14 remote Worker placement to pressure-admit and therefore does not silently manufacture a pressure scheduler.
+A single-server composition that creates a `DistributedRuntime` may use the same `HostPressureDeploymentConfig` and `configure_distributed_host_pressure()` helper. The ordinary non-distributed single-node profile has no remote Worker placement to pressure-admit and therefore does not silently manufacture a pressure scheduler.
 
-## Follow-up #500 slices
+## Follow-up operational evidence
 
 The portable core, Linux collector, #16 projection, authenticated remote reporting, deployment composition and Control Plane/doctor projection now precede the remaining dedicated operational evidence. Remaining issue-owned work includes:
 
-- additional #39/#240 operator guidance where concrete deployment packaging needs it;
-- #440 dedicated host-pressure benchmark profiles with hard safety bounds.
+- additional single-server/advanced-deployment operator guidance where concrete deployment packaging needs it;
+- dedicated host-pressure benchmark profiles with hard safety bounds.
 
 None of those follow-ups may silently tune kernel, swap, zRAM or cgroup settings; collection remains read-only by default.

@@ -1,6 +1,6 @@
 # Portable canonical import/export
 
-Issue #79 defines a portability boundary for moving canonical platform resources between compatible installations. Portability is intentionally distinct from backup/restore: a portable package contains canonical configuration, selected durable content and explicit dependency metadata, but excludes deployment-private runtime state and secret material.
+The Portability domain defines a boundary for moving canonical platform resources between compatible installations. Portability is intentionally distinct from backup/restore: a portable package contains canonical configuration, selected durable content and explicit dependency metadata, but excludes deployment-private runtime state and secret material.
 
 ## Architecture boundary
 
@@ -70,7 +70,7 @@ Canonical resource dependencies also drive topological import ordering. Missing 
 
 Portable payloads must not contain plaintext passwords, API keys, bearer tokens, private keys, cookies or equivalent credential material. The portability validator reuses the platform security redaction boundary instead of maintaining a competing secret vocabulary.
 
-Canonical `SecretReference` placeholders are allowed because they identify a required secret without carrying the secret value. Destination-side resolution and authorization remain normal #15/#34 security operations.
+Canonical `SecretReference` placeholders are allowed because they identify a required secret without carrying the secret value. Destination-side resolution and authorization remain normal Authorization/Secrets operations.
 
 ## Runtime-state boundary
 
@@ -135,7 +135,7 @@ Portable `project` resources preserve the complete canonical `Project` snapshot:
 
 Project identity follows the ordinary `IdPolicy`: preserve keeps the canonical Project ID when conflict-free, while regenerate allocates a deterministic destination Project ID through the server-owned preview and rewrites the decoded Project identity through `ImportContext`.
 
-Import uses the canonical `ScopeStore.store_project_snapshot(...)` seam completed by #308. There is no portability-specific Project database or reduced reconstruction path. A destination restart therefore reconstructs the same canonical Project metadata through `SqliteScopeStore`.
+Import uses the canonical `ScopeStore.store_project_snapshot(...)` seam provided by the canonical ScopeStore. There is no portability-specific Project database or reduced reconstruction path. A destination restart therefore reconstructs the same canonical Project metadata through `SqliteScopeStore`.
 
 Project compensation is intentionally fail-closed. `ScopeStore.compensate_project(...)` refuses deletion when Workspace dependencies exist and also requires an explicit cross-domain dependency audit. If a deployment cannot prove that an imported Project is unreferenced, package rollback reports incomplete compensation rather than risking deletion of referenced canonical state.
 
@@ -186,7 +186,7 @@ On import:
 - the target project must match the remapped project for scopes whose canonical access policy denies cross-project access;
 - `explicit_policy_only` cross-project semantics require an explicit `MemoryImportPrivacyPolicy` grant rather than an implicit migration shortcut.
 
-The destination `MemoryProvider` remains authoritative. Using `AuthorizedDataMemoryProvider` therefore retains the normal #15 authorization gate during both export reads and import writes.
+The destination `MemoryProvider` remains authoritative. Using `AuthorizedDataMemoryProvider` therefore retains the normal Authorization gate during both export reads and import writes.
 
 ### User/owner privacy
 
@@ -234,7 +234,7 @@ Scheduler and delivery runtime state is deliberately omitted. `last_evaluated_at
 
 A source Automation that is `enabled` materializes as `paused` at the destination and therefore cannot create Tasks until an authorized destination action explicitly resumes it. Paused, disabled and invalid Automations remain non-running; invalidation metadata is retained for an invalid source definition.
 
-Import preserves `IdentityContext` and rejects implicit identity transfer by default. Package rollback removes only a newly imported Automation that has no TriggerDelivery history. The guarded compensation repository seam refuses to delete any Automation once delivery history exists, so normal #18 audit/runtime history cannot be erased by an import rollback.
+Import preserves `IdentityContext` and rejects implicit identity transfer by default. Package rollback removes only a newly imported Automation that has no TriggerDelivery history. The guarded compensation repository seam refuses to delete any Automation once delivery history exists, so normal Automation audit/runtime history cannot be erased by an import rollback.
 
 The detailed Automation contract is documented in `PORTABILITY_AUTOMATION.md`.
 
@@ -248,7 +248,7 @@ Exact suite versions are create-only. Existing `<suite_id>@<version>` identities
 
 The codec declares dependencies from suite content rather than silently weakening it. Canonical Agent targets are resource dependencies and are remapped through the accepted `ImportContext`; model and capability targets remain explicit model/capability requirements. Fixture references are declared as `evaluation_fixture` resource dependencies. The current single-node composition intentionally has no portable EvaluationFixture resource/registry, so cross-deployment import of a fixture-bearing suite fails closed unless that dependency is supplied by a future owning-domain integration. Fixture bytes/paths are never smuggled into the suite payload as portability-private state.
 
-Single-node production composition registers `evaluation_suite` on the normal #79 workflow. Evaluation execution itself still has no dependency on portability: deployments may execute configured or persisted suites without enabling export/import.
+Single-node production composition registers `evaluation_suite` on the normal Portability workflow. Evaluation execution itself still has no dependency on portability: deployments may execute configured or persisted suites without enabling export/import.
 
 ## Dry-run and conflict boundary
 
@@ -287,11 +287,11 @@ Rollback error details pass through the platform redaction boundary before enter
 
 Portable export optimizes for canonical semantics and migration between compatible installations. It deliberately omits runtime/provider material that a deployment backup may preserve.
 
-Backup/restore (#40) instead protects one installation's operational state and may include backend-specific databases, indexes and deployment metadata. Neither mechanism is a substitute for the other.
+Backup/restore instead protects one installation's operational state and may include backend-specific databases, indexes and deployment metadata. Neither mechanism is a substitute for the other.
 
 ## Current test coverage
 
-The #79 portability stack verifies at least:
+The Portability stack verifies at least:
 
 - package serialize/deserialize round trip;
 - resource and package checksum tamper detection;
@@ -331,4 +331,4 @@ The #79 portability stack verifies at least:
 - deterministic Agent-target remapping inside imported EvaluationSuite cases;
 - durable imported-suite restart recovery, exact-version conflict detection and checksum/history-guarded compensation.
 
-#79 is complete and closed. Agent/Team, Template, Project and now EvaluationSuite round trips use the same package, integrity, preview, remapping and rollback-safe import contracts. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #19 now supplies the previously missing owning-domain EvaluationSuite persistence/mutation seam and registers `evaluation_suite` through the existing #79 workflow without making Evaluation execution depend on portability. Fixture-bearing suite imports remain fail-closed until an owning-domain portable EvaluationFixture integration exists. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done.
+Agent/Team, Template, Project and now EvaluationSuite round trips use the same package, integrity, preview, remapping and rollback-safe import contracts. Project portability consumes the canonical ScopeStore persistence seam. Evaluation supplies the previously missing owning-domain EvaluationSuite persistence/mutation seam and registers `evaluation_suite` through the existing Portability workflow without making Evaluation execution depend on portability. Fixture-bearing suite imports remain fail-closed until an owning-domain portable EvaluationFixture integration exists. Durable model-routing and authorization-policy resources remain independent domain concerns.

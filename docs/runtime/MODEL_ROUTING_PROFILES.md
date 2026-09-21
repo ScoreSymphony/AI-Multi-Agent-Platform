@@ -98,7 +98,7 @@ For an Agent with an exact `routing_profile_ref`, profile requirements are merge
 
 ## Portability through #79
 
-Issue #79 consumes the #309 domain rather than defining another routing-policy resource.
+Portability consumes the Model Routing Profile domain rather than defining another routing-policy resource.
 
 `ModelRoutingProfilePortableSnapshot` carries the stable definition plus the complete immutable revision history. `ModelRoutingProfilePortableCodec`:
 
@@ -108,7 +108,7 @@ Issue #79 consumes the #309 domain rather than defining another routing-policy r
 - remaps Project and canonical model references deterministically;
 - excludes provider-native identifiers, endpoint data, provider/node health, credentials and gateway-private state.
 
-`ModelRoutingProfileImportMutationHandler` replays the complete history through the canonical repository. A failed partial replay is compensated by removing the just-created profile, and the normal #79 import executor can also roll the resource back if a later package resource fails.
+`ModelRoutingProfileImportMutationHandler` replays the complete history through the canonical repository. A failed partial replay is compensated by removing the just-created profile, and the normal Portability import executor can also roll the resource back if a later package resource fails.
 
 Exact routing-profile references embedded in Agent and Template portability are represented as dependencies on the canonical `model_routing_profile` resource with the referenced revision pinned. ID regeneration therefore remaps the profile identity without changing the pinned revision. Legacy/generic model-policy strings are preserved as their existing policy references instead of being silently reinterpreted as #309 resources.
 

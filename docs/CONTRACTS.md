@@ -270,7 +270,7 @@ External adapters may depend on platform contracts. Canonical domain/core/contra
 
 ## Required validation scenarios
 
-Issue #5 is guarded by explicit tests for all requested scenarios:
+The core interface contracts are guarded by explicit tests for all required scenarios:
 
 1. a real canonical `Task`, `Run` and `Tool` execute through fake orchestrator, model, tool and lifecycle providers only;
 2. the model implementation is replaced by a second independent adapter without modifying the canonical Task or Agent objects;

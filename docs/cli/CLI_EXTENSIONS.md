@@ -1,7 +1,5 @@
 # CLI extension inspection and execution
 
-Issue: #38
-
 The Control Plane can expose later platform domains through explicitly registered extension collections and commands. The CLI discovers that surface from the canonical OpenAPI document instead of hard-coding a backend implementation.
 
 ## Read-only discovery

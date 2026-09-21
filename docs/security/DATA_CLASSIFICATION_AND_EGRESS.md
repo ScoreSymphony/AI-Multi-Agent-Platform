@@ -1,6 +1,6 @@
 # Canonical data classification and egress policy
 
-Issue #591 defines one platform-owned policy boundary for outbound data movement. The boundary is
+The platform defines one canonical policy boundary for outbound data movement. The boundary is
 provider-neutral: model providers, connectors, MCP servers, browser/network capabilities, remote
 workers and export adapters remain replaceable, while classification and disclosure policy stay in
 the application layer.
@@ -109,7 +109,7 @@ Transport classification is intentionally distinct from mutation side effects. B
 link following and downloads can be read-only or local-write operations while still sending data
 over HTTP(S). `browser.network.read` and the generic `network.egress*` permission family therefore
 mark the transport as external even when `side_effects` is not `EXTERNAL`. This prevents read-only
-browser calls from bypassing #591.
+browser calls from bypassing the canonical egress boundary.
 
 `EgressConnectorService` checks list/read/action/subscription/sync outbound requests before the
 connector provider is called. Returned canonical resources, events and action results inherit the
@@ -128,20 +128,20 @@ secret material into provider metadata, audit events or configuration values.
 
 ## Approval exceptions
 
-Optional exceptions reuse the existing #15 `AuthorizationGate`/`ApprovalService`; #591 does not add
+Optional exceptions reuse the existing `AuthorizationGate`/`ApprovalService`; the egress domain does not add
 a second approval engine. `EgressApprovalExceptionPolicy` is deny-by-default and requires a
 deployment to enumerate the exact egress reason codes and data classes that may be approved.
 `secret` and `secret_reference` are non-overridable by default.
 
 `EgressApprovalBridge` binds the Approval to the exact destination, target posture, effective data
 classification, outbound payload SHA-256, resource type, capability, Project/Task/Run context,
-egress-policy version, exact EgressProfile revision/source revision and cost class. The existing #15
+egress-policy version, exact EgressProfile revision/source revision and cost class. The existing Authorization
 expiry applies. A changed payload, destination, scope or policy/profile revision produces a different
 `ProposedAction.digest`, so the old Approval is stale automatically. Approval decisions themselves
 still go through `AuthorizationGate.decide_approval`.
 
 The documented reuse semantic is `exact_digest_until_expiry`; deployments that need one-shot
-semantics should add that as a stricter #15 policy rather than weakening the egress binding.
+semantics should add that as a stricter Authorization policy rather than weakening the egress binding.
 
 ## Decisions and audit evidence
 

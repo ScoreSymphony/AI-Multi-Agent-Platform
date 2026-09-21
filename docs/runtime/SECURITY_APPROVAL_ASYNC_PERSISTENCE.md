@@ -1,6 +1,6 @@
 # Security Approval async persistence
 
-Issue #892 requires runtime-critical async code to avoid inline synchronous SQLite work while retaining SQLite as a first-class single-node backend.
+Runtime-critical async code avoids inline synchronous SQLite work while retaining SQLite as a first-class single-node backend.
 
 ## Runtime boundary
 
@@ -47,7 +47,7 @@ Async Security callers depend only on the awaitable protocols. A future PostgreS
 
 ## Regression coverage
 
-The #892 Security persistence regression suite covers:
+The Security persistence regression suite covers:
 
 - event-loop responsiveness and worker-owned SQLite connections;
 - bounded Security concurrency and isolation from asyncio's default executor;

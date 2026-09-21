@@ -1,6 +1,5 @@
 # Agent Runtime and Agent Teams
 
-Issue: #33
 
 ## Purpose
 
@@ -226,7 +225,7 @@ after preflight.
 ## Control Plane
 
 `register_agent_control_plane(...)` extends the generic Control Plane registration seam
-rather than modifying the #32 foundation.
+rather than modifying the canonical Control Plane foundation.
 
 Registered resources:
 
@@ -273,7 +272,7 @@ If a client tries to assert those fields directly, the command fails with
 into capability or permission grants while still allowing reference/self-hosted
 compositions to derive deterministic availability from trusted platform state.
 
-Authentication and session management remain upstream Control Plane concerns. The #36
+Authentication and session management remain upstream Control Plane concerns. Authentication
 authentication layer resolves an authenticated request into the canonical
 `RequestContext`; Agent command handlers consume that context for ownership, provenance
 and trusted execution-environment resolution but do not define credentials, sessions or
@@ -282,7 +281,7 @@ canonical Agent/Team profile.
 
 ## Deliberate boundaries
 
-The #33 implementation does not:
+The Agent Runtime implementation does not:
 
 - make Hermes or another orchestrator canonical;
 - let reviewer Agents decide canonical completion;

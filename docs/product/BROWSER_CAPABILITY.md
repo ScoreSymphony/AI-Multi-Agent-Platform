@@ -1,6 +1,6 @@
 # Browser and Web Capability
 
-Issue #74 adds a platform-owned browser/web boundary. Browser engines remain replaceable
+The Browser domain adds a platform-owned browser/web boundary. Browser engines remain replaceable
 providers behind the existing capability registry and invocation pipeline.
 
 ## Canonical boundary
@@ -50,7 +50,7 @@ canonical `CapabilitySpec` or browser task request.
 Placement stays on the registration boundary deliberately. Provider-specific worker labels must
 not be written into the shared capability definition, because multiple replaceable providers for
 the same capability/version must continue to publish an identical canonical capability contract.
-A later #14 scheduler can use node/worker registration data and browser feature metadata to place
+The Node/Worker scheduler can use node/worker registration data and browser feature metadata to place
 work without changing task logic.
 
 ## Security and trust
@@ -76,7 +76,7 @@ Page text/HTML returned by the reference adapter is marked `untrusted_web_conten
 orchestrators must treat page instructions as untrusted external input, not as platform policy or
 system instructions.
 
-`browser.submit_form` is classified as a restricted external side effect so the existing #15
+`browser.submit_form` is classified as a restricted external side effect so the existing Authorization
 authorization/approval bridge can deny or gate it. The canonical capability requires both
 `browser.external.submit` and `file.read`; this ensures any optional `file_upload` reference is
 already authorized at capability resolution before file bytes are read or a network mutation is
@@ -100,7 +100,7 @@ redacted source URL, content type, SHA-256 checksum, download timestamp, provena
 untrusted-content classification. Persisted source URLs retain scheme, host, port and path but
 remove embedded credentials, query parameters and fragments so signed URL tokens do not enter
 ordinary long-lived file metadata. The reference adapter then generates a canonical `artifact_*`
-identity and links it to the file through the refined #13 `FileProvider.link_artifact` seam. The
+identity and links it to the file through the refined `FileProvider.link_artifact` seam. The
 browser does not create a provider-private artifact namespace or a parallel artifact store.
 
 The reference adapter verifies artifact-linking support before starting download persistence. A
@@ -166,8 +166,8 @@ Browser task schemas do not encode local-process assumptions. Browser providers 
 `CapabilityRegistry`, whose registrations already carry provider/node/worker placement metadata.
 `BoundBrowserProvider` exposes this placement explicitly for browser adapters while preserving the
 same capability ID and request shape. A later local sandbox, dedicated browser worker, remote
-browser service or #14 scheduler integration can therefore implement the same capability IDs.
-The #7 execution boundary remains the place for sandbox/execution implementation details rather
+browser service or Node/Worker scheduler integration can therefore implement the same capability IDs.
+The execution boundary remains the place for sandbox/execution implementation details rather
 than browser-domain contracts.
 
 ## Failure semantics

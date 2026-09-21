@@ -1,6 +1,6 @@
 # Research quality evaluation
 
-Issue #589 integrates Research Evidence with the existing #19 Evaluation framework through
+Research Evidence integrates with the existing Evaluation framework through
 `ResearchEvaluationCaseExecutor`. Research does not define a second evaluator runtime and the
 quality path does not require an LLM, model judge or paid service.
 
@@ -32,10 +32,10 @@ no-paid-service suite. Its decision-readiness case requires:
 - zero unsupported or disputed Claims;
 - zero stale, unavailable or unverifiable Evidence;
 - exact Source binding integrity for every Evidence record;
-- exact current #86 Verification bindings for every Claim and Evidence record.
+- exact current Verification bindings for every Claim and Evidence record.
 
 The suite can run with the ordinary `DeterministicAssertionEvaluator` and
-`MetricThresholdEvaluator`. Model-based qualitative evaluation can be layered on later through #19
+`MetricThresholdEvaluator`. Model-based qualitative evaluation can be layered on later through Evaluation
 without becoming canonical Research truth.
 
 ## Provider replacement
@@ -52,10 +52,10 @@ implementation metadata to define evaluation semantics.
 
 ## Research Team role separation
 
-The existing standard Research Team from #77 remains an ordinary Agent Team:
+The existing standard Research Team remains an ordinary Agent Team:
 
 - Researcher produces Claims/Evidence;
-- source-checking Reviewer performs independent #86 review;
+- source-checking Reviewer performs independent Verification review;
 - Data Analyst remains a separate analysis role.
 
 Research does not grant new capabilities merely because an Agent participates in that Team. The
@@ -63,6 +63,6 @@ canonical Agent runtime still applies each member's own capability policy; a Tea
 a capability denied by a member fails closed. The standard Researcher, Reviewer and Data Analyst
 all retain their existing write/shell denials.
 
-The #86 bridge preserves producer Agent identity on Research Claims/Evidence, so a policy with
+The Verification bridge preserves producer Agent identity on Research Claims/Evidence, so a policy with
 `producer_agent_must_differ`, read-only reviewer requirements and self-verification prohibition
 rejects a Researcher reviewing its own Claim while accepting the separate standard Reviewer.

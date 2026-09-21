@@ -1,6 +1,6 @@
 # Control Plane HA observability
 
-Issue #89 projects active/passive Control Plane state through the existing backend-neutral #16
+The HA observability profile projects active/passive Control Plane state through the existing backend-neutral
 observability facade. HA does not introduce a dedicated metrics database, tracing product or hosted
 monitoring dependency.
 

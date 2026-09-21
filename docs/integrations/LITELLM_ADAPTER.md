@@ -1,6 +1,6 @@
 # LiteLLM optional model-gateway adapter
 
-Issue #11 adds LiteLLM only behind the platform-owned model contracts from #5/#10. LiteLLM is a convenience integration, not canonical model inventory, routing policy, Agent configuration or Task lifecycle state.
+LiteLLM is integrated only behind the platform-owned model contracts. LiteLLM is a convenience integration, not canonical model inventory, routing policy, Agent configuration or Task lifecycle state.
 
 ## Supported integration modes
 
@@ -138,7 +138,7 @@ Updates require an explicit version-change review and must rerun:
 
 1. baseline CI without LiteLLM installed;
 2. optional LiteLLM package import/compatibility check;
-3. issue #11 adapter contract tests;
+3. LiteLLM adapter contract tests;
 4. model registry/router tests;
 5. local/proxy integration fixture;
 6. license/security/provenance review.

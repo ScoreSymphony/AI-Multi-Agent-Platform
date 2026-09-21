@@ -120,4 +120,4 @@ No Hermes, Forge, Temporal, external model API or production database is require
 
 ## Deliberate non-goals
 
-Issue #6 does not select a production scheduler, event bus or database and does not integrate Hermes or Temporal. Supported external participants remain replaceable around this kernel and map their private state into the platform-owned canonical lifecycle; Forge is retired and is not an active participant.
+The kernel does not select a production scheduler, event bus or database and does not integrate Hermes or Temporal. Supported external participants remain replaceable around this kernel and map their private state into the platform-owned canonical lifecycle; Forge is retired and is not an active participant.

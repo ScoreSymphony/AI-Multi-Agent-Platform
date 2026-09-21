@@ -1,3 +1,5 @@
+> Historical final hardening note. The issue-specific audit and follow-up references below are retained only as provenance; current secret, observability and remote-build contracts are defined by the maintained security/runtime documentation.
+
 # Issue #748 final secret-contract hardening
 
 This note records the final compatibility/security contract added after the strict #748 audit.

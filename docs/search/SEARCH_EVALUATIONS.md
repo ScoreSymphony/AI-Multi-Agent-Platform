@@ -1,6 +1,6 @@
 # Evaluation discovery in global Search
 
-This document records the issue #45 Search integration for the canonical evaluation framework from issue #19.
+This document defines the Search integration for the canonical Evaluation framework.
 
 ## Canonical sources
 
@@ -79,6 +79,6 @@ Clients should follow those canonical Control Plane resources rather than treati
 
 ## Rebuild and synchronization
 
-Evaluation resources participate in the normal #45 registered-domain rebuild path. The Search checkpoint/stale-recovery contract remains applicable without giving Search ownership of Evaluation history.
+Evaluation resources participate in the normal registered-domain rebuild path. The Search checkpoint/stale-recovery contract remains applicable without giving Search ownership of Evaluation history.
 
 A future durable/event-driven Search provider may incrementally project Evaluation changes, but a detected synchronization gap must use the normal stale/rebuild recovery path. No external Search backend, vector database or paid service is required for Evaluation discovery.

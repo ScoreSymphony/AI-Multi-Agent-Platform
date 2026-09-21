@@ -1,6 +1,6 @@
 # Remote Workspace materialization
 
-Issue #433 provides the concrete distributed implementation of the Workspace contracts from #37 on top of the platform-owned MessageTransport from #35.
+The remote Workspace materializer provides the concrete distributed implementation of the Workspace contracts on top of the platform-owned `MessageTransport`.
 
 The implementation lives in the public module:
 
@@ -57,7 +57,7 @@ Worker-local state for incoming transfers and installed snapshots. It owns no ca
 
 ### `WorkerWorkspaceTransportEndpoint`
 
-Consumes Workspace commands for exactly one Worker through the #35 transport. A command is acknowledged only after its operation reply is published. If reply publication fails, the command is negatively acknowledged for redelivery. Because the Store operations are idempotent, a lost reply does not require a duplicate materialization.
+Consumes Workspace commands for exactly one Worker through the canonical transport. A command is acknowledged only after its operation reply is published. If reply publication fails, the command is negatively acknowledged for redelivery. Because the Store operations are idempotent, a lost reply does not require a duplicate materialization.
 
 ### `WorkspaceBoundLocalWorker`
 

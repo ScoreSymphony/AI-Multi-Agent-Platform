@@ -1,6 +1,6 @@
 # Automation, Triggers and Event-Driven Task Creation
 
-Issue #18 introduced Automation as a canonical platform domain without creating a second execution system. Issue #241 hardens that baseline with durable automatic delivery retries, an explicit recoverable `INVALID` lifecycle and fail-closed workspace-aware platform-event visibility.
+Automation is a canonical platform domain without a second execution system. The maintained baseline includes durable automatic delivery retries, an explicit recoverable `INVALID` lifecycle and fail-closed workspace-aware platform-event visibility.
 
 ## Core invariant
 
@@ -107,11 +107,11 @@ An `INVALID` Automation rejects webhook delivery before normal admission.
 
 ## Platform-event triggers
 
-Platform-event Triggers match one canonical `event_type` and optional exact field filters. The service consumes canonical Event semantics directly and has no broker dependency. Issue #35 may later provide distributed transport without changing the Automation contract.
+Platform-event Triggers match one canonical `event_type` and optional exact field filters. The service consumes canonical Event semantics directly and has no broker dependency. Distributed deployments may deliver the same canonical events through the MessageTransport boundary without changing the Automation contract.
 
 Visibility is evaluated before trigger filters or delivery/dedupe mutation. Project-scoped Automations require the matching canonical project. Workspace-scoped Automations additionally require workspace scope to be proven by the replaceable `WorkspaceEventScopeResolver`.
 
-The reference `CanonicalWorkspaceEventScopeResolver` does not add an Automation-only `workspace_id` to Event payloads. It resolves workspace identity from canonical #37 workspace state and durable Run-to-Workspace bindings. Missing, ambiguous, inconsistent or failing resolution is fail-closed. Rejection audit records contain only abstract scope reason categories and omit hidden event, subject and foreign-workspace identifiers.
+The reference `CanonicalWorkspaceEventScopeResolver` does not add an Automation-only `workspace_id` to Event payloads. It resolves workspace identity from canonical Workspace state and durable Run-to-Workspace bindings. Missing, ambiguous, inconsistent or failing resolution is fail-closed. Rejection audit records contain only abstract scope reason categories and omit hidden event, subject and foreign-workspace identifiers.
 
 Owner-only behavior remains conservative. An unowned/global event is visible only to a service-owned Automation when no project/workspace scope already authorizes it. Historical events older than the Automation are not treated as replay requests.
 
@@ -206,7 +206,7 @@ Automation composes above the current Search-enabled Control Plane layer rather 
 
 `ReferenceScheduler` is deterministic and in-process. Normal schedule evaluation delegates back to `AutomationService`; `AutomationRuntime` adds restart-safe wakeups for both schedule and retry deadlines.
 
-`WorkspaceEventScopeResolver` is the provider-neutral workspace visibility seam. The reference implementation resolves canonical #37 workspace relationships without changing Event payload identity.
+`WorkspaceEventScopeResolver` is the provider-neutral workspace visibility seam. The reference implementation resolves canonical Workspace relationships without changing Event payload identity.
 
 `TaskCreator` is the admission port and retains the ordinary non-null `Awaitable[str]` contract. The production Control Plane implementation binds this port to canonical Task creation. Platform-owned composed domain dispatchers may return the explicit `NO_TASK_REQUIRED` string-subtype signal only after they have handled a delivery and determined that no executable Task is required. Test or alternate embeddings may supply another implementation, but accidental `None`, blank or non-string results fail closed and the public composed platform never routes Automation directly to execution providers.
 

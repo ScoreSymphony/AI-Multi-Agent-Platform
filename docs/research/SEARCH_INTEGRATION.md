@@ -1,7 +1,6 @@
 # Research Search integration
 
-Issue #589 integrates canonical Research Evidence with the existing global Search subsystem from
-#45. Research does not own a second index, query language or provider runtime.
+Research Evidence integrates with the existing global Search subsystem. Research does not own a second index, query language or provider runtime.
 
 ## Composition
 
@@ -40,7 +39,7 @@ Research Control Plane resource, not through the derived Search document.
 
 Search results pass through two checks before counts or result bodies are returned:
 
-1. the existing Control Plane/#15 authorization check for the registered collection;
+1. the existing Control Plane/Authorization check for the registered collection;
 2. the Research domain `search_result_allowed(...)` check, which resolves the canonical
    `ResearchItem` and requires an exact authenticated owner match.
 
@@ -61,5 +60,5 @@ Search integration does not change Research semantics:
 - Search does not execute source material;
 - Search does not replace File/Artifact snapshot storage.
 
-Canonical Research state, #86 Verification, #15 authorization, Files/Artifacts and the normal
+Canonical Research state, Verification, Authorization, Files/Artifacts and the normal
 Task/Plan/Run lifecycle remain authoritative.

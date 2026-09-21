@@ -1,6 +1,6 @@
 # Top-level Python package boundaries
 
-Issue #726 defines the ownership policy for packages directly below `src/ai_multi_agent_platform/`.
+This document defines the ownership policy for packages directly below `src/ai_multi_agent_platform/`.
 The machine-readable inventory is [`PACKAGE_BOUNDARIES.toml`](PACKAGE_BOUNDARIES.toml). Every
 current top-level package appears there exactly once with a responsibility, owner, kind and current
 disposition.
@@ -61,7 +61,7 @@ security facilities, but those integrations do not transfer their canonical owne
 responsibility references and the Task management service.
 
 Task-to-Project reassignment already depends on `TaskManagementService`, so reassignment belongs to
-the `task_management` domain rather than forming another durable top-level domain. #726 applies that
+the `task_management` domain rather than forming another durable top-level domain. the package-boundary policy applies that
 low-risk consolidation directly:
 
 - the canonical implementation now lives at `task_management.reassignment`;
@@ -69,7 +69,7 @@ low-risk consolidation directly:
   re-exports the same public objects;
 - architecture coverage asserts object identity across the canonical and compatibility imports;
 - new reassignment behavior must be implemented under `task_management`;
-- the compatibility namespace remains supported through the first formal release prepared by #1237;
+- the compatibility namespace remains supported through the first formal release prepared by the first formal release work;
   that release must carry migration/deprecation guidance for the canonical path;
 - removal is permitted only in a later non-patch release after that published deprecation and only
   while repository-internal callers remain at zero.
@@ -81,7 +81,7 @@ package-level circular import merely for re-export convenience.
 ### `capabilities` and `capability_assignments`
 
 Capability assignment policy is part of the capability domain rather than a separate durable domain.
-Issue #895 moves the canonical implementation to `capabilities.assignments` and turns the historical
+The compatibility migration moves the canonical implementation to `capabilities.assignments` and turns the historical
 `ai_multi_agent_platform.capability_assignments` package into a compatibility-only namespace.
 
 - new assignment behavior belongs under `capabilities.assignments`;
@@ -96,7 +96,7 @@ Issue #895 moves the canonical implementation to `capabilities.assignments` and 
 
 `high_availability` -> `distributed.high_availability` and
 `repository_intelligence` -> `repositories.intelligence` were completed as behavior-preserving
-ownership moves under #1241. Their historical root namespaces remain compatibility-only shims while
+ownership moves under the repository-domain consolidation. Their historical root namespaces remain compatibility-only shims while
 repository-internal callers use the canonical owners.
 
 Both roots are subject to the same public-import deprecation rule as the other compatibility
@@ -122,7 +122,7 @@ A new top-level package is justified only when all of the following are true:
 6. any material change to canonical ownership or public compatibility is documented in the relevant
    architecture documentation and, when required, an ADR.
 
-Issue #1173 satisfies that exception for `applications`: independently deployable external
+The application-adapter runtime satisfies that exception for `applications`: independently deployable external
 applications have durable definition/instance state and lifecycle/reconciliation semantics that remain
 meaningful when the concrete runtime backend is replaced. Assigning that authority to
 `application_distribution`, `distribution`, `deployment` or `distributed` would mix distinct state
@@ -156,14 +156,14 @@ independent growth.
   symmetry.
 - A consolidation must not reverse canonical dependency direction to make the file move convenient.
 
-## Coordination with #723
+## Coordination with backend responsibility decomposition
 
-Issue #723 decomposes oversized modules by responsibility behind stable facades. That decomposition
+Backend responsibility decomposition splits oversized modules by responsibility behind stable facades. That decomposition
 must normally remain inside the canonical owner identified here. Splitting a large module into focused
 nested modules/subpackages is encouraged; creating another root package as a by-product of the split
 is not.
 
-If #723 discovers that code is actually owned by another canonical domain, that is an ownership
+If responsibility analysis discovers that code is actually owned by another canonical domain, that is an ownership
 change and should be handled as an explicit package-boundary decision rather than silently moved while
 splitting a monolith.
 

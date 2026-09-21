@@ -1,6 +1,6 @@
 # Canonical Research Evidence
 
-Issue #589 adds a platform-owned semantic layer for source-based research without creating a
+The Research Evidence domain adds a platform-owned semantic layer for source-based research without creating a
 second Task/Run runtime or replacing existing Search, Browser, Connector, File, Knowledge,
 Memory, Planning, Verification or Authorization ownership.
 
@@ -18,12 +18,12 @@ ResearchItem
       +--> Claim <-------- EvidenceRecord
               |
               v
-        #86 Verification
+        Verification
               |
               v
       ResearchActionContext
               |
-              +--> #439 Planning
+              +--> Planning
               +--> explicit Knowledge promotion
               +--> explicit Memory promotion
 ```
@@ -83,17 +83,17 @@ Revalidation creates a new EvidenceRecord pointing at the new SourceObservation 
 
 ## Verification boundary
 
-Research uses the existing #86 `VerificationService` as the authority for policy, verifier kind,
+Research uses the existing `VerificationService` as the authority for policy, verifier kind,
 reviewer independence and PASS/FAIL semantics. `ResearchVerificationBridge` resolves exact
 Research Item/Claim/Evidence revision+digest subjects and records only a current PASS as action
 provenance.
 
 The bridge deliberately does **not** bind Research review to
 `VerificationCompletionAuthority`. Therefore checking a Research Claim does not accidentally make
-that check a Task-completion gate. A Task may independently have its own #86 completion policy.
+that check a Task-completion gate. A Task may independently have its own Verification completion policy.
 
-The current #86 request contract is Task-scoped. Project/domain research therefore needs an
-associated canonical Task context when it is sent through #86; this preserves one Task/Run system
+The current Verification request contract is Task-scoped. Project/domain research therefore needs an
+associated canonical Task context when it is sent through Verification; this preserves one Task/Run system
 rather than introducing a Research execution lifecycle.
 
 ## Research to action
@@ -101,9 +101,9 @@ rather than introducing a Research execution lifecycle.
 `ResearchActionContext` is the governed handoff. It contains the exact Research Item revision and
 digest plus the supported Claim, current Evidence and required Verification IDs.
 
-The #439 Planning bridge passes these references through `PlanningService.propose(evidence_refs=)`.
+The Planning bridge passes these references through `PlanningService.propose(evidence_refs=)`.
 Research code does not create or activate a private Plan and cannot grant permissions or approvals.
-Normal #15 authorization and approval policy still governs privileged downstream actions.
+Normal Authorization and approval policy still governs privileged downstream actions.
 
 ## Knowledge and Memory promotion
 
@@ -160,7 +160,7 @@ The registered commands are deliberately research-semantic mutations only:
 - `research.evidence.revalidate`.
 
 They do not create Tasks/Runs, approve decisions, grant permissions or execute downloaded code.
-Existing Control Plane authorization is applied first, the Research service remains subject to #15,
+Existing Control Plane authorization is applied first, the Research service remains subject to Authorization,
 and the domain registration additionally enforces the authenticated owner scope. Observation
 commands reuse the northbound `Idempotency-Key`, so retries cannot silently replace an earlier
 source/content binding.
@@ -177,10 +177,10 @@ implementation and a dependency-free SQLite implementation for single-node resta
 Source Observations, Evidence and completed Verification bindings are append-only historical
 records. Research Items and Claims use explicit optimistic revisions for their mutable projections.
 
-## #589 completion state
+## Completion state
 
-The canonical Research Evidence core, Search projection, durable single-node composition, #19
-Research evaluation, #77 Research Team integration, #598 Decision provenance and #79 portable
+The canonical Research Evidence core, Search projection, durable single-node composition, Evaluation,
+Research Team integration, Decision provenance and portable
 Research bundle codec are integrated. ``build_single_node_deployment(...)`` now exposes the same
 durable ``ResearchService`` backed by ``db/research.sqlite3`` and registers the Search-aware
 Research Control Plane surface by default.
@@ -190,10 +190,10 @@ The Research quality suite remains **explicit/versioned opt-in** via
 exact Research Item and therefore should not be installed as a global deployment suite with a
 placeholder identity or duplicated thresholds.
 
-The shared #79 portability composition can export Research bundles with historical-preserve
+The shared Portability composition can export Research bundles with historical-preserve
 semantics. Generic package import deliberately does not receive a no-op Research mutation handler;
 ``import_research_bundle(...)`` remains the owner-domain import boundary so exact graph validation
-and destination-local #86 Verification validation stay fail-closed.
+and destination-local Verification validation stay fail-closed.
 
 ``UntrustedResearchExecutionProfile`` remains a policy projection consumed by the existing
 Workspace/Executor/Capability/Authorization/resource boundaries. Research does not introduce a

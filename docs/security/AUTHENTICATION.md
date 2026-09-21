@@ -1,10 +1,8 @@
 # Authentication and Session Management
 
-Issue: #36
-
 ## Purpose and boundary
 
-Authentication answers **who is making a request**. Authorization from #15 answers
+Authentication answers **who is making a request**. Authorization answers
 **what that authenticated actor may do**. The two decisions are intentionally separate.
 
 The canonical path is:
@@ -14,13 +12,13 @@ client credential / browser session
         -> authentication boundary
         -> AuthenticatedActor + ActorIdentity
         -> trusted RequestContext principal + authentication trust context
-        -> #15 authorization
+        -> canonical authorization
         -> Control Plane operation
 ```
 
 No authentication method grants administrative permissions by itself. In particular,
 `bootstrap_first_admin()` creates the first local human identity but does not install or
-bypass a #15 authorization policy.
+bypass an authorization policy.
 
 ## Canonical authenticated actor
 
@@ -56,8 +54,7 @@ Baseline defaults:
 contract fixtures. It deliberately stores only password/token verifiers and safe
 credential metadata. Production persistence can replace this storage boundary without
 changing `AuthenticatedActor`, credential formats or Control Plane authentication
-semantics. The deployment issue must bind authentication state to the deployment's durable
-persistence profile before claiming restart-persistent account storage.
+semantics. A production deployment must bind authentication state to its durable persistence profile before claiming restart-persistent account storage.
 
 Credential scope is part of the authoritative `StoredCredential` record and must be
 persisted atomically with the credential. A durable implementation must never persist a
@@ -69,7 +66,7 @@ For an empty authentication store, `bootstrap_first_admin(username, password)` c
 first local user. It is allowed exactly while no local users exist.
 
 The name describes the operator bootstrap flow, not a permission grant. The deployment
-bootstrap must separately install an explicit #15 policy for whichever administrator
+bootstrap must separately install an explicit authorization policy for whichever administrator
 rights are desired.
 
 Password recovery is intentionally not exposed as an unauthenticated HTTP endpoint.
@@ -136,10 +133,10 @@ credentials. The kind must match its canonical `ActorType`; a token cannot chang
 class. Mobile credentials remain human credentials but use a distinct authentication method and a
 restrictive deny-only scope ceiling for the maintained companion workflows.
 
-### Credential scopes and #15
+### Credential scopes and authorization
 
 `CredentialScope` is a credential-local **deny-only authorization ceiling** expressed in
-canonical #15 vocabulary:
+canonical authorization vocabulary:
 
 - `actions` contains `AuthorizationAction` values;
 - `resource_types` contains `ResourceType` values;
@@ -156,14 +153,14 @@ StoredCredential.scope
         -> validated authentication metadata
         -> trusted RequestContext authentication context
         -> canonical AuthorizationRequest.trust_context
-        -> ControlPlaneAuthorizationBridge / #15
+        -> ControlPlaneAuthorizationBridge
         -> credential-scope deny-only check
-        -> normal #15 policy / approval decision
+        -> normal policy / approval decision
 ```
 
-Passing the credential-scope check **never grants** an operation. The normal #15 provider
+Passing the credential-scope check **never grants** an operation. The normal authorization provider
 must still allow it or return the relevant approval outcome. Conversely, a scope denial is
-final even if the principal's normal #15 policy would otherwise allow the operation.
+final even if the principal's normal authorization policy would otherwise allow the operation.
 Authentication credentials therefore never grant implicit administrator rights.
 
 Malformed or incomplete persisted scope data fails closed during bearer authentication.
@@ -172,8 +169,7 @@ missing or corrupt.
 
 ## Worker authentication contract
 
-`create_worker_credential()` and `authenticate_worker_request()` provide the #36 side of
-future #14 remote worker enrollment/registration.
+`create_worker_credential()` and `authenticate_worker_request()` provide the authentication side of remote Worker enrollment/registration.
 
 The request-authentication fixture includes:
 
@@ -183,13 +179,11 @@ The request-authentication fixture includes:
 - nonce replay protection;
 - optional TLS/mTLS peer reference metadata.
 
-The TLS peer reference is evidence/transport metadata, not canonical worker identity. #14
-will consume this authenticated identity for registration, heartbeat and dispatch without
-making the scheduler a dependency of #36.
+The TLS peer reference is evidence/transport metadata, not canonical Worker identity. The distributed runtime consumes this authenticated identity for registration, heartbeat and dispatch without making the scheduler part of the authentication authority.
 
 Worker credential rotation creates a new credential, preserves the previous scope unless
 an explicit replacement scope is supplied, and revokes the old credential. A compromised
-or lost worker credential can be revoked independently from the future scheduler.
+or lost worker credential can be revoked independently from the scheduler.
 
 ## Brute-force and request rate-control hooks
 
@@ -239,7 +233,7 @@ The boundary removes caller-provided `X-Principal-Ref`, `X-Owner-Type`, `X-Owner
 other caller-supplied identity projections. It then attaches an internal trusted
 `ActorContext` containing only the canonical actor established by authentication. For
 token credentials, the validated credential scope is carried in the trusted authentication
-context so #15 can apply it as a deny-only constraint.
+context so authorization can apply it as a deny-only constraint.
 
 This prevents authentication from becoming a trusted-header convention at the exposed
 client boundary while preserving the existing versioned Control Plane application
@@ -280,20 +274,20 @@ bearer authentication server-side.
 
 Service/worker/automation/integration credential issuance is available at the application
 service boundary. Administrative APIs that expose those creation operations must first
-apply #15 `manage_credentials` authorization; #36 deliberately does not create an
+apply canonical `manage_credentials` authorization; authentication deliberately does not create an
 unauthenticated or role-name-based shortcut.
 
 ## HTTP error distinction
 
 Authentication failures return `401 unauthorized` with `WWW-Authenticate` where relevant.
-Rate limiting returns 429. Once authentication succeeds, a #15 policy or credential-scope
+Rate limiting returns 429. Once authentication succeeds, an authorization policy or credential-scope
 denial remains `403 forbidden`/authorization. This distinction is part of the public
 Control Plane error contract.
 
 ## Audit and redaction
 
 Authentication operations emit `AuthenticationAuditRecord` through an injected sink when
-one is configured. The #36 public self-hosted composition provides hooks for:
+one is configured. The public self-hosted authentication composition provides hooks for:
 
 - successful/failed local login, including disabled or locked accounts;
 - browser-session creation and successful/failed session authentication, including CSRF,
@@ -313,8 +307,7 @@ session cookies, bearer tokens, CSRF values or external IdP assertions.
 
 Audit metadata is passed through the platform's standard recursive secret redaction.
 Normal session/credential serialization likewise excludes token and password verifiers.
-#16 may later enrich or export these audit hooks, but #36 does not depend on the
-observability stack for the hooks themselves to exist.
+Observability may enrich or export these audit hooks, but authentication does not depend on the observability stack for the hooks themselves to exist.
 
 ## Security invariants
 
@@ -327,9 +320,9 @@ observability stack for the hooks themselves to exist.
 6. Revoked/expired sessions and credentials fail deterministically.
 7. Browser state-changing operations require CSRF validation.
 8. External identity claims never become canonical permissions automatically.
-9. Worker request nonces can be rejected on replay before #14 exists.
-10. Credential scope is stored atomically with the credential and is a deny-only #15
+9. Worker request nonces are rejected on replay independently of scheduler availability.
+10. Credential scope is stored atomically with the credential and is a deny-only authorization
     constraint; malformed persisted scope fails closed.
 11. Security-sensitive authentication decisions expose redacted audit hooks without
-    requiring #16.
+    requiring observability.
 12. Raw credential values are excluded from ordinary audit/log/resource representations.

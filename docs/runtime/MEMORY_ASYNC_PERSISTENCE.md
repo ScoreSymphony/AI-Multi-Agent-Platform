@@ -1,6 +1,6 @@
 # Async Memory SQLite persistence
 
-Issue #892 requires awaitable runtime services to avoid executing synchronous `sqlite3` work on the asyncio event-loop thread. The local Memory provider remains SQLite-backed, while its existing provider contract stays backend-neutral and awaitable.
+Awaitable runtime services avoid executing synchronous `sqlite3` work on the asyncio event-loop thread. The local Memory provider remains SQLite-backed, while its existing provider contract stays backend-neutral and awaitable.
 
 ## Runtime boundary
 
@@ -40,4 +40,4 @@ Provider/domain errors retain their existing canonical codes. SQLite `busy` and 
 
 No caller depends on the offload implementation. The public async `MemoryProvider` contract remains suitable for the reusable in-memory conformance provider and for a future Postgres-backed provider without changing service callers.
 
-The existing scoped-memory conformance suite continues to run against both the in-memory provider and `LocalMemoryProvider`. #892-specific integration coverage additionally verifies event-loop responsiveness, worker-thread connection ownership, bounded concurrency, shared-default-executor isolation, cancellation at the persistence boundary, busy mapping, rollback, concurrent delete semantics and restart durability.
+The existing scoped-memory conformance suite continues to run against both the in-memory provider and `LocalMemoryProvider`. The async-persistence integration coverage additionally verifies event-loop responsiveness, worker-thread connection ownership, bounded concurrency, shared-default-executor isolation, cancellation at the persistence boundary, busy mapping, rollback, concurrent delete semantics and restart durability.

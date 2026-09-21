@@ -1,6 +1,6 @@
 # Task Project reassignment
 
-Issue #157 defines Project reassignment as a canonical Task mutation. It is not a Task-management metadata field and no frontend or adapter may maintain a second Project assignment.
+Project reassignment is a canonical Task mutation. It is not a Task-management metadata field and no frontend or adapter may maintain a second Project assignment.
 
 ## Commands
 

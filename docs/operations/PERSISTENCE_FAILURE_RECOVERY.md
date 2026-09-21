@@ -1,13 +1,11 @@
 # Persistence and filesystem failure recovery
 
-Issue: #1155  
-Foundation: #707, #13, #16, #37  
-Backup/restore authority: #40
-
+Foundation: startup reconciliation, data persistence, observability and Workspaces
+Backup/restore authority: canonical backup/restore workflow
 ## Scope and ownership
 
 The supported single-node profile uses domain-owned SQLite/JSON repositories plus platform-owned
-filesystem roots. #1155 hardens failure handling around those existing owners. It does **not** add a
+filesystem roots. This policy hardens failure handling around those existing owners. It does **not** add a
 second persistence database, lifecycle authority, schema authority or backup/restore mechanism.
 
 The durable-store inventory in `backup/inventory.py` is reused only to identify which current
@@ -100,7 +98,7 @@ Workspace materializations are execution/cache state, not canonical Workspace/Sn
 The SQLite Workspace provider already clears stale active Task/Run references while loading durable
 metadata.
 
-#1155 additionally removes stale `materialization_<canonical-id>` paths during startup. A path is
+Startup recovery additionally removes stale `materialization_<canonical-id>` paths during startup. A path is
 eligible only when its full name validates as a canonical materialization ID. Invalid/unowned names
 are left untouched.
 
@@ -168,12 +166,12 @@ guesses.
 - `SqliteWriteLock` for deterministic real writer contention;
 - `FailOnceFilesystemOperation` for one-shot filesystem failures such as atomic rename.
 
-They are deliberately small and reusable by #46/#1157 conformance/reliability suites. The existing
+They are deliberately small and reusable by conformance/reliability suites. The existing
 persistence-fault benchmark remains useful for retry/idempotency pressure; these helpers add the
 local OS/SQLite boundary cases that benchmark intentionally did not claim.
 
 ## Backup/restore boundary
 
-If canonical state is missing or corrupt, follow `docs/operations/BACKUP_RESTORE.md` and #40.
-#1155 does not repair a corrupt database in place and does not reinterpret backup manifests. Health
+If canonical state is missing or corrupt, follow `docs/operations/BACKUP_RESTORE.md` and the canonical backup/restore workflow.
+This recovery path does not repair a corrupt database in place and does not reinterpret backup manifests. Health
 and startup recovery are pre-serving safety gates around the existing persistence owners.

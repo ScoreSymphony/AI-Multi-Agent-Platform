@@ -1,6 +1,5 @@
 # Workspace and Project Environment Contract
 
-Issue: #37
 
 ## Purpose
 
@@ -121,26 +120,26 @@ Cleanup failures are represented in reports rather than silently treated as succ
 
 `RemoteMaterializationRequest` carries the canonical workspace ID, snapshot ID, expected checksum, access mode and cache key required by a future worker transport.
 
-The #37 boundary also defines:
+The Workspace boundary also defines:
 
 - `RemoteMaterializationReceipt` — worker acknowledgement of the exact snapshot actually materialized, including checksum verification and opaque worker/materialization references;
 - `RemoteMaterializationResult` — changed canonical File references and artifact references returned from remote execution;
 - `RemoteCleanupAcknowledgement` — explicit success/failure acknowledgement for disposable worker-local cleanup;
 - `RemoteWorkspaceMaterializer` — transport-neutral materialize/result/cleanup interface.
 
-Remote receipts reject checksum mismatch and path-like materialization references. #14 can implement actual worker transfer, caching and transport over these contracts without redefining Workspace identity.
+Remote receipts reject checksum mismatch and path-like materialization references. Distributed execution can implement actual worker transfer, caching and transport over these contracts without redefining Workspace identity.
 
 ## Follow-up integration boundaries
 
 The workspace domain is complete without requiring concrete implementations of later subsystems:
 
-- #14 supplies actual remote-worker transport/materialization execution;
-- #15 supplies authorization enforcement around the existing workspace policy context;
-- #34 supplies secret references for authenticated external sources;
-- #44 supplies concrete repository/artifact/template source connectors/resolvers;
-- #17 can expose richer workspace/project UI over the canonical Control Plane.
+- Distributed execution supplies actual remote-worker transport/materialization execution;
+- Authorization supplies enforcement around the existing workspace policy context;
+- Secrets and configuration supply secret references for authenticated external sources;
+- Connectors supply concrete repository/artifact/template source connectors/resolvers;
+- The Web client can expose richer workspace/project UI over the canonical Control Plane.
 
-Those integrations consume the #37 contracts rather than changing their identities or lifecycle semantics.
+Those integrations consume the Workspace contracts rather than changing their identities or lifecycle semantics.
 
 ## Acceptance coverage
 

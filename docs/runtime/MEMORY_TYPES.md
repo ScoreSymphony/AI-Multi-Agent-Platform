@@ -1,6 +1,6 @@
 # Canonical Memory Types
 
-Issue #718 adds a second, provider-neutral dimension to Memory. `MemoryScope` answers **where / for whom** an entry belongs; `MemoryType` answers **what kind of memory** the entry represents. The dimensions are independent and continue to use the same `MemoryProvider` boundary.
+Memory has a second, provider-neutral dimension alongside scope. `MemoryScope` answers **where / for whom** an entry belongs; `MemoryType` answers **what kind of memory** the entry represents. The dimensions are independent and continue to use the same `MemoryProvider` boundary.
 
 ## Taxonomy
 

@@ -1,6 +1,6 @@
 # Bounded-context package map
 
-Issue #895 refines the root-package ownership policy from [`PACKAGE_BOUNDARIES.md`](PACKAGE_BOUNDARIES.md).
+This document refines the root-package ownership policy from [`PACKAGE_BOUNDARIES.md`](PACKAGE_BOUNDARIES.md).
 The package-boundary manifest remains the canonical ownership inventory; this document is the
 higher-level navigation map. It groups the current root namespace into a small number of primary
 contexts without pretending that every grouped package has the same lifecycle authority.
@@ -10,7 +10,7 @@ context first, then the canonical owner inside that context.
 
 ## Architectural roles
 
-The current root packages fall into five #895 roles:
+The current root packages fall into five bounded-context roles:
 
 | Role | Meaning |
 | --- | --- |
@@ -183,7 +183,7 @@ connected components with Tarjan's algorithm. The reviewed baseline lives in
 `PACKAGE_DEPENDENCY_CYCLES.toml` and is exercised by
 `tests/architecture/test_package_dependency_cycles.py`.
 
-The first enforced #895 probe measured:
+The first enforced bounded-context probe measured:
 
 - **62** importable top-level packages;
 - **434** directed top-level import edges;
@@ -196,7 +196,7 @@ of unrelated pairwise cycles would therefore be misleading.
 
 The baseline is shrink-only: an SCC may split or lose members, but a current SCC must remain a subset
 of an explicitly reviewed baseline set. A new SCC outside that set, or growth that pulls another root
-package into the reviewed SCC, fails the architecture test. Before freezing the baseline, #895 moved
+package into the reviewed SCC, fails the architecture test. Before freezing the baseline, the bounded-context migration moved
 the last production Control Plane import of the `task_reassignment` compatibility namespace to
 `task_management.reassignment`; the compatibility root is intentionally excluded from the allowed
 SCC. This records an actual cycle-membership reduction rather than merely documenting existing debt.
@@ -210,10 +210,10 @@ to be eliminated in one risky refactor.
 
 | Historical root package | Canonical destination | State | Removal criterion |
 | --- | --- | --- | --- |
-| `task_reassignment` | `task_management.reassignment` | compatibility-only since #726; internal Control Plane caller migrated in #895 | Remove only after supported external callers have migrated and the normal public-import deprecation window permits removal. |
-| `capability_assignments` | `capabilities.assignments` | compatibility-only in #895 | Same public-import deprecation rule; canonical code must not import the shim. |
-| `repository_intelligence` | `repositories.intelligence` | compatibility-only under #1241 | Canonical callers and ProjectAtlas entrypoint migrated; remove the root only after the public-import deprecation window. |
-| `high_availability` | `distributed.high_availability` | compatibility-only under #1241 | Canonical callers migrated; contracts remain backed by `distributed.control_plane_ha`; remove the root only after the public-import deprecation window. |
+| `task_reassignment` | `task_management.reassignment` | compatibility-only under the package-boundary policy; internal Control Plane caller migrated to the canonical domain | Remove only after supported external callers have migrated and the normal public-import deprecation window permits removal. |
+| `capability_assignments` | `capabilities.assignments` | compatibility-only under the bounded-context policy | Same public-import deprecation rule; canonical code must not import the shim. |
+| `repository_intelligence` | `repositories.intelligence` | compatibility-only under repository/distributed ownership consolidation | Canonical callers and ProjectAtlas entrypoint migrated; remove the root only after the public-import deprecation window. |
+| `high_availability` | `distributed.high_availability` | compatibility-only during the public-import deprecation window | Canonical callers migrated; contracts remain backed by `distributed.control_plane_ha`; remove the root only after the public-import deprecation window. |
 
 ## Staged migration order
 
@@ -222,10 +222,10 @@ to be eliminated in one risky refactor.
 2. **Compatibility-edge cleanup** — move internal callers from historical compatibility paths to the
    canonical owners so migration namespaces do not remain part of the canonical dependency SCC merely
    because first-party code still imports them.
-3. **Repository intelligence** — completed under #1241: provider-neutral implementation and
+3. **Repository intelligence** — completed under ownership consolidation: provider-neutral implementation and
    ProjectAtlas import strings are canonical under `repositories.intelligence`, with the root retained
    only for compatibility.
-4. **High availability** — completed under #1241: implementation is canonical beneath
+4. **High availability** — implementation is canonical beneath
    `distributed.high_availability`, with the root retained only for compatibility.
 5. **Broader subdomain nesting** — consider additional physical moves only when dependency evidence
    shows a clear benefit. Documentation grouping alone is preferable to mass path churn for stable

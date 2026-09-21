@@ -1,6 +1,6 @@
 # Distributed runtime
 
-Issue #14 introduces platform-owned Node, Worker, placement and remote-job semantics without making one host layout, GPU vendor, broker, container system or cloud provider canonical.
+The Distributed Runtime introduces platform-owned Node, Worker, placement and remote-job semantics without making one host layout, GPU vendor, broker, container system or cloud provider canonical.
 
 ## Ownership boundary
 
@@ -12,7 +12,7 @@ Task / Run
     -> WorkerJobRequest
     -> DeterministicScheduler
     -> capacity Reservation
-    -> #15 dispatch authorization (when configured)
+    -> dispatch authorization (when configured)
     -> WorkerDispatcher
     -> LifecycleBackend
     -> executor adapter
@@ -71,21 +71,21 @@ A Worker that disappears is not trusted as healthy indefinitely. Re-registration
 
 ### Authenticated remote reporter
 
-`WorkerProtocolService` is the worker-facing security boundary. It reuses #36 authentication and #15 authorization instead of inventing a second identity or permission system.
+`WorkerProtocolService` is the worker-facing security boundary. It reuses canonical authentication and authorization instead of inventing a second identity or permission system.
 
 A remote registration identifies one reporter through `RegistrationRequest.service_identity_ref`. The reporter must:
 
-- authenticate with a #36 Worker credential;
+- authenticate with a Worker credential;
 - match the credential-bound Worker identity;
 - be present in the reported Worker snapshot;
 - pass the credential's canonical `CredentialScope` ceiling;
-- pass #15 authorization for the Node and every reported Worker.
+- pass canonical authorization for the Node and every reported Worker.
 
 Authenticated registration is treated as an authoritative Worker snapshot for that Node. A re-registration cannot silently omit known Workers; removal uses explicit deregistration. Authenticated heartbeats likewise report the complete registered Worker snapshot and cannot inject an unknown Worker.
 
 Remote reports never control administrative trust state. For a new remotely enrolled Node, the reference service assigns `trust_level="untrusted"` unless the deployment chooses another explicit initial policy. Re-registration and heartbeat preserve Control-Plane-owned Node trust, maintenance and drain state as well as existing Worker drain state.
 
-#36 replay protection and optional TLS peer binding are applied before the registry is mutated. The raw Worker credential is never persisted in distributed runtime state.
+Worker-protocol replay protection and optional TLS peer binding are applied before the registry is mutated. The raw Worker credential is never persisted in distributed runtime state.
 
 ### State-change timestamp semantics
 
@@ -138,13 +138,13 @@ The registry prevents a second Worker from claiming the same canonical Worker Jo
 
 ## Dispatch authorization
 
-`DistributedRuntime` accepts the existing canonical #15 `AuthorizationProvider` as an optional deployment dependency. When configured, every new placement is authorized against the **exact selected `worker_*` resource before the external Worker dispatch boundary**.
+`DistributedRuntime` accepts the existing canonical `AuthorizationProvider` as an optional deployment dependency. When configured, every new placement is authorized against the **exact selected `worker_*` resource before the external Worker dispatch boundary**.
 
 The authorization request carries only canonical scope/context fields needed for policy evaluation: principal, action, Worker/Node, Project, Workspace, Task, Run and an unambiguous required capability when available. Job input and `secret_refs` are not copied into the policy request.
 
 Placement still reserves capacity before this final authorization gate so the authorization decision refers to the deterministic selected Worker. A denial or authorization-provider failure releases that reservation before the Worker can start execution; no dispatch ownership record is created and the denied Worker Job is not executed.
 
-Reference scheduler tests may construct a runtime without an authorization provider, matching the deterministic local/reference path allowed by #14. Production composition that requires #15 enforcement supplies the canonical provider rather than defining a distributed-specific policy system.
+Reference scheduler tests may construct a runtime without an authorization provider, matching the deterministic local/reference path. Production composition that requires authorization enforcement supplies the canonical provider rather than defining a distributed-specific policy system.
 
 ## Worker protocol and local reference worker
 
@@ -161,9 +161,9 @@ Reference scheduler tests may construct a runtime without an authorization provi
 
 Duplicate delivery of the same exact `worker_job_id` is idempotent. Reusing that ID with a different payload is rejected.
 
-## #35 replaceable Worker message transport
+## Replaceable Worker message transport
 
-`TransportWorkerDispatcher` and `WorkerTransportEndpoint` adapt the transport-neutral Worker contract to the existing #35 `MessageTransport` abstraction. They do not introduce a second broker contract and do not select Redis, NATS, Kafka, RabbitMQ or another permanent transport.
+`TransportWorkerDispatcher` and `WorkerTransportEndpoint` adapt the transport-neutral Worker contract to the existing `MessageTransport` abstraction. They do not introduce a second broker contract and do not select Redis, NATS, Kafka, RabbitMQ or another permanent transport.
 
 Worker operations are carried as versioned command/reply envelopes for:
 
@@ -176,9 +176,9 @@ The identity layers remain distinct:
 
 - `worker_job_id` is the canonical Worker execution/idempotency identity;
 - transport `message_id` is only one delivery identity;
-- correlation/causation, Task, Run, project and idempotency metadata are propagated through the #35 envelope.
+- correlation/causation, Task, Run, project and idempotency metadata are propagated through the transport envelope.
 
-#35 is explicitly at-least-once. The distributed runtime therefore does not claim exactly-once messaging. A lost dispatch reply can be retried with a new transport message ID and the same Worker Job identity; the Worker executes the canonical Run only once. Likewise, a lost terminal result reply is recovered by repeating result retrieval, not by redispatching the execution. Tests prove that Artifact/Evidence references survive that retry while the lifecycle start count remains unchanged.
+The canonical MessageTransport is explicitly at-least-once. The distributed runtime therefore does not claim exactly-once messaging. A lost dispatch reply can be retried with a new transport message ID and the same Worker Job identity; the Worker executes the canonical Run only once. Likewise, a lost terminal result reply is recovered by repeating result retrieval, not by redispatching the execution. Tests prove that Artifact/Evidence references survive that retry while the lifecycle start count remains unchanged.
 
 Only portable secret references may appear in Worker job envelopes. Plaintext secret material is resolved at the execution boundary and is not copied into transport payloads, persistence, telemetry or Control Plane projections.
 
@@ -264,15 +264,15 @@ Registered read collections are:
 - `workers`;
 - `worker-jobs`.
 
-Administrative commands currently include Node drain/undrain, Node maintenance enable/disable and Worker drain/undrain. They inherit the existing Control Plane idempotency and #15 authorization boundary.
+Administrative commands currently include Node drain/undrain, Node maintenance enable/disable and Worker drain/undrain. They inherit the existing Control Plane idempotency and authorization boundary.
 
 Worker-job projections intentionally omit `secret_refs`. Input `artifact_refs` remain distinct from the optional terminal `result` projection. When a terminal result has been collected, the read-only projection exposes its status, canonical output artifact refs, evidence refs, error category, completion time and execution status; it never exposes secret references or plaintext secret material.
 
-Remote Worker registration and heartbeat are not implemented as ordinary human/admin Control Plane commands. They use `WorkerProtocolService`, because they require #36 Worker-token authentication, replay protection, reporter binding and protocol-specific authorization before any runtime mutation.
+Remote Worker registration and heartbeat are not implemented as ordinary human/admin Control Plane commands. They use `WorkerProtocolService`, because they require Worker-token authentication, replay protection, reporter binding and protocol-specific authorization before any runtime mutation.
 
-## #5 provider contract integration
+## Provider contract integration
 
-`DistributedNodeProvider` and `DistributedWorkerProvider` adapt the same distributed runtime to the existing replaceable `NodeProvider` and `WorkerProvider` contracts from #5. They do not create a second registry or scheduler.
+`DistributedNodeProvider` and `DistributedWorkerProvider` adapt the same distributed runtime to the existing replaceable `NodeProvider` and `WorkerProvider` provider contracts. They do not create a second registry or scheduler.
 
 `NodeDescriptor` and `WorkerDescriptor` remain discovery views. Registration preserves canonical Node/Worker IDs and passes the current complete sibling Worker snapshot back through the runtime so a provider-level upsert cannot accidentally mark unrelated Workers offline.
 
@@ -280,9 +280,9 @@ Remote Worker registration and heartbeat are not implemented as ordinary human/a
 
 Registry/scheduler failures are translated to backend-neutral `ContractError` categories before crossing the provider boundary. Adapter-private metadata remains namespaced and is not exposed through the public Control Plane resource projections.
 
-## #16 observability integration
+## Observability integration
 
-`DistributedTelemetry` connects #14-owned scheduler, Worker, Node, reservation and reconciliation semantics to the existing #16 `Telemetry` facade. It does not own an exporter, storage backend or second tracing system.
+`DistributedTelemetry` connects scheduler, Worker, Node, reservation and reconciliation semantics to the existing `Telemetry` facade. It does not own an exporter, storage backend or second tracing system.
 
 The integration emits structured, correlated data for:
 
@@ -296,9 +296,9 @@ The integration emits structured, correlated data for:
 
 Telemetry context preserves canonical Task/Step, Run, Worker Job, Node, Worker, correlation and causation references when available. Job input payloads and `secret_refs` are deliberately not copied into metrics, logs, timeline entries or spans. Tests include explicit private input/secret markers and assert that those markers never reach the in-memory telemetry exporter.
 
-## #37 remote workspace integration
+## Remote Workspace integration
 
-The distributed runtime consumes the existing #37 remote materialization contracts instead of defining a second workspace-transfer protocol.
+The distributed runtime consumes the existing remote materialization contracts instead of defining a second workspace-transfer protocol.
 
 `WorkspaceJobMaterializationResolver` resolves the canonical `workspace_ref` and `snapshot_ref` carried by `WorkerJobRequest` through the existing `WorkspaceProvider`, verifies that the snapshot belongs to the workspace, and creates the existing `RemoteMaterializationRequest` with the canonical snapshot checksum and workspace access mode. The persisted Worker Job continues to carry only canonical references; host-local execution paths never become part of the distributed contract.
 
@@ -309,22 +309,22 @@ The distributed runtime consumes the existing #37 remote materialization contrac
 3. validate receipt Worker/workspace/snapshot/checksum/access-mode identity;
 4. dispatch the unchanged canonical Worker Job;
 5. collect canonical result/artifact evidence only after terminal execution;
-6. clean up using the #37 acknowledgement/outcome contract.
+6. clean up using the Workspace acknowledgement/outcome contract.
 
 A lost dispatch acknowledgement does not trigger premature cleanup or a second workspace materialization. The wrapper retains the original materialization receipt and reuses it when the same idempotent Worker Job is retried/reconciled. Remote result artifact IDs are folded into `WorkerJobResult` without exposing a host path.
 
-## #34 scoped secret delivery
+## Scoped secret delivery
 
-`SecretDeliveringWorkerDispatcher` resolves canonical `SecretReference` objects only at the exact Worker execution boundary. Resolution uses the existing #34 `SecretProvider` / `SecretAccessContext` contracts and therefore composes with the established #15 authorization boundary rather than creating a second distributed secret system.
+`SecretDeliveringWorkerDispatcher` resolves canonical `SecretReference` objects only at the exact Worker execution boundary. Resolution uses the existing `SecretProvider` / `SecretAccessContext` contracts and therefore composes with the established authorization boundary rather than creating a second distributed secret system.
 
-`WorkerJobRequest` stores only opaque secret references. Plaintext `SecretMaterial` exists only in the ephemeral per-dispatch bundle passed to a secret-aware execution adapter and is not stored in distributed JSON persistence, Worker Job Control Plane resources, #16 telemetry or #35 transport envelopes.
+`WorkerJobRequest` stores only opaque secret references. Plaintext `SecretMaterial` exists only in the ephemeral per-dispatch bundle passed to a secret-aware execution adapter and is not stored in distributed JSON persistence, Worker Job Control Plane resources, telemetry or transport envelopes.
 
-## Issue #14 completion status
+## Current distributed-runtime scope
 
-The distributed-runtime scope now includes canonical runtime projections, versioned registration/heartbeat, capability/resource scheduling, node-wide and accelerator capacity leases, local and remote Worker dispatch, authenticated Worker reporting, explicit #15 pre-dispatch authorization hooks, provider/Control-Plane integration, restart persistence, durable terminal result/evidence recovery, remote workspace composition, scoped secret delivery, structured telemetry, replaceable #35 transport, lost-reply recovery and controlled fenced cross-Worker failover.
+The distributed-runtime scope now includes canonical runtime projections, versioned registration/heartbeat, capability/resource scheduling, node-wide and accelerator capacity leases, local and remote Worker dispatch, authenticated Worker reporting, explicit pre-dispatch authorization hooks, provider/Control-Plane integration, restart persistence, durable terminal result/evidence recovery, remote workspace composition, scoped secret delivery, structured telemetry, replaceable MessageTransport, lost-reply recovery and controlled fenced cross-Worker failover.
 
 The acceptance path uses the same canonical `ExecutionRequest`/`WorkerJobRequest` regardless of whether the selected Worker is local or remote. Tests cover ordinary single-/multi-Worker scheduling as well as controlled transfer of the same canonical work from one lost/fenced Worker to another eligible Worker without changing Task or agent logic. Result recovery tests additionally prove lost-completion-response -> Control-Plane restart -> same-Worker result recovery -> second restart without Worker attachment, while the original execution is started only once.
 
-No infrastructure-provider identifier, host name, GPU vendor, broker, container runtime or deployment topology becomes a canonical execution identity. Deployment profiles such as #240 consume these contracts rather than introducing a second scheduler.
+No infrastructure-provider identifier, host name, GPU vendor, broker, container runtime or deployment topology becomes a canonical execution identity. Advanced deployment profiles consume these contracts rather than introducing a second scheduler.
 
-No additional functional #14 subsystem is intentionally deferred. Issue closure requires the final synchronized CI/integration review of the completing PR.
+No additional functional distributed-runtime subsystem is intentionally deferred.

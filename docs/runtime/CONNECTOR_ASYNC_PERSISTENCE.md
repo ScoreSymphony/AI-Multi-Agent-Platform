@@ -1,6 +1,6 @@
 # Async Connector SQLite persistence
 
-Issue #892 requires runtime-critical async services to avoid synchronous `sqlite3` work on the asyncio event-loop thread. Connector persistence already exposes a backend-neutral, awaitable `ConnectorRepository`; the local SQLite implementation now preserves that contract while moving blocking runtime I/O to Connector-owned workers.
+Runtime-critical async services avoid synchronous `sqlite3` work on the asyncio event-loop thread. Connector persistence exposes a backend-neutral, awaitable `ConnectorRepository`; the local SQLite implementation preserves that contract while moving blocking runtime I/O to Connector-owned workers.
 
 ## Runtime boundary
 
@@ -34,7 +34,7 @@ Existing `ContractError` domain failures pass through unchanged. SQLite `busy`/`
 
 ## Regression coverage
 
-Issue #892 Connector integration coverage verifies:
+Connector async-persistence integration coverage verifies:
 
 - event-loop heartbeat responsiveness during intentionally slow SQLite work;
 - runtime connection creation on worker threads rather than the event-loop thread;

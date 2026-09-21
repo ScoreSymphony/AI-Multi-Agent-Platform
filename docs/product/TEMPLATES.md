@@ -1,6 +1,6 @@
 # Reusable Templates
 
-Issue #78 introduces a platform-owned Template system for reusable configuration intent.
+The platform provides a Template system for reusable configuration intent.
 Templates package configuration for Agents, Agent Teams, workflow/plans, Projects,
 Workspace structures, Automations, model-routing policies, capability assignments and
 composite solutions without turning runtime state into reusable configuration.
@@ -50,12 +50,12 @@ The current standard platform has concrete canonical handlers for all of these t
 
 - Agent -> `AgentService`;
 - Agent Team -> `AgentService` with portable member/delegation remapping;
-- Workflow/Plan -> the #364 `AuthorizedWorkflowService`;
+- Workflow/Plan -> the `AuthorizedWorkflowService`;
 - Automation -> the canonical Automation service;
 - Project -> `ScopeStore`;
 - Workspace structure -> the canonical `WorkspaceProvider`;
-- Model-routing policy -> the #309 `ModelRoutingProfileService`;
-- Capability assignment -> the #366 `CapabilityAssignmentService`;
+- Model-routing policy -> the `ModelRoutingProfileService`;
+- Capability assignment -> the `CapabilityAssignmentService`;
 - Composite -> dependency coordination only, with no private composite runtime object.
 
 The architectural rule remains unchanged: Templates configure resources owned by canonical
@@ -64,7 +64,7 @@ capability assignments, Agents, Teams or other runtime resources.
 
 ### Workflow/Plan
 
-`workflow_plan` Templates instantiate through #364. Workflow stages are materialized into
+`workflow_plan` Templates instantiate through the Workflow domain. Workflow stages are materialized into
 canonical `WorkflowStage` values, Template compatibility is preserved as canonical
 `WorkflowCompatibility`, and exact Template revision plus Template instance provenance are
 stored in the resulting Workflow revision. Agent and Agent-Team stage references can be
@@ -78,7 +78,7 @@ state or provider/orchestrator sessions.
 
 ### Capability assignment
 
-`capability_assignment` Templates instantiate through #366 and return ordinary
+`capability_assignment` Templates instantiate through the Capability Assignment domain and return ordinary
 `cap_assignment_*` resources. Direct canonical Agent/Agent-Team/Project targets and targets
 produced by earlier Template dependencies are supported.
 
@@ -88,12 +88,12 @@ target references. Provider tool handles, runtime sessions and credentials are e
 
 ### Model-routing policy
 
-`model_routing_policy` Templates instantiate through #309 `ModelRoutingProfileService`.
+`model_routing_policy` Templates instantiate through `ModelRoutingProfileService`.
 They create ordinary durable routing profiles using canonical model-configuration IDs,
 provider-neutral `RoutingRequirements`, ordered model preferences and deterministic
 fallback policy.
 
-The standard Template composition reuses the same #309 service already registered in the
+The standard Template composition reuses the same Model Routing Profile service already registered in the
 Control Plane rather than constructing a second routing-policy owner. Template provenance
 records the exact source revision and Template instance. Guarded compensation can remove
 only an untouched revision-1 profile created by that exact failed Template application.
@@ -177,7 +177,7 @@ The standard public Single-Node composition resolves:
 
 - Capability IDs and versions from the canonical Capability Registry;
 - live Connector Definition IDs from the composed canonical Connector Registry;
-- enabled model-routing policy references from the canonical #309 repository;
+- enabled model-routing policy references from the canonical Model Routing Profile repository;
 - platform version from the running package;
 - globally grantable actions from persisted authorization state;
 - Workspace prerequisites from the composed canonical Workspace provider.
@@ -219,7 +219,7 @@ capabilities remain visible during preview. Imported/untrusted Templates require
 validation and activation before ordinary apply.
 
 Capability-assignment privileged/approval-gated rules stay explicit and re-enter #366's
-ordinary authorization boundary. Workflow scope re-enters #364. Model-routing policy
+ordinary authorization boundary. Workflow scope re-enters the Workflow domain. Model-routing policy
 creation re-enters #309. None of these domains accept a Template apply decision as a
 substitute for their own authorization contract.
 
@@ -277,9 +277,9 @@ plaintext secrets or copies of canonical resources created from Templates.
 
 Canonical domain state remains in its owner store, including:
 
-- capability assignments -> #366 `JsonCapabilityAssignmentRepository`;
-- Workflows -> #364 `JsonWorkflowRepository` (`db/workflows.json` in Single-Node);
-- model-routing profiles -> #309 `JsonModelRoutingProfileRepository`.
+- capability assignments -> `JsonCapabilityAssignmentRepository`;
+- Workflows -> `JsonWorkflowRepository` (`db/workflows.json` in Single-Node);
+- model-routing profiles -> `JsonModelRoutingProfileRepository`.
 
 These stores participate independently in the deployment's normal persistence and
 backup/restore semantics.
@@ -358,7 +358,7 @@ configuration examples, not mandatory platform roles or public marketplace entri
 
 ## Verification
 
-Issue #78 regression coverage includes:
+Template regression coverage includes:
 
 - create/revise/publish and immutable history;
 - clone/fork lineage;
@@ -380,7 +380,7 @@ Issue #78 regression coverage includes:
 - Agent Team export compensation;
 - untrusted import downgrade, explicit activation and promotion-bypass prevention;
 - durable restart behavior;
-- standard Single-Node Template composition for #309/#364/#366 and #44 Connector inventory;
+- standard Single-Node Template composition for Model Routing Profile, Workflow, Capability Assignment and Connector inventory;
 - frontend typed create-from-existing commands, manifest gating, preview diagnostics,
   activation, tests and production build;
 - provider/orchestrator replacement compatibility.

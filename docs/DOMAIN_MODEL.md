@@ -193,7 +193,7 @@ Implementation-neutral descriptor used to match Agent, Tool, Model, Node or Work
 
 `PolicyScope` is a small canonical scope identity used where model assignment must target a policy-defined scope. It has a `policy_scope_<uuid>` identity, owner/project hooks, immutable criteria, provenance and external references.
 
-It intentionally **does not** define the final authorization/policy evaluation model. Its purpose in Issue #4 is to preserve the normative architecture contract that models can be assigned by capability/policy scope without accepting an arbitrary non-canonical string.
+It intentionally **does not** define the final authorization/policy evaluation model. Its purpose is to preserve the normative architecture contract that models can be assigned by capability/policy scope without accepting an arbitrary non-canonical string.
 
 ### Model Assignment
 

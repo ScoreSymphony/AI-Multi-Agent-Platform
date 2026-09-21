@@ -1,6 +1,6 @@
 # Project/Workspace Scope async persistence
 
-Issue #892 requires runtime-critical async code to avoid inline synchronous SQLite work while retaining SQLite as a first-class single-node backend.
+Runtime-critical async code avoids inline synchronous SQLite work while retaining SQLite as a first-class single-node backend.
 
 ## Runtime boundary
 
@@ -54,7 +54,7 @@ Restore/integrity code and startup composition remain synchronous by design when
 
 ## Regression coverage
 
-The #892 Scope persistence tests cover:
+The Scope persistence tests cover:
 
 - event-loop responsiveness and worker-owned SQLite connections;
 - bounded dedicated executor use and isolation from asyncio's default executor;

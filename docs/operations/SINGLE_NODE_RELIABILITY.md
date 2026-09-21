@@ -1,8 +1,8 @@
 # Single-node reliability and startup recovery
 
-Issue #707 hardens the ordinary #39 single-node / single-Control-Plane deployment without making high availability a baseline dependency.
+The single-node reliability profile hardens the ordinary single-node / single-Control-Plane deployment without making high availability a baseline dependency.
 
-This document describes the first reliability slice: **ordinary startup reconciliation after an abnormal process exit**. Disaster-restore recovery remains owned by #40 and uses its separate restore marker/report lifecycle.
+This document describes the first reliability slice: **ordinary startup reconciliation after an abnormal process exit**. Disaster-restore recovery remains owned by the canonical backup/restore workflow and uses its separate restore marker/report lifecycle.
 
 ## Startup invariant
 
@@ -87,12 +87,12 @@ This slice deliberately distinguishes the outcomes already supported by the cano
 
 A reconciliation exception itself is fail-closed: `platform-server serve` does not open the HTTP serving path when a required recovery owner cannot complete its pass.
 
-Broader #707 work extends this policy through focused follow-ups. #1155 owns the local
+Broader reliability work extends this policy through focused subsystems. Persistence failure recovery owns the local
 persistence/filesystem slice documented in
 `docs/operations/PERSISTENCE_FAILURE_RECOVERY.md`: required persistence participates in
 readiness, crash-interrupted File/Workspace state is recovered only with ownership evidence, and
 unknown/corrupt canonical state remains fail-closed. The uncertain external-side-effect gap is
-handled by #1154; see [External side-effect recovery](EXTERNAL_EFFECT_RECOVERY.md) for the durable
+handled by the external-effect recovery subsystem; see [External side-effect recovery](EXTERNAL_EFFECT_RECOVERY.md) for the durable
 dispatch journal, provider reconciliation contract, manual-review path and operator diagnostics.
 These recovery owners remain explicit rather than being collapsed into a generic `retry everything`
 rule.
@@ -120,22 +120,22 @@ Normal startup recovery and disaster-restore recovery are separate gates:
 ```text
 platform-server serve
         |
-        +-- #40 post-restore gate, when a restore marker/report requires it
+        +-- backup/restore post-restore gate, when a restore marker/report requires it
         |
-        `-- #707 ordinary startup gate, on every normal serve
+        `-- ordinary startup reconciliation gate, on every normal serve
 ```
 
-A restored deployment must clear the #40 integrity/readiness gate before ordinary startup resolution can be used. This avoids using the narrower #707 path to bypass restore integrity validation.
+A restored deployment must clear the backup/restore integrity/readiness gate before ordinary startup resolution can be used. This avoids using the narrower ordinary-startup path to bypass restore integrity validation.
 
 ## Relationship to HA
 
-No leader election, standby Control Plane, fencing epoch or shared HA persistence is introduced here. #566 remains optional and owns real multi-instance Control Plane HA.
+No leader election, standby Control Plane, fencing epoch or shared HA persistence is introduced here. The advanced HA profile remains optional and owns real multi-instance Control Plane HA.
 
 The reliability principle is intentionally stronger than "HA will recover it later": a single Control Plane should first be able to crash, restart and return to a deterministic canonical state on its own.
 
 ## Relationship to graceful shutdown
 
-#1152 owns the process-local graceful-drain/shutdown path layered in front of this recovery
+The graceful-drain/shutdown path is layered in front of this recovery
 authority. Drain never persists a second lifecycle: work that does not settle before the bounded
 shutdown deadline remains canonical owner state for this startup reconciliation pass.
 
@@ -144,12 +144,12 @@ See `SINGLE_NODE_DRAIN_SHUTDOWN.md` for the shutdown-side disposition policy.
 ## Remaining reliability scope
 
 The startup-recovery slice remains intentionally narrower than all reliability work. Remaining
-items outside the completed #1152 drain boundary include, among other items:
+items outside the completed drain boundary include, among other items:
 
-- stale non-Worker session cleanup outside the #1155 File/Workspace storage slice;
-- external-side-effect recovery is tracked separately by #1154 and documented in `EXTERNAL_EFFECT_RECOVERY.md`;
-- provider/dependency failure isolation beyond persistence and bounded lifecycle retries — owned by follow-up #1156;
-- health/readiness integration while reconciliation is in progress — owned by follow-up #1156;
-- operator diagnostics beyond startup/persistence diagnostics — owned by follow-up #1156;
+- stale non-Worker session cleanup outside the File/Workspace persistence-recovery slice;
+- external-side-effect recovery is documented separately in `EXTERNAL_EFFECT_RECOVERY.md`;
+- provider/dependency failure isolation beyond persistence and bounded lifecycle retries — owned by the dependency-degradation subsystem;
+- health/readiness integration while reconciliation is in progress — owned by the dependency-degradation subsystem;
+- operator diagnostics beyond startup/persistence diagnostics — owned by the dependency-degradation subsystem;
 - repeated hard-kill/restart endurance testing;
-- broader platform-conformance reliability evidence consuming the reusable #1155 persistence fixtures and the #1154 external-effect failure injector.
+- broader platform-conformance reliability evidence consuming the reusable persistence fixtures and the external-effect failure injector.
