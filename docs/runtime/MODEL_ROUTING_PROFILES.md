@@ -1,6 +1,6 @@
 # Durable model-routing profiles
 
-Issue #309 adds the durable policy layer that intentionally sits above the Issue #10 model inventory/router foundation.
+Durable model-routing profiles provide the policy layer that intentionally sits above the canonical model inventory/router foundation.
 
 ## Ownership boundary
 
@@ -48,7 +48,7 @@ Each immutable revision owns:
 
 `ModelRoutingProfilePolicy` stores only platform concepts. It may require context window, tool calling, structured output, streaming, modalities, reasoning metadata, local/self-hosted placement and an explicit canonical model configuration. `preferred_model_ids` adds an ordered list of canonical model configuration IDs.
 
-`local_only=True` is the strict local placement rule and permits only `ModelLocation.LOCAL`. `self_hosted_only=True` follows the existing Issue #10 router contract: it excludes remote-provider models while allowing both `LOCAL` and `SELF_HOSTED` configurations. The two flags remain mutually exclusive.
+`local_only=True` is the strict local placement rule and permits only `ModelLocation.LOCAL`. `self_hosted_only=True` follows the existing canonical router contract: it excludes remote-provider models while allowing both `LOCAL` and `SELF_HOSTED` configurations. The two flags remain mutually exclusive.
 
 It does **not** persist:
 
@@ -80,7 +80,7 @@ Disabling a profile changes lifecycle state on the stable definition; it does no
 
 ## Authorization, assignment and scope
 
-`ModelRoutingProfileService` is the management boundary. When an Issue #15 `AuthorizationProvider` is supplied, create/version/read/enable/disable operations are authorized using `model-routing-profile:*` actions. Project-scoped profiles additionally require the same canonical `project_id` in `OperationContext`.
+`ModelRoutingProfileService` is the management boundary. When an `AuthorizationProvider` is supplied, create/version/read/enable/disable operations are authorized using `model-routing-profile:*` actions. Project-scoped profiles additionally require the same canonical `project_id` in `OperationContext`.
 
 Assignment is a separate authorization decision. `ModelRoutingProfileAssignmentGate` authorizes the exact immutable revision with the `model-routing-profile:assign` action, checks enabled state and Project scope before assignment, and preserves the authenticated actor type supplied by the Control Plane. Without an AuthorizationProvider it fails closed unless the assignment context exactly matches the profile owner scope.
 
