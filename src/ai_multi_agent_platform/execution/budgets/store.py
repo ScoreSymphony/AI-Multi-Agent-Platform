@@ -68,6 +68,16 @@ class TaskBudgetStore(ABC):
     def runtime_counter(self, task_id: str, dimension: BudgetDimension) -> float: ...
 
     @abstractmethod
+    def runtime_counter_snapshot(
+        self,
+        task_id: str,
+        dimension: BudgetDimension,
+        observed_at: datetime,
+    ) -> tuple[float, float]:
+        """Return consumed runtime-counter usage and active reserved quantity atomically."""
+        ...
+
+    @abstractmethod
     def expire_reservations(self, observed_at: datetime) -> tuple[BudgetReservation, ...]: ...
 
 
@@ -181,6 +191,24 @@ class InMemoryTaskBudgetStore(TaskBudgetStore):
     def runtime_counter(self, task_id: str, dimension: BudgetDimension) -> float:
         with self._lock:
             return self._counters.get((task_id, dimension), 0.0)
+
+    def runtime_counter_snapshot(
+        self,
+        task_id: str,
+        dimension: BudgetDimension,
+        observed_at: datetime,
+    ) -> tuple[float, float]:
+        with self._lock:
+            self._expire_locked(observed_at)
+            consumed = self._counters.get((task_id, dimension), 0.0)
+            reserved = sum(
+                reservation.quantity
+                for reservation in self._reservations.values()
+                if reservation.task_id == task_id
+                and reservation.dimension is dimension
+                and reservation.state is ReservationState.ACTIVE
+            )
+            return consumed, reserved
 
     def expire_reservations(self, observed_at: datetime) -> tuple[BudgetReservation, ...]:
         with self._lock:
@@ -440,6 +468,34 @@ class SQLiteTaskBudgetStore(TaskBudgetStore):
                 (task_id, dimension.value),
             ).fetchone()
         return 0.0 if row is None else float(row["quantity"])
+
+    def runtime_counter_snapshot(
+        self,
+        task_id: str,
+        dimension: BudgetDimension,
+        observed_at: datetime,
+    ) -> tuple[float, float]:
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._expire_connection(connection, observed_at)
+            counter_row = connection.execute(
+                """
+                SELECT quantity FROM task_budget_runtime_counters
+                WHERE task_id = ? AND dimension = ?
+                """,
+                (task_id, dimension.value),
+            ).fetchone()
+            reserved_row = connection.execute(
+                """
+                SELECT COALESCE(SUM(quantity), 0.0) AS quantity
+                FROM task_budget_reservations
+                WHERE task_id = ? AND dimension = ? AND state = ?
+                """,
+                (task_id, dimension.value, ReservationState.ACTIVE.value),
+            ).fetchone()
+            consumed = 0.0 if counter_row is None else float(counter_row["quantity"])
+            reserved = 0.0 if reserved_row is None else float(reserved_row["quantity"])
+            return consumed, reserved
 
     def expire_reservations(self, observed_at: datetime) -> tuple[BudgetReservation, ...]:
         with self._lock, self._connect() as connection:
