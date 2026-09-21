@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -214,7 +215,7 @@ export class MemoryKnowledgeClient {
 
   createMemory(
     input: CreateMemoryInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalMemoryEntry> {
     const scopeId = requireNonBlank(input.scopeId, "memory scope id");
     return this.command<CanonicalMemoryEntry>(
@@ -240,7 +241,7 @@ export class MemoryKnowledgeClient {
   promoteMemory(
     memoryId: string,
     input: PromoteMemoryInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalMemoryEntry> {
     return this.command<CanonicalMemoryEntry>(
       "memory.promote",
@@ -259,7 +260,7 @@ export class MemoryKnowledgeClient {
   updateMemory(
     memoryId: string,
     input: UpdateMemoryInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalMemoryEntry> {
     if (
       input.value === undefined
@@ -289,7 +290,7 @@ export class MemoryKnowledgeClient {
   expireMemory(
     memoryId: string,
     input: ExpireMemoryInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<{ id: string; type: "memory"; expired: true }> {
     return this.command(
       "memory.expire",
@@ -305,7 +306,7 @@ export class MemoryKnowledgeClient {
 
   deleteMemory(
     memoryId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<{ id: string; type: "memory"; deleted: true }> {
     return this.command(
       "memory.delete",
@@ -347,7 +348,7 @@ export class MemoryKnowledgeClient {
 
   registerKnowledge(
     input: RegisterKnowledgeInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalKnowledgeSource> {
     return this.command<CanonicalKnowledgeSource>(
       "knowledge.register",
@@ -365,7 +366,7 @@ export class MemoryKnowledgeClient {
   updateKnowledge(
     sourceId: string,
     input: UpdateKnowledgeInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalKnowledgeSource> {
     const title = optionalNonBlank(input.title);
     if (title === null && input.metadata === undefined) {
@@ -382,7 +383,7 @@ export class MemoryKnowledgeClient {
   ingestKnowledge(
     sourceId: string,
     input: IngestKnowledgeInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<JsonValue> {
     return this.command(
       "knowledge.ingest",
@@ -398,7 +399,7 @@ export class MemoryKnowledgeClient {
   reindexKnowledge(
     sourceId: string,
     input: ReindexKnowledgeInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<JsonValue> {
     return this.command(
       "knowledge.reindex",
@@ -414,7 +415,7 @@ export class MemoryKnowledgeClient {
 
   detachKnowledge(
     sourceId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalKnowledgeSource & { detached: true }> {
     return this.command(
       "knowledge.detach",
@@ -426,7 +427,7 @@ export class MemoryKnowledgeClient {
 
   deleteKnowledge(
     sourceId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalKnowledgeSource & { deleted: true }> {
     return this.command(
       "knowledge.delete",

@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -208,7 +209,7 @@ export class ApplicationsClient {
       {
         method: "POST",
         body: { resource_ref: requireRef(instanceId), ...payload },
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: createUuid(),
       },
     );
   }

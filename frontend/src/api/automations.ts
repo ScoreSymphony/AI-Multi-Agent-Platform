@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
 import type { JsonValue } from "./types";
@@ -205,7 +206,7 @@ export class AutomationClient {
     return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
       method: "POST",
       body: { resource_ref: resourceRef, ...payload },
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 }

@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import type {
   AgentProfile,
   AgentTeamProfile,
@@ -324,7 +325,7 @@ export class ConfigurationClient {
     return this.transport.request<T>(`/commands/${encodeURIComponent(command)}`, {
       method: "POST",
       body: compact({ resource_ref: resourceRef, ...payload }),
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 }

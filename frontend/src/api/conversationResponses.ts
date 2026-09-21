@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import type { CanonicalConversationMessage } from "./conversations";
 import { ApiTransport, ControlPlaneError } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -64,7 +65,7 @@ export class ConversationResponseClient {
   async stream(
     messageId: string,
     handlers: ConversationResponseHandlers = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<ConversationResponseCommittedEvent> {
     if (!idempotencyKey.trim()) throw new Error("conversation response idempotency key is required");
     const response = await this.transport.requestRaw(

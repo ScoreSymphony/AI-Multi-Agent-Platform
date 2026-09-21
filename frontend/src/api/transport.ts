@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import type { APIErrorBody } from "./types";
 
 export interface AuthBoundary {
@@ -107,7 +108,7 @@ export class ApiTransport {
     const headers = new Headers(options.headers);
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-    const correlationId = headers.get("X-Correlation-ID") ?? crypto.randomUUID();
+    const correlationId = headers.get("X-Correlation-ID") ?? createUuid();
     headers.set("X-Correlation-ID", correlationId);
 
     if (options.body !== undefined && !headers.has("Content-Type")) {

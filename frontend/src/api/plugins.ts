@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -125,7 +126,7 @@ export class PluginsClient {
   install(
     pluginId: string,
     manifestDigest: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalPlugin> {
     return this.command<CanonicalPlugin>(
       "plugin.install",
@@ -138,7 +139,7 @@ export class PluginsClient {
   configure(
     pluginId: string,
     configuration: Record<string, JsonValue>,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalPlugin> {
     return this.command<CanonicalPlugin>(
       "plugin.configure",
@@ -151,7 +152,7 @@ export class PluginsClient {
   enable(
     pluginId: string,
     manifestDigest: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalPlugin> {
     return this.command<CanonicalPlugin>(
       "plugin.enable",
@@ -163,7 +164,7 @@ export class PluginsClient {
 
   disable(
     pluginId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalPlugin> {
     return this.command<CanonicalPlugin>(
       "plugin.disable",
@@ -175,7 +176,7 @@ export class PluginsClient {
 
   refreshHealth(
     pluginId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalPlugin> {
     return this.command<CanonicalPlugin>(
       "plugin.refresh-health",
@@ -188,7 +189,7 @@ export class PluginsClient {
   validateUpdate(
     pluginId: string,
     candidateManifestDigest: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<PluginUpdateValidation> {
     return this.command<PluginUpdateValidation>(
       "plugin.validate-update",
@@ -200,7 +201,7 @@ export class PluginsClient {
 
   remove(
     pluginId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<PluginRemoval> {
     return this.command<PluginRemoval>(
       "plugin.remove",

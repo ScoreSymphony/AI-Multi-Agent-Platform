@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -269,7 +270,7 @@ export class EvaluationClient {
   runSuite(
     suiteRef: string,
     input: RunEvaluationInput,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalEvaluationRun> {
     if (!input.snapshot.platform_version.trim()) {
       throw new Error("evaluation snapshot platform_version is required");
@@ -324,7 +325,7 @@ export class EvaluationClient {
     currentRunId: string,
     baselineRunId: string,
     regressionPolicyRef: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
     options: CompareEvaluationOptions = {},
   ): Promise<CanonicalEvaluationComparison> {
     if (!baselineRunId.trim()) throw new Error("baseline evaluation run id is required");

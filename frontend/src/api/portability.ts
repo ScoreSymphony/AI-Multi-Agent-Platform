@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -140,7 +141,7 @@ export class PortabilityClient {
   exportPackage(
     resources: PortabilityResourceSelection[],
     metadata?: Record<string, JsonValue>,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<PortabilityPackageInspection> {
     if (resources.length === 0) throw new Error("At least one export resource is required");
     const normalized = resources.map((resource) => ({
@@ -160,7 +161,7 @@ export class PortabilityClient {
 
   validatePackage(
     packageDocument: JsonValue,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<PortabilityPackageInspection> {
     if (!isJsonObject(packageDocument)) throw new Error("Portable package must be a JSON object");
     return this.command<PortabilityPackageInspection>(
@@ -173,7 +174,7 @@ export class PortabilityClient {
 
   previewPackage(
     packageId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<PortabilityImportPreview> {
     return this.command<PortabilityImportPreview>(
       "portability.preview",
@@ -185,7 +186,7 @@ export class PortabilityClient {
 
   importPreview(
     previewId: string,
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<PortabilityImportReport> {
     return this.command<PortabilityImportReport>(
       "portability.import",

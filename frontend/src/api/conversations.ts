@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import {
   ConversationResponseClient,
   type ConversationResponseCommittedEvent,
@@ -225,7 +226,7 @@ export class ConversationClient {
   streamResponse(
     messageId: string,
     handlers: ConversationResponseHandlers = {},
-    idempotencyKey = crypto.randomUUID(),
+    idempotencyKey = createUuid(),
   ): Promise<ConversationResponseCommittedEvent> {
     return new ConversationResponseClient({ transport: this.transport }).stream(
       messageId,
@@ -290,7 +291,7 @@ export class ConversationClient {
     return this.transport.request<T>(path, {
       method: options.method ?? "POST",
       body: options.body,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 }

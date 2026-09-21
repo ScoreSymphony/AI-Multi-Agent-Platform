@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { useCallback, useEffect, useState } from "react";
 import {
   ApprovalClient,
@@ -152,8 +153,8 @@ export function ApprovalDetailPage({
       ? decisionAttempt
       : {
           fingerprint,
-          idempotencyKey: crypto.randomUUID(),
-          correlationId: crypto.randomUUID(),
+          idempotencyKey: createUuid(),
+          correlationId: createUuid(),
         };
     setDecisionAttempt(attempt);
     setBusy(true);

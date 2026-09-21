@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ApiTransport } from "./transport";
 import type { ApiRequestOptions, ApiTransportOptions } from "./transport";
 import type { JsonValue, ModelCapabilities } from "./types";
@@ -357,7 +358,7 @@ export class OnboardingClient {
     return this.request<T>(path, {
       method: "POST",
       body: stripUndefined(body),
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createUuid(),
     });
   }
 

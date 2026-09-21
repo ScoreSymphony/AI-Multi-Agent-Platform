@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type CanonicalVerification,
@@ -214,7 +215,7 @@ export function VerificationDetailPage({
       };
       const fingerprint = JSON.stringify({ action, input });
       const key =
-        retryAttempt?.fingerprint === fingerprint ? retryAttempt.idempotencyKey : crypto.randomUUID();
+        retryAttempt?.fingerprint === fingerprint ? retryAttempt.idempotencyKey : createUuid();
       setRetryAttempt({ action, fingerprint, idempotencyKey: key });
       setBusy(true);
       setActionError(null);

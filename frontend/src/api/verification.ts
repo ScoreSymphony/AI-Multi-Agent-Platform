@@ -1,3 +1,4 @@
+import { createUuid } from "../uuid";
 import { ControlPlaneCollectionClient } from "./collections";
 import { ApiTransport } from "./transport";
 import type { ApiTransportOptions } from "./transport";
@@ -163,7 +164,7 @@ export class VerificationClient {
   accept(
     verificationId: string,
     input: HumanReviewInput = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalVerification> {
     return this.review("verification.accept", verificationId, input, idempotencyKey);
   }
@@ -171,7 +172,7 @@ export class VerificationClient {
   reject(
     verificationId: string,
     input: HumanReviewInput = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalVerification> {
     return this.review("verification.reject", verificationId, input, idempotencyKey);
   }
@@ -179,7 +180,7 @@ export class VerificationClient {
   requestChanges(
     verificationId: string,
     input: HumanReviewInput = {},
-    idempotencyKey: string = crypto.randomUUID(),
+    idempotencyKey: string = createUuid(),
   ): Promise<CanonicalVerification> {
     return this.review("verification.request-changes", verificationId, input, idempotencyKey);
   }
