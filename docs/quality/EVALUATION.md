@@ -300,7 +300,7 @@ CLI contract tests verify URL encoding for versioned suite refs, pagination/filt
 
 ## Global Search integration
 
-Issue #45 projects canonical Evaluation discovery into the global Search layer without making Search authoritative for Evaluation state. Search consumes only the registered Control Plane Evaluation resources:
+Global Search projects canonical Evaluation discovery without making Search authoritative for Evaluation state. Search consumes only the registered Control Plane Evaluation resources:
 
 - `evaluation-suites` -> `evaluation-suite` discovery documents;
 - `evaluation-runs` -> `evaluation-run` discovery documents.
