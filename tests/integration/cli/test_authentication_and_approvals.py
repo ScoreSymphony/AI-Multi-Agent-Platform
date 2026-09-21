@@ -253,6 +253,57 @@ def test_auth_cli_login_me_logout_keeps_secrets_out_of_profile_and_output(
     assert CredentialStore.load(config).get("local") is None
 
 
+def test_auth_cli_mobile_pairing_and_server_revocation_use_canonical_routes(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "cli.json"
+    transport, auth, user_id = _authentication_fixture(config)
+    _login(config, transport)
+
+    code, paired, error = _invoke(
+        config,
+        transport,
+        "auth",
+        "mobile",
+        "pair",
+        "--server-origin",
+        "https://platform.example",
+    )
+    assert code == 0 and not error
+    pairing = paired["data"]
+    assert pairing["pairing_uri"].startswith("amp-mobile://pair?")
+    assert pairing["secret_display"] == "one_time"
+    pair_call = transport.calls[-1]
+    assert pair_call[0:2] == ("POST", "/api/v1/auth/mobile-pairings")
+    assert "x-csrf-token" in pair_call[3]
+
+    device, issued = auth.mobile_pairing.consume_challenge(
+        pairing["id"],
+        pairing["code"],
+        device_name="CLI paired phone",
+        platform="android",
+    )
+    assert device.user_id == user_id
+
+    code, listed, error = _invoke(config, transport, "auth", "mobile", "list")
+    assert code == 0 and not error
+    assert [item["id"] for item in listed["data"]["items"]] == [device.device_id]
+    assert issued.secret not in json.dumps(listed, sort_keys=True)
+
+    code, revoked, error = _invoke(
+        config,
+        transport,
+        "--yes",
+        "auth",
+        "mobile",
+        "revoke",
+        device.device_id,
+    )
+    assert code == 0 and not error
+    assert revoked["data"] == {"id": device.device_id, "revoked": True}
+    assert auth.mobile_pairing.safe_device(device)["active"] is False
+
+
 def test_auth_cli_reports_unauthenticated_revoked_and_expired_credentials(
     tmp_path: Path,
 ) -> None:
