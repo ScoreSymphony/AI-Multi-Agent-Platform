@@ -31,6 +31,33 @@ export function TraceExplorer({
   const [selectedNode, setSelectedNode] = useState<TraceNode | null>(null);
   const [nodeLoading, setNodeLoading] = useState(false);
   const [nodeError, setNodeError] = useState<unknown>(null);
+  const [workspaceByRunId, setWorkspaceByRunId] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    if (!taskId) {
+      setWorkspaceByRunId({});
+      return () => {
+        active = false;
+      };
+    }
+    void client
+      .listTaskRuns(taskId, { limit: 100, sort: "created_at", direction: "desc" })
+      .then((page) => {
+        if (!active) return;
+        const bindings: Record<string, string> = {};
+        for (const run of page.items) {
+          if (run.workspace_id) bindings[run.id] = run.workspace_id;
+        }
+        setWorkspaceByRunId(bindings);
+      })
+      .catch(() => {
+        if (active) setWorkspaceByRunId({});
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, taskId]);
 
   const loadTrace = useCallback(
     async (cursor?: string, append = false) => {
@@ -275,7 +302,7 @@ function TraceTable({
                 </td>
                 <td>{formatDuration(item.duration_seconds)}</td>
                 <td>
-                  <TraceContext node={item} />
+                  <TraceContext node={item} workspaceId={item.context.run_id ? workspaceByRunId[item.context.run_id] : undefined} />
                 </td>
                 <td>
                   {item.usage.length > 0 ? (
@@ -330,7 +357,7 @@ function TraceNodeDetail({ node }: { node: TraceNode }) {
           : ""}
       </p>
       <p>
-        <TraceContext node={node} />
+        <TraceContext node={node} workspaceId={node.context.run_id ? workspaceByRunId[node.context.run_id] : undefined} />
       </p>
       {node.failure ? (
         <p>
@@ -377,8 +404,14 @@ function TraceNodeDetail({ node }: { node: TraceNode }) {
   );
 }
 
-export function TraceContext({ node }: { node: TraceNode }) {
-  const workspaceId = node.context.workspace_id;
+export function TraceContext({
+  node,
+  workspaceId,
+}: {
+  node: TraceNode;
+  workspaceId?: string;
+}) {
+  const canonicalWorkspaceId = node.context.workspace_id ?? workspaceId;
   const preferred = [
     "step_id",
     "agent_id",
@@ -395,13 +428,13 @@ export function TraceContext({ node }: { node: TraceNode }) {
   );
   return (
     <span>
-      {workspaceId ? (
+      {canonicalWorkspaceId ? (
         <>
-          workspace: <AppLink href={`/workspaces/${workspaceId}`}><CanonicalId value={workspaceId} /></AppLink>
+          workspace: <AppLink href={`/workspaces/${canonicalWorkspaceId}`}><CanonicalId value={canonicalWorkspaceId} /></AppLink>
           {visible.length > 0 ? " · " : ""}
         </>
       ) : null}
-      {visible.length > 0 ? visible.join(" · ") : workspaceId ? null : "Task-scoped"}
+      {visible.length > 0 ? visible.join(" · ") : canonicalWorkspaceId ? null : "Task-scoped"}
     </span>
   );
 }
