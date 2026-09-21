@@ -256,9 +256,10 @@ def test_bootstrap_status_route_preserves_405_and_openapi_ownership(tmp_path) ->
             },
         },
     }
-    assert {
-        path for path in paths if "/auth/bootstrap" in path
-    } == {"/api/v1/auth/bootstrap-admin", status_path}
+    assert {path for path in paths if "/auth/bootstrap" in path} == {
+        "/api/v1/auth/bootstrap-admin",
+        status_path,
+    }
 
 
 def test_bootstrap_status_asgi_pre_body_classification_returns_405(tmp_path) -> None:
