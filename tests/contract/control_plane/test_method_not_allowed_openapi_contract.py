@@ -57,14 +57,8 @@ def test_registered_extension_openapi_documents_405_without_new_operations() -> 
     assert isinstance(paths, dict)
 
     assert paths["/api/v1/widgets"]["get"]["responses"]["405"] == ERROR_RESPONSE_REF
-    assert (
-        paths["/api/v1/widgets/{resource_id}"]["get"]["responses"]["405"]
-        == ERROR_RESPONSE_REF
-    )
-    assert (
-        paths["/api/v1/commands/{command}"]["post"]["responses"]["405"]
-        == ERROR_RESPONSE_REF
-    )
+    assert paths["/api/v1/widgets/{resource_id}"]["get"]["responses"]["405"] == ERROR_RESPONSE_REF
+    assert paths["/api/v1/commands/{command}"]["post"]["responses"]["405"] == ERROR_RESPONSE_REF
 
     assert set(paths["/api/v1/widgets"]) == {"get"}
     assert set(paths["/api/v1/widgets/{resource_id}"]) == {"get"}
