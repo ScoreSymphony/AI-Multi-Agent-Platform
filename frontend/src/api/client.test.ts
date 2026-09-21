@@ -105,8 +105,8 @@ describe("ControlPlaneClient", () => {
   });
 
   it("encodes colon-bearing inventory targets before appending command suffixes", async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(model), { status: 200 }),
+    const fetchSpy = vi.fn().mockImplementation(
+      async () => new Response(JSON.stringify(model), { status: 200 }),
     );
     const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
 
