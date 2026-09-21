@@ -1,6 +1,6 @@
 # Connector portability
 
-Issue #79 moves canonical connector configuration between compatible installations without pretending that provider implementations, credentials or synchronization runtime are portable state.
+Portability moves canonical connector configuration between compatible installations without pretending that provider implementations, credentials or synchronization runtime are portable state.
 
 ## Portable resource
 
@@ -30,7 +30,7 @@ Import preflight resolves the actual target `ConnectorRegistry` entry and compar
 
 Plaintext connector credentials are never portable.
 
-Each canonical `SecretReference` is serialized only as reference metadata and is also declared as a required `DependencyKind.SECRET` requirement. The target installation must bind a compatible local secret before import/provider validation can succeed. Secret material remains behind the normal #34 `SecretProvider` boundary.
+Each canonical `SecretReference` is serialized only as reference metadata and is also declared as a required `DependencyKind.SECRET` requirement. The target installation must bind a compatible local secret before import/provider validation can succeed. Secret material remains behind the normal `SecretProvider` boundary.
 
 Endpoint metadata is still subject to the global portability secret validator and to `ConnectorService` credential-bearing metadata checks.
 
@@ -65,7 +65,7 @@ After import, normal connector reads/actions/synchronization fail with `UNAVAILA
 
 ## ID and reference semantics
 
-Connection IDs use the ordinary #79 preserve/regenerate policy and are rewritten through `ImportContext`.
+Connection IDs use the ordinary preserve/regenerate identity policy and are rewritten through `ImportContext`.
 
 Project IDs are canonical resource references and are remapped through the accepted Project mapping. Owner and organization transfer is rejected by default; callers that already obtained appropriate authorization must opt into the explicit `ConnectionImportPolicy` exceptions.
 
@@ -81,6 +81,6 @@ A failure inside the Connection apply operation self-compensates any fresh parti
 
 ## Non-portable ConnectorDefinition installation
 
-A ConnectorDefinition is evidence of a registered provider implementation. It is therefore not imported as an independently writable portable resource. Installing/enabling connector code remains plugin/deployment/provider responsibility and is deliberately outside #79 import authority.
+A ConnectorDefinition is evidence of a registered provider implementation. It is therefore not imported as an independently writable portable resource. Installing/enabling connector code remains plugin/deployment/provider responsibility and is deliberately outside Portability import authority.
 
 This distinction is why package metadata can describe the connector contract required by a Connection while dependency resolution still fails when the target `ConnectorRegistry` has no matching implementation.
