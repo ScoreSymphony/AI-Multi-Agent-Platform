@@ -123,6 +123,7 @@ jobs:
               "schema_version": 1,
               "lane": os.environ["VALIDATION_LANE"],
               "wall_seconds": round(time.time() - started, 3),
+              "workflow_run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "1")),
           }
           path = Path(".artifacts/validation-runtime") / (
               payload["lane"] + ".json"
@@ -155,16 +156,16 @@ jobs:
         if: needs.python-validation.result == 'success'
         uses: actions/download-artifact@v8
         with:
-          pattern: python-test-runtime-*-attempt-${{ github.run_attempt }}
+          pattern: python-test-runtime-*-attempt-*
           path: .artifacts/test-runtime-aggregate
-          merge-multiple: true
+          merge-multiple: false
       - name: Download Python validation runtime evidence
         if: needs.python-validation.result == 'success'
         uses: actions/download-artifact@v8
         with:
-          pattern: python-validation-runtime-*-attempt-${{ github.run_attempt }}
+          pattern: python-validation-runtime-*-attempt-*
           path: .artifacts/validation-runtime-aggregate
-          merge-multiple: true
+          merge-multiple: false
       - name: Verify frontend-independent Python aggregate budget
         if: needs.python-validation.result == 'success'
         run: |
