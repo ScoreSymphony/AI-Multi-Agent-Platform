@@ -68,7 +68,7 @@ jobs:
         if: always() && matrix.kind == 'test'
         uses: actions/upload-artifact@v7
         with:
-          name: python-test-runtime-${{ matrix.lane }}
+          name: python-test-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: .artifacts/test-runtime/${{ matrix.lane }}.*
           if-no-files-found: warn
 
@@ -138,7 +138,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: python-validation-runtime-${{ matrix.lane }}
+          name: python-validation-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: .artifacts/validation-runtime/${{ matrix.lane }}.json
           if-no-files-found: warn
 
@@ -155,14 +155,14 @@ jobs:
         if: needs.python-validation.result == 'success'
         uses: actions/download-artifact@v8
         with:
-          pattern: python-test-runtime-*
+          pattern: python-test-runtime-*-attempt-${{ github.run_attempt }}
           path: .artifacts/test-runtime-aggregate
           merge-multiple: true
       - name: Download Python validation runtime evidence
         if: needs.python-validation.result == 'success'
         uses: actions/download-artifact@v8
         with:
-          pattern: python-validation-runtime-*
+          pattern: python-validation-runtime-*-attempt-${{ github.run_attempt }}
           path: .artifacts/validation-runtime-aggregate
           merge-multiple: true
       - name: Verify frontend-independent Python aggregate budget
@@ -175,7 +175,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: python-test-runtime-aggregate
+          name: python-test-runtime-aggregate-attempt-${{ github.run_attempt }}
           path: .artifacts/test-runtime-aggregate/aggregate.json
           if-no-files-found: warn
       - name: Require all Python validation lanes
