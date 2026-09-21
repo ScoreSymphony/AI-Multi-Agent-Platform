@@ -114,8 +114,8 @@ canonical planning/coordinator path.
 
 ## Durable Plan/Step and AgentRun binding
 
-`CoordinatedHandoffService` is the read-only integration seam with the durable durable coordinator.
-The production runtime additionally checks canonical canonical `AgentRunRecord` evidence.
+`CoordinatedHandoffService` is the read-only integration seam with the durable coordinator.
+The production runtime additionally checks canonical `AgentRunRecord` evidence.
 
 Before creation the combined path proves that:
 
