@@ -286,7 +286,30 @@ export function RunDetailPage({ client, runId }: { client: ControlPlaneClient; r
           <ReferenceList label="Results" values={run.result_ids} />
         </Card>
       </div>
+      <Card title="Workspace provenance">
+        <RunWorkspaceBinding run={run} />
+      </Card>
       <Card title="Output"><pre>{prettyJson(run.output)}</pre></Card>
+    </div>
+  );
+}
+
+export function RunWorkspaceBinding({
+  run,
+}: {
+  run: Pick<CanonicalRun, "workspace_id" | "workspace_snapshot_id" | "workspace_content_checksum">;
+}) {
+  if (!run.workspace_id) {
+    return <p>No canonical Workspace binding is recorded for this Run.</p>;
+  }
+  return (
+    <div className="stack">
+      <p><AppLink href={`/workspaces/${run.workspace_id}`}>Open Workspace</AppLink></p>
+      <DefinitionList values={{
+        Workspace: run.workspace_id,
+        "Workspace snapshot": run.workspace_snapshot_id ?? "not recorded",
+        "Content checksum": run.workspace_content_checksum ?? "not recorded",
+      }} />
     </div>
   );
 }
