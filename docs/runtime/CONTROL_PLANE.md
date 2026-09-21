@@ -37,7 +37,7 @@ The stable Control Plane foundation is intentionally small and contains only its
 
 The Control Plane foundation does **not** predeclare APIs or command vocabularies for independent domains such as Agents, Tools, Workers, Approvals, Automations, Evaluations, Plugins or Search. Those domains extend the same Control Plane only through their canonical contracts.
 
-## Current later-domain integrations
+## Current registered-domain integrations
 
 Registered domain APIs beyond this foundation are not retroactively part of the foundation contract.
 
@@ -52,7 +52,7 @@ These routes are legitimate because the Model domain and its Control Plane integ
 ```text
 Control Plane foundation contract
         +
-implemented later-domain APIs
+implemented registered-domain APIs
         +
 explicitly registered future extensions
         =
@@ -65,7 +65,7 @@ This prevents the foundation from guessing future schemas while allowing the API
 
 The first stable major for the shared Control Plane foundation/protocol is `/api/v1`.
 
-The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The `control-plane-v1` classification is **Core + Stable**, but that classification covers the shared `v1` protocol/foundation conventions and stable foundation behavior rather than automatically promoting every registered domain resource to Stable. Each later-domain public contract keeps the stability level declared for its own feature entry.
+The repository-wide role/stability vocabulary is defined in [`../FEATURE_CLASSIFICATION.md`](../FEATURE_CLASSIFICATION.md). The `control-plane-v1` classification is **Core + Stable**, but that classification covers the shared `v1` protocol/foundation conventions and stable foundation behavior rather than automatically promoting every registered domain resource to Stable. Each registered-domain public contract keeps the stability level declared for its own feature entry.
 
 A later domain can therefore expose a Beta or Experimental resource through the same composed `/api/v1` Control Plane without downgrading the Stable foundation and without acquiring Stable compatibility by namespace inheritance. API-major stability and feature maturity are related but non-overlapping concepts. ADR 0003 still governs the northbound wire contract: a breaking canonical Control Plane contract change requires a new major namespace regardless of the feature's maturity label.
 
@@ -91,9 +91,9 @@ Kernel-owned task/run commands include:
 
 These commands delegate to canonical kernel behavior. The foundation does not reserve approval, worker, plugin, automation or evaluation commands before those domains define them.
 
-## Extension contract for later domains
+## Extension contract for additional domains
 
-Later issues extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
+Additional domains extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
 
 ### Resource registration
 
