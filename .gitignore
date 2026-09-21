@@ -15,6 +15,13 @@ frontend/.vite/
 frontend/coverage/
 mobile/.expo/
 mobile/coverage/
+mobile/android/
+mobile/.artifacts/
+
+# Mobile signing material
+mobile/*.jks
+mobile/*.keystore
+mobile/*.p12
 
 # Build
 build/

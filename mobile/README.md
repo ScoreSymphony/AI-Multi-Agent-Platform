@@ -33,6 +33,22 @@ supported mobile baseline:
 Web is intentionally not an initial mobile target because the repository already has the
 canonical browser frontend.
 
+## Android release identity
+
+Official direct-install Android builds use the stable application ID
+`org.scoresymphony.aimultiagentplatform`. The semantic app version is shared by
+`package.json` and Expo `version`; Android additionally uses a monotonically increasing
+integer `versionCode`.
+
+`npm run validate:release` fails if those release identifiers drift. The generated native
+Android tree is intentionally not committed: `npm run build:android:release` regenerates it
+with Expo prebuild and assembles an unsigned production APK. Official signing happens only in
+the protected GitHub release workflow; local/debug workflows do not have the production key.
+
+Direct APK distribution, signing-key custody, checksum/signature verification and update
+semantics are documented in
+`docs/operations/MOBILE_ANDROID_DISTRIBUTION.md`.
+
 ## Authentication and secrets
 
 Mobile uses an already-issued bearer credential. Activation validates the credential through
@@ -107,9 +123,19 @@ npm install
 npm run typecheck
 npm test
 npm run check:expo
+npm run validate:release
 npm run smoke:android
 npm run smoke:ios
 ```
+
+To reproduce the native Android release assembly locally, install the Android SDK/JDK 17 and run:
+
+```bash
+npm run build:android:release
+```
+
+That command deliberately leaves the release APK unsigned. Never copy the production keystore
+into the repository or generated `mobile/android/` tree.
 
 The package is optional. Installing or starting the server does not install or import this
 client.

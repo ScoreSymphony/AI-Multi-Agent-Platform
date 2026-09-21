@@ -12,7 +12,8 @@
       "bundleIdentifier": "org.scoresymphony.aimultiagentplatform"
     },
     "android": {
-      "package": "org.scoresymphony.aimultiagentplatform"
+      "package": "org.scoresymphony.aimultiagentplatform",
+      "versionCode": 1
     },
     "plugins": [
       [
