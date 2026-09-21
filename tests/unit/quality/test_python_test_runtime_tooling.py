@@ -203,3 +203,13 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
             "validation_critical_path_seconds": 350,
         },
     ) == ["failed or over-budget lanes: integration"]
+
+
+def test_ci_runtime_artifacts_are_scoped_to_current_workflow_attempt() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "name: python-test-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}" in workflow
+    assert "name: python-validation-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}" in workflow
+    assert "pattern: python-test-runtime-*-attempt-${{ github.run_attempt }}" in workflow
+    assert "pattern: python-validation-runtime-*-attempt-${{ github.run_attempt }}" in workflow
+    assert "name: python-test-runtime-aggregate-attempt-${{ github.run_attempt }}" in workflow
