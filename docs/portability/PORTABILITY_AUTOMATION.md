@@ -1,6 +1,6 @@
 # Automation portability
 
-Issue #79 treats an Automation as portable canonical configuration, not as a transferable scheduler process.
+Automation portability treats an Automation as portable canonical configuration, not as a transferable scheduler process.
 
 ## Portable definition
 
