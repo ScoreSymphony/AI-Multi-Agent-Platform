@@ -12,7 +12,7 @@ The compensation subsystem is deliberately narrow:
   capabilities;
 - the Authorization/Approval hooks attached to `CapabilityInvoker` remain the security
   authority;
-- the durable durable Plan/Step coordinator remains the lifecycle authority;
+- the durable Plan/Step coordinator remains the lifecycle authority;
 - connector/provider-native resource identifiers remain evidence references rather than canonical
   platform entity types;
 - optional Verification runs after the compensating invocation and does not redefine its
