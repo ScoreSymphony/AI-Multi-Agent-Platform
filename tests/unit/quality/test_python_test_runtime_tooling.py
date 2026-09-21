@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from scripts.ci.run_pytest_lane import budget_violations, build_report  # noqa: 
 from scripts.ci.verify_pytest_runtime_aggregate import (  # noqa: E402
     aggregate_violations,
     build_aggregate,
+    load_lane_reports,
+    load_validation_reports,
 )
 from scripts.ci.verify_pytest_shards import compare_collections  # noqa: E402
 
@@ -205,7 +208,67 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
     ) == ["failed or over-budget lanes: integration"]
 
 
-def test_ci_runtime_artifacts_are_scoped_to_current_workflow_attempt() -> None:
+def test_runtime_report_loaders_prefer_latest_workflow_attempt(tmp_path: Path) -> None:
+    pytest_root = tmp_path / "pytest"
+    validation_root = tmp_path / "validation"
+    for root in (pytest_root, validation_root):
+        (root / "attempt-1").mkdir(parents=True)
+        (root / "attempt-2").mkdir(parents=True)
+
+    (pytest_root / "attempt-1" / "system-regression.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "workflow_run_attempt": 1,
+                "wall_seconds": 200.0,
+                "pytest_exit_code": 0,
+                "budget_violations": ["stale violation"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (pytest_root / "attempt-2" / "system-regression.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "workflow_run_attempt": 2,
+                "wall_seconds": 95.0,
+                "pytest_exit_code": 0,
+                "budget_violations": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (validation_root / "attempt-1" / "system-regression.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "workflow_run_attempt": 1,
+                "wall_seconds": 220.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (validation_root / "attempt-2" / "system-regression.json").write_text(
+        json.dumps(
+            {
+                "lane": "system-regression",
+                "workflow_run_attempt": 2,
+                "wall_seconds": 120.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pytest_reports = load_lane_reports(pytest_root)
+    validation_reports = load_validation_reports(validation_root)
+
+    assert pytest_reports["system-regression"]["workflow_run_attempt"] == 2
+    assert pytest_reports["system-regression"]["budget_violations"] == []
+    assert validation_reports["system-regression"]["workflow_run_attempt"] == 2
+
+
+def test_ci_runtime_artifacts_preserve_attempts_for_latest_lane_aggregation() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert (
@@ -215,6 +278,7 @@ def test_ci_runtime_artifacts_are_scoped_to_current_workflow_attempt() -> None:
         "name: python-validation-runtime-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"
         in workflow
     )
-    assert "pattern: python-test-runtime-*-attempt-${{ github.run_attempt }}" in workflow
-    assert "pattern: python-validation-runtime-*-attempt-${{ github.run_attempt }}" in workflow
+    assert "pattern: python-test-runtime-*-attempt-*" in workflow
+    assert "pattern: python-validation-runtime-*-attempt-*" in workflow
+    assert workflow.count("merge-multiple: false") == 2
     assert "name: python-test-runtime-aggregate-attempt-${{ github.run_attempt }}" in workflow
