@@ -47,7 +47,10 @@ def test_recovery_override_restores_into_clean_volume_subpath() -> None:
     recovery = RECOVERY_COMPOSE.read_text(encoding="utf-8")
 
     assert "subpath: restored-data" in recovery
-    assert "name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}" in recovery
+    assert (
+        "name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}"
+        in recovery
+    )
     assert "  restore:" in recovery
     assert "entrypoint:\n      - platform-backup" in recovery
     assert "  recover-restore:" in recovery
@@ -106,6 +109,9 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     normalized = " ".join(runbook.split())
     assert "deletes the named volume" in normalized
     assert "raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
+    assert "docker-compose.recovery.yml" in runbook
+    assert "recover-restore" in runbook
+    assert "restored-data" in runbook
 
 
 def test_hostinger_url_profile_is_self_contained_and_uses_remote_source_context() -> None:
