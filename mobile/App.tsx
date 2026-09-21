@@ -26,6 +26,7 @@ import {
 import {
   classifyConnectionError,
   connectionStateMessage,
+  initialConnectionState,
   probeControlPlane,
   type ControlPlaneCompatibility,
   type MobileConnectionState,
@@ -200,9 +201,10 @@ export default function App() {
         const session = await sessionStore.current();
         if (cancelled) return;
         if (!session) {
-          setConnectionState(selected ? "authentication_expired" : "never_configured");
+          setConnectionState(initialConnectionState(Boolean(selected), false));
           return;
         }
+        setConnectionState(initialConnectionState(true, true));
         await connectProfile(session.profileId, false);
       } catch (error) {
         if (!cancelled) {
