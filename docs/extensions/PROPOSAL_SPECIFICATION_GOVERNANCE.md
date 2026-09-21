@@ -1,6 +1,6 @@
 # Proposal and Specification governance
 
-Issue #501 adds an **optional** governance layer before canonical Task execution. It does
+The Proposal/Specification governance layer is an **optional** layer before canonical Task execution. It does
 not change the execution hierarchy: `Goal -> Task -> Plan -> Step -> Run` remains the
 platform-owned execution model, and callers may continue creating a Task directly.
 
@@ -21,7 +21,7 @@ platform-owned execution model, and callers may continue creating a Task directl
   change creates a new revision and content digest.
 - A Specification never executes. Conversion creates exactly one canonical `Task`, and
   all runtime planning/execution starts from that Task.
-- Canonical Approval ownership remains in the #15 security layer. Governance stores no
+- Canonical Approval ownership remains in the canonical security layer. Governance stores no
   second approval lifecycle.
 - An approval for Task conversion is bound to the exact `Specification` ID, revision and
   SHA-256 content digest through the canonical `ProposedAction.digest` contract. A later
@@ -46,7 +46,7 @@ therefore be recognized as identical content while the reviewed revision is stil
 High-risk (`high` or `critical`) Specifications and Specifications with one or more
 `required_human_gates` cannot convert without a valid canonical Approval. Governance
 creates/looks up that Approval through `AuthorizationGate`/`ApprovalService`; approval
-decisions still pass through the normal #15 approver authorization path.
+decisions still pass through the normal approver authorization path.
 
 Conversion is restart-safe:
 
@@ -95,8 +95,8 @@ predates the store.
 
 ### Approval and replay observability
 
-Canonical #15 Approval state and its authorization audit remain authoritative for the
-actual Approval decision lifecycle; #501 does not duplicate that authority. Governance
+Canonical Approval state and its authorization audit remain authoritative for the
+actual Approval decision lifecycle; the governance layer does not duplicate that authority. Governance
 adds safe linkage/projection events around the Specification contract:
 
 - `specification.approval-requested` when governance requests canonical Approval;
@@ -157,7 +157,7 @@ The CLI discovers registered extension collections and commands from canonical O
 idempotency key; it does not contain a separate Proposal/Specification state machine.
 Approval decisions continue through the existing canonical Approval surface.
 
-## Planning integration (#439)
+## Planning integration
 
 `GovernanceService.planning_input(...)` exposes an immutable exact-revision projection for
 planning. When the Specification requires approval, the same exact action binding must be
