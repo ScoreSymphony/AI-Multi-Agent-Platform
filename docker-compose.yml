@@ -55,7 +55,6 @@ services:
       - type: volume
         source: platform-data
         target: /var/lib/ai-multi-agent-platform
-        read_only: true
       - type: bind
         source: ${AI_MAP_BACKUP_DIR:-./backups}
         target: /backups
