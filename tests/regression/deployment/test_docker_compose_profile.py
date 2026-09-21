@@ -5,6 +5,7 @@ from pathlib import Path
 COMPOSE = Path("docker-compose.yml")
 DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
+RECOVERY_COMPOSE = DOCKER_DIR / "docker-compose.recovery.yml"
 
 
 def test_compose_keeps_control_plane_private_and_state_durable() -> None:
@@ -25,6 +26,42 @@ def test_compose_keeps_control_plane_private_and_state_durable() -> None:
     assert "cap_drop:" in control_plane
     assert "stop_grace_period: 40s" in control_plane
 
+
+
+def test_compose_backup_service_exports_quiesced_backup_outside_data_volume() -> None:
+    compose = COMPOSE.read_text(encoding="utf-8")
+
+    assert "  backup:" in compose
+    assert "profiles:\n      - operations" in compose
+    assert "entrypoint:\n      - platform-backup" in compose
+    assert "source: platform-data" in compose
+    assert "target: /var/lib/ai-multi-agent-platform" in compose
+    assert "read_only: true" in compose
+    assert "source: ${AI_MAP_BACKUP_DIR:-./backups}" in compose
+    assert "target: /backups" in compose
+    assert "create_host_path: false" in compose
+    assert "network_mode: none" in compose
+
+
+def test_recovery_override_restores_into_clean_volume_subpath() -> None:
+    recovery = RECOVERY_COMPOSE.read_text(encoding="utf-8")
+
+    assert "subpath: restored-data" in recovery
+    assert "name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}" in recovery
+    assert "  restore:" in recovery
+    assert "entrypoint:\n      - platform-backup" in recovery
+    assert "  recover-restore:" in recovery
+    assert "platform-server\n      - recover-restore" in recovery
+    assert "read_only: true" in recovery
+
+
+def test_recovery_override_keeps_canonical_data_path_for_replacement_runtime() -> None:
+    recovery = RECOVERY_COMPOSE.read_text(encoding="utf-8")
+    control_plane = recovery.split("\n\n  backup:", 1)[0]
+
+    assert "target: /var/lib/ai-multi-agent-platform" in control_plane
+    assert "subpath: restored-data" in control_plane
+    assert "AI_MAP_DATA_DIR" not in control_plane
 
 def test_container_edge_preserves_api_prefix_and_spa_fallback() -> None:
     caddy = (DOCKER_DIR / "Caddyfile").read_text(encoding="utf-8")
