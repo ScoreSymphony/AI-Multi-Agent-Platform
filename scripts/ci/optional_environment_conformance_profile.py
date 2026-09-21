@@ -76,7 +76,7 @@ _PROFILES: dict[str, OptionalEnvironmentProfile] = {
         deployment_profile="litellm-pinned",
         distribution="litellm",
         component_name="litellm",
-        expected_version="1.100.1",
+        expected_version="1.101.0",
         pytest_node=(
             "tests/integration/upstreams/test_litellm_pinned.py::"
             "test_pinned_litellm_library_executes_through_platform_adapter"
