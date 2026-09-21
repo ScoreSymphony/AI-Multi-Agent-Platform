@@ -1,6 +1,6 @@
 # Learning async persistence boundary
 
-Issue #892 requires governed Learning runtime paths to remain responsive while the single-node deployment uses the synchronous stdlib `sqlite3` driver.
+Governed Learning runtime paths remain responsive while the single-node deployment uses the synchronous stdlib `sqlite3` driver.
 
 ## Runtime boundary
 
