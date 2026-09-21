@@ -1293,10 +1293,25 @@ try {
 
   // Re-open the real first-run timeline and prove its dense table remains contained by the
   // intentional horizontally scrollable wrapper rather than clipping the product viewport.
+  // Register before navigation because recent-Task auto-selection may start a timeline read
+  // immediately; the explicit Task submit must still win over any older in-flight response.
+  const narrowTimelineResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(
+        `/api/v1/tasks/${encodeURIComponent(firstRunResult.task_id)}/timeline`,
+      )
+      && response.request().method() === "GET",
+  );
   await page.goto(`${frontendUrl}/observability`);
   await page.getByRole("heading", { name: "Observability", exact: true }).waitFor();
   await page.getByLabel("Exact Task ID", { exact: true }).fill(firstRunResult.task_id);
   await (await waitForButton(page, "Open telemetry")).click();
+  const narrowTimelineResponse = await narrowTimelineResponsePromise;
+  if (!narrowTimelineResponse.ok()) {
+    throw new Error(
+      `Narrow observability timeline failed with ${narrowTimelineResponse.status()}: ${await narrowTimelineResponse.text()}`,
+    );
+  }
   const narrowTimelineHeading = page.getByRole("heading", { name: "Timeline", exact: true });
   await narrowTimelineHeading.waitFor();
   const narrowTimelineCard = narrowTimelineHeading.locator("..");
