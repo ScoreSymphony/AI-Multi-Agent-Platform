@@ -320,7 +320,7 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT (2026-09-02) | yes; integrated for #12 |
 | tzdata | Windows runtime IANA time-zone data fallback for `zoneinfo` | `==2026.4; platform_system == 'Windows'` | `https://github.com/python/tzdata` | Apache-2.0 (2026-09-16) | yes; required only for supported Windows baseline |
 | mcp | optional MCP transport + CI integration coverage | `==2.2.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT (2026-09-14) | yes; optional adapter recorded above |
-| litellm | optional model gateway SDK / proxy compatibility target | `==1.100.1` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed (2026-09-14) | yes; optional adapter recorded above |
+| litellm | optional model gateway SDK / proxy compatibility target | `==1.101.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed (2026-09-21) | yes; optional adapter recorded above |
 | uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause (2026-09-02) | no |
 | psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only (2026-09-13) | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT (2026-09-02) | no |
