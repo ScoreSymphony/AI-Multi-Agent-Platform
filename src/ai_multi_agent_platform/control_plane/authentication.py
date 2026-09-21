@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from functools import lru_cache
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -22,7 +23,7 @@ from ai_multi_agent_platform.security.authentication import (
     safe_session,
 )
 
-from .http import HTTPRequest, HTTPResponse, _request_context
+from .http import HTTPRequest, HTTPResponse, _openapi_path_matches, _request_context
 from .mobile_authentication import (
     handle_authenticated_mobile_auth_route,
     handle_public_mobile_auth_route,
@@ -60,6 +61,10 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
         correlation_id = _header(request.headers, "x-correlation-id") or request_id
         try:
             relative = _relative_path(request.path)
+            if relative.startswith("/auth/"):
+                route_error = _authentication_route_error(request.method, relative)
+                if route_error is not None:
+                    raise route_error
             if _public_route(request.method, relative):
                 if relative.startswith("/auth/"):
                     return self._public_auth_route(
