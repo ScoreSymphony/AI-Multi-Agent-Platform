@@ -53,7 +53,7 @@ While draining:
   completion/force reason.
 
 The drain flag is intentionally absent after process restart. A new process starts in
-`serving` admission state and must pass #707 reconciliation before `platform-server serve` opens
+`serving` admission state and must pass canonical startup reconciliation before `platform-server serve` opens
 the normal serving path.
 
 ## In-flight disposition policy
