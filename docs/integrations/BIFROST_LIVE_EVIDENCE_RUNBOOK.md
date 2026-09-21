@@ -230,4 +230,4 @@ Even after promotion:
 - Bifrost remains optional;
 - it is not the default/recommended platform router;
 - the platform `ModelRouter` remains authoritative;
-- #799 may expose it only as an Advanced optional component after #799's own acceptance criteria are satisfied.
+- the component catalog may expose it only as an Advanced optional component after the catalog's normal support-admission criteria are satisfied.
