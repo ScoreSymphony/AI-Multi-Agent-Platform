@@ -192,7 +192,10 @@ verification and wrong-signer distinction without exposing production material. 
 publication additionally proves protected-key signing, signer continuity after the first release,
 checksum generation and expected GitHub Release assets.
 
-Clean install/launch against a remote Control Plane and N -> N+1 data-preserving update are retained
-as real-device evidence. The terminal physical Android/VPS journey, including a wrong-signature
-update rejection on a real device, is validated separately so the distribution workflow is not confused
-with product-level device acceptance.
+A clean install/launch of the first official APK is retained as real-device evidence. The release
+pipeline also proves same-signing-identity continuity and monotonic Android versioning across the
+published N -> N+1 release pair. Device-side in-place N -> N+1 installation and preservation of app
+and secure pairing state are **not yet retained as completed acceptance evidence** and must not be
+claimed until that physical-device check is recorded. The broader physical Android/VPS journey,
+including wrong-signature update rejection on a real device, is likewise separate product-level
+acceptance rather than a property inferred from the distribution workflow.
