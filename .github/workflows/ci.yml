@@ -8,7 +8,7 @@ on:
 jobs:
   python-validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 7
     strategy:
       fail-fast: false
       matrix:

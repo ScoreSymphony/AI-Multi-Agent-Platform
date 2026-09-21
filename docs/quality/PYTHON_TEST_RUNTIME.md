@@ -137,8 +137,10 @@ individual-test and 20-second module thresholds remain above the measured maxima
 17.397 seconds. System/regression uses a 240-second wall budget against a measured 95.651-second
 run and the same 15/20-second test/module thresholds.
 
-The complete `python-validation` matrix has a six-minute job timeout. This deliberately differs
-from the typical performance target: a hard CI guard must tolerate measured hosted-runner variance.
+The complete `python-validation` matrix has a seven-minute job timeout. This deliberately differs
+from the typical performance target: the outer fail-safe must leave enough room for the 350-second
+validation budget to record timing evidence and fail deterministically instead of being cancelled
+before the regression guard can report its result.
 The required `test` aggregator downloads all four pytest timing artifacts and fails if their
 measured pytest critical path exceeds 330 seconds or if any expected lane report is missing.
 Typical performance remains tracked separately from the hard guard; the current integration median
