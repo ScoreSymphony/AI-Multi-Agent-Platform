@@ -1,7 +1,5 @@
 # Canonical CLI
 
-Issue: #38
-
 The `platform` command is a northbound client of the versioned Control Plane. It must never use kernel repositories, databases, Hermes, Forge, MCP servers, model-provider SDKs, workers, or other backend-private interfaces directly.
 
 ```text
@@ -14,9 +12,9 @@ platform CLI
 canonical application services
 ```
 
-## Foundation scope
+## Supported scope
 
-This first #38 slice provides the CLI foundation that can be implemented solely on top of #32:
+The maintained CLI provides the following API-first baseline:
 
 - installable `platform` entry point;
 - local and remote non-secret target profiles;
@@ -30,7 +28,7 @@ This first #38 slice provides the CLI foundation that can be implemented solely 
 - task create/list/show/queue/start/cancel/retry/timeline commands;
 - run list/show/cancel commands.
 
-The foundation intentionally did not invent commands for domains before their canonical APIs existed. Progressive integrations now add those surfaces while preserving the same API-first client boundary.
+The CLI does not invent commands for domains without canonical APIs. Additional product domains extend the same API-first client boundary.
 
 ## Installation and entry point
 
@@ -141,7 +139,7 @@ platform task create \
   --objective "Produce a canonical inspection result" \
   --owner-type user \
   --owner-id operator
-platform task list --filter status=created
+platform task list --filter status=draft
 platform task show task_...
 platform task queue task_...
 platform task start task_...
@@ -157,7 +155,7 @@ platform run cancel run_... --task-id task_...
 
 List commands support the Control Plane conventions `--limit`, `--cursor`, `--sort`, `--direction`, `--q`, repeatable `--filter FIELD=VALUE`, and `--fields`.
 
-## Evaluation and regression commands (#19)
+## Evaluation and regression commands
 
 Evaluation commands are a thin northbound adapter over the canonical Evaluation Control Plane resources and commands. The CLI never constructs an `EvaluationRunner`, reads the evaluation repository directly, aggregates repetition samples locally, or introduces a second evaluation lifecycle.
 
@@ -237,22 +235,22 @@ platform-completion fish | source
 
 The helper completes the current command hierarchy, command options, and finite option choices such as `--direction` and `--owner-type`. Dynamic resource IDs are intentionally not fetched during tab completion, so completion cannot cause network access or administrative side effects.
 
-## Initial doctor contract
+## Doctor contract
 
-`platform doctor` currently validates the foundation that exists today:
+`platform doctor` is a northbound diagnostic client over canonical Control Plane surfaces. It validates:
 
-- CLI configuration parsed successfully;
-- `/api/v1` is reachable;
-- API major is compatible (`v1`);
-- canonical health endpoint responds;
-- canonical readiness endpoint responds.
+- CLI configuration;
+- `/api/v1` reachability and API-major compatibility;
+- the canonical manifest, health and readiness surfaces;
+- canonical dependency/provider health reported by the Control Plane;
+- Node and Worker health through Control Plane resources when the distributed compute surface is registered.
 
-The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Provider/worker/auth/secret/permission checks are added only after the corresponding canonical platform domains exist.
+The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Optional compute resources may degrade diagnostics without redefining Control Plane readiness. The CLI does not probe providers, workers or backend-private services directly.
 
 ## Verification
 
 CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). Integration/contract tests exercise HTTP-style transports so the CLI remains on the real versioned Control Plane boundary rather than direct kernel or repository access.
 
-## Progressive #38 work still open
+## Extension model
 
-This document does not close #38. Later work should continue extending the same client when owning canonical APIs require additional CLI surfaces. Evaluation is now integrated through #19 and must remain API-first.
+Additional domain commands extend the same API-first client boundary through their canonical Control Plane contracts. Evaluation and other product domains must not introduce CLI-owned lifecycle authority or backend-private shortcuts.
