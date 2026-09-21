@@ -35,11 +35,11 @@ from .authentication import (
     _required_string,
 )
 from .http import HTTPRequest, HTTPResponse
-from .models import APIException, api_exception_from_contract
 from .mobile_authentication import (
     handle_authenticated_mobile_auth_route_async,
     handle_public_mobile_auth_route_async,
 )
+from .models import APIException, api_exception_from_contract
 from .release_api import AuthenticatedControlPlaneHTTP as _ReleaseAuthenticatedControlPlaneHTTP
 
 
