@@ -129,6 +129,66 @@ describe("MobileSessionStore", () => {
     ).toThrow("Unsupported pairing protocol");
   });
 
+  it("pairs successfully from a parsed QR descriptor and binds the pairing request ID", async () => {
+    const storage = new MemoryStorage();
+    const store = new MobileSessionStore(storage);
+    const descriptor = parseMobilePairingUri(
+      "amp-mobile://pair?server=https%3A%2F%2Fplatform.example&id=pairing_123&code=ABCD-EFGH-JKLM&v=1",
+    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            device: {
+              id: "mobile_device_qr",
+              display_name: "QR phone",
+              server_origin: "https://platform.example",
+              credential_id: "credential_qr",
+              active: true,
+            },
+            credential: {
+              id: "credential_qr",
+              secret: "amp1.credential_qr.device-secret",
+              expires_at: null,
+              secret_display: "one_time",
+            },
+          }),
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            actor_id: "user-1",
+            actor_type: "human",
+            authentication_method: "mobile_device_token",
+            credential_id: "credential_qr",
+            authenticated_at: "2026-09-21T08:00:00Z",
+            expires_at: null,
+            organization_id: null,
+            project_id: null,
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const actor = await store.pair(descriptor, "QR phone", "android", fetchImpl);
+
+    expect(actor.authentication_method).toBe("mobile_device_token");
+    expect(await store.current()).toEqual({ baseUrl: "https://platform.example" });
+    expect(await store.getToken()).toBe("amp1.credential_qr.device-secret");
+    const [consumeUrl, consumeInit] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(consumeUrl).toBe("https://platform.example/api/v1/auth/mobile-pairings:consume");
+    expect(JSON.parse(String(consumeInit.body))).toMatchObject({
+      pairing_id: "pairing_123",
+      code: "ABCDEFGHJKLM",
+      device_name: "QR phone",
+      platform: "android",
+      protocol_version: "1",
+    });
+  });
+
   it("pairs with a fallback code, persists the returned credential, and verifies identity", async () => {
     const storage = new MemoryStorage();
     const store = new MobileSessionStore(storage);
