@@ -286,10 +286,7 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
               </dl>
             </Card>
             <Card title="Session controls">
-              <p>
-                Authentication establishes identity only. Authorization and approval decisions remain
-                server-side under the canonical #15 boundary.
-              </p>
+              <SettingsSessionSecurityCopy />
               <div className="actions">
                 <button disabled={mutating} onClick={() => void renew()}>Renew session</button>
                 <button disabled={mutating} onClick={() => void logout()}>Sign out</button>
@@ -550,6 +547,15 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
         </>
       )}
     </div>
+  );
+}
+
+export function SettingsSessionSecurityCopy() {
+  return (
+    <p>
+      Authentication establishes identity only. Authorization and approval decisions remain enforced
+      server-side by the platform.
+    </p>
   );
 }
 
