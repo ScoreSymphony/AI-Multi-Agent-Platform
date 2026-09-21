@@ -291,6 +291,7 @@ def test_runtime_report_loader_rejects_duplicate_same_attempt(tmp_path: Path) ->
     ):
         load_lane_reports(tmp_path)
 
+
 def test_runtime_report_loader_rejects_duplicate_stale_attempt(
     tmp_path: Path,
 ) -> None:
@@ -318,4 +319,3 @@ def test_runtime_report_loader_rejects_duplicate_stale_attempt(
         match="duplicate pytest runtime report for lane integration at run attempt 1",
     ):
         load_lane_reports(tmp_path)
-
