@@ -1,6 +1,6 @@
 # Async Notification preference persistence
 
-Issue #892 requires async runtime services to avoid executing synchronous `sqlite3` work on the asyncio event-loop thread. Notification preferences therefore expose an awaitable application-facing persistence contract while SQLite remains the local reference backend.
+Async runtime services avoid executing synchronous `sqlite3` work on the asyncio event-loop thread. Notification preferences therefore expose an awaitable application-facing persistence contract while SQLite remains the local reference backend.
 
 ## Runtime contract
 
@@ -56,7 +56,7 @@ No async handler needs to know whether preference persistence is SQLite-backed.
 
 ## Conformance and regressions
 
-The in-memory preference repository implements the same `AsyncNotificationPreferenceRepository` contract as SQLite. #892 regression coverage verifies:
+The in-memory preference repository implements the same `AsyncNotificationPreferenceRepository` contract as SQLite. The async-persistence regression coverage verifies:
 
 - event-loop heartbeat responsiveness during intentionally slow SQLite preference work;
 - worker-thread SQLite connection ownership;
