@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
-from ai_multi_agent_platform.control_plane.first_user_bootstrap import AuthenticatedControlPlaneHTTP
+from ai_multi_agent_platform.control_plane.first_user_bootstrap import (
+    BOOTSTRAP_STATUS_PATH,
+    AuthenticatedControlPlaneHTTP,
+)
 from ai_multi_agent_platform.control_plane.http import ControlPlaneASGI, HTTPRequest
 from ai_multi_agent_platform.security import LocalAuthenticationService, ScryptPasswordHasher
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
@@ -185,30 +188,77 @@ def test_setup_resources_and_mutations_remain_authenticated_during_bootstrap(tmp
 
 def test_bootstrap_status_route_preserves_405_and_openapi_ownership(tmp_path) -> None:
     http, _authentication, _authorization = _http(tmp_path)
+    status_path = f"/api/v1{BOOTSTRAP_STATUS_PATH}"
     headers = {
-        "x-request-id": "request-1330-bootstrap",
-        "x-correlation-id": "correlation-1330-bootstrap",
+        "x-request-id": "request-1331-bootstrap",
+        "x-correlation-id": "correlation-1331-bootstrap",
     }
 
     wrong_method = _run(
         http.handle(
             HTTPRequest(
                 method="POST",
-                path="/api/v1/auth/bootstrap-status",
+                path=status_path,
                 headers=headers,
             )
         )
     )
     assert wrong_method.status == 405
     assert wrong_method.body["code"] == "method_not_allowed"
-    assert wrong_method.body["request_id"] == "request-1330-bootstrap"
-    assert wrong_method.body["correlation_id"] == "correlation-1330-bootstrap"
+    assert wrong_method.body["request_id"] == "request-1331-bootstrap"
+    assert wrong_method.body["correlation_id"] == "correlation-1331-bootstrap"
+
+    unknown = _run(
+        http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/auth/bootstrap-private-status",
+                headers=headers,
+            )
+        )
+    )
+    assert unknown.status == 404
+    assert unknown.body["code"] == "not_found"
 
     openapi = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
     assert openapi.status == 200
-    status_route = openapi.body["paths"]["/api/v1/auth/bootstrap-status"]
+    paths = openapi.body["paths"]
+    assert [path for path in paths if path.endswith(BOOTSTRAP_STATUS_PATH)] == [status_path]
+
+    status_route = paths[status_path]
     assert set(status_route) == {"get"}
-    assert status_route["get"]["security"] == []
+    operation = status_route["get"]
+    assert operation["security"] == []
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/FirstUserBootstrapStatus"
+    }
+    assert operation["responses"]["405"] == {"$ref": "#/components/responses/Error"}
+    assert operation["responses"]["500"] == {"$ref": "#/components/responses/Error"}
+
+    assert openapi.body["components"]["schemas"]["FirstUserBootstrapStatus"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["state", "bootstrap_available", "password_policy"],
+        "properties": {
+            "state": {
+                "type": "string",
+                "enum": ["uninitialized", "incomplete", "initialized"],
+            },
+            "bootstrap_available": {"type": "boolean"},
+            "password_policy": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["min_length", "max_bytes"],
+                "properties": {
+                    "min_length": {"type": "integer", "minimum": 1},
+                    "max_bytes": {"type": "integer", "minimum": 1},
+                },
+            },
+        },
+    }
+    assert {
+        path for path in paths if "/auth/bootstrap" in path
+    } == {"/api/v1/auth/bootstrap-admin", status_path}
 
 
 def test_bootstrap_status_asgi_pre_body_classification_returns_405(tmp_path) -> None:
