@@ -47,6 +47,8 @@ A trace is an operational identifier. It supplements canonical identifiers; it d
 
 Instrumentation propagates existing identifiers rather than manufacturing unrelated canonical identities.
 
+For Run diagnostics, the canonical Run/Workspace binding remains owned by the Workspace integration, not Observability. When a Run records `workspace_id`, `workspace_snapshot_id` and the corresponding content checksum, operator surfaces may use those values to navigate from Task -> Run -> Workspace and inspect the exact execution provenance. Observability may project or link that relationship, but it does not create, rewrite or infer Workspace identity.
+
 ## Parent/child spans, remote propagation and async links
 
 Normal synchronous nesting uses parent/child spans through `TraceHierarchy`.
