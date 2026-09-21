@@ -330,6 +330,60 @@ def test_authenticated_openapi_documents_auth_routes_and_security_schemes() -> N
     assert specification["paths"]["/api/v1/auth/login"]["post"]["security"] == []
 
 
+def test_auth_openapi_documents_revoke_not_found_runtime_outcomes() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    token = auth.create_personal_access_token(user.user_id, purpose="issue-1334", now=NOW)
+    control_plane = _CredentialAuthorizationControlPlane(deny=False)
+    http = AuthenticatedControlPlaneHTTP(control_plane, auth, secure_cookie=False)
+
+    openapi = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
+    assert openapi.status == 200
+    specification = openapi.body
+    error_ref = {"$ref": "#/components/responses/Error"}
+    assert specification["components"]["responses"]["Error"]["content"]["application/json"][
+        "schema"
+    ] == {"$ref": "#/components/schemas/APIError"}
+
+    session_operation = specification["paths"]["/api/v1/auth/sessions/{session_id}:revoke"]["post"]
+    credential_operation = specification["paths"][
+        "/api/v1/auth/credentials/{credential_id}:revoke"
+    ]["post"]
+
+    for operation in (session_operation, credential_operation):
+        assert operation["responses"]["401"] == error_ref
+        assert operation["responses"]["403"] == error_ref
+        assert operation["responses"]["404"] == error_ref
+        assert operation["responses"]["405"] == error_ref
+
+    headers = {"authorization": f"Bearer {token.secret}"}
+    missing_session = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/sessions/session_missing:revoke",
+                headers=headers,
+            )
+        )
+    )
+    assert missing_session.status == 404
+    assert missing_session.body["code"] == "not_found"
+    assert session_operation["responses"][str(missing_session.status)] == error_ref
+
+    missing_credential = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/auth/credentials/credential_missing:revoke",
+                headers=headers,
+            )
+        )
+    )
+    assert missing_credential.status == 404
+    assert missing_credential.body["code"] == "not_found"
+    assert credential_operation["responses"][str(missing_credential.status)] == error_ref
+
+
 def test_browser_control_plane_login_csrf_session_listing_and_logout() -> None:
     auth = _service()
     auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)

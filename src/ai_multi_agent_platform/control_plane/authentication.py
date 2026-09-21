@@ -30,6 +30,7 @@ from .mobile_authentication import (
     mobile_auth_openapi_paths,
 )
 from .models import API_VERSION, APIError, APIException, api_exception_from_contract
+from .openapi_errors import ensure_method_not_allowed_responses
 from .search_contract import ControlPlaneHTTP as _ControlPlaneHTTP
 
 
@@ -765,6 +766,7 @@ def _augment_authentication_openapi(
                 public=True,
                 request_fields=("username", "password"),
                 status="201",
+                error_statuses=("409",),
             )
         },
         f"/api/{API_VERSION}/auth/login": {
@@ -804,6 +806,7 @@ def _augment_authentication_openapi(
             "post": _auth_operation(
                 "revokeBrowserSession",
                 "Revoke one browser session owned by the current user.",
+                error_statuses=("404",),
                 parameters=(
                     {
                         "name": "session_id",
@@ -840,6 +843,7 @@ def _augment_authentication_openapi(
             "post": _auth_operation(
                 "revokePersonalCredential",
                 "Revoke a personal credential after manage-credentials authorization.",
+                error_statuses=("404",),
                 parameters=(
                     {
                         "name": "credential_id",
@@ -854,7 +858,7 @@ def _augment_authentication_openapi(
     }
     paths.update(auth_paths)
     document["paths"] = paths
-    return document
+    return ensure_method_not_allowed_responses(document)
 
 
 def _auth_operation(
@@ -864,18 +868,23 @@ def _auth_operation(
     public: bool = False,
     request_fields: tuple[str, ...] = (),
     status: str = "200",
+    error_statuses: tuple[str, ...] = (),
     parameters: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
+    responses: dict[str, Any] = {
+        status: {"description": "Authentication operation result"},
+        "400": {"$ref": "#/components/responses/Error"},
+        "401": {"$ref": "#/components/responses/Error"},
+        "403": {"$ref": "#/components/responses/Error"},
+        "429": {"$ref": "#/components/responses/Error"},
+    }
+    for error_status in error_statuses:
+        responses.setdefault(error_status, {"$ref": "#/components/responses/Error"})
+
     operation: dict[str, Any] = {
         "operationId": operation_id,
         "description": description,
-        "responses": {
-            status: {"description": "Authentication operation result"},
-            "400": {"$ref": "#/components/responses/Error"},
-            "401": {"$ref": "#/components/responses/Error"},
-            "403": {"$ref": "#/components/responses/Error"},
-            "429": {"$ref": "#/components/responses/Error"},
-        },
+        "responses": responses,
     }
     if public:
         operation["security"] = []
