@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ControlPlaneClient } from "../api/client";
 import { RouterProvider } from "../app/router";
-import { ObservabilityPage } from "./ObservabilityPage";
+import { ObservabilityPage, preserveTaskScopeDuringRecentTaskLoad } from "./ObservabilityPage";
 
 function renderWithRouter(element: ReactElement): string {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -20,6 +20,33 @@ function renderWithRouter(element: ReactElement): string {
 }
 
 describe("Observability task reachability", () => {
+  it("does not let a late recent-Task load overwrite an edited empty draft", () => {
+    expect(
+      preserveTaskScopeDuringRecentTaskLoad(
+        "",
+        "task_11111111-1111-4111-8111-111111111111",
+        true,
+      ),
+    ).toBe("");
+  });
+
+  it("auto-selects a recent Task only before the Task scope is edited", () => {
+    expect(
+      preserveTaskScopeDuringRecentTaskLoad(
+        "",
+        "task_11111111-1111-4111-8111-111111111111",
+        false,
+      ),
+    ).toBe("task_11111111-1111-4111-8111-111111111111");
+    expect(
+      preserveTaskScopeDuringRecentTaskLoad(
+        "task_22222222-2222-4222-8222-222222222222",
+        "task_11111111-1111-4111-8111-111111111111",
+        false,
+      ),
+    ).toBe("task_22222222-2222-4222-8222-222222222222");
+  });
+
   it("keeps an exact Task ID reachable even when it is outside the recent Task inventory", () => {
     const html = renderWithRouter(
       <ObservabilityPage
