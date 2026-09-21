@@ -272,11 +272,11 @@ class MobilePairingService:
         issued = cast(
             IssuedCredential,
             self.authentication.create_credential(
-            challenge.user_id,
-            ActorType.HUMAN,
-            CredentialKind.MOBILE,
-            purpose=f"mobile device: {display_name}",
-            now=now,
+                challenge.user_id,
+                ActorType.HUMAN,
+                CredentialKind.MOBILE,
+                purpose=f"mobile device: {display_name}",
+                now=now,
                 scope=_MOBILE_CREDENTIAL_SCOPE,
             ),
         )
