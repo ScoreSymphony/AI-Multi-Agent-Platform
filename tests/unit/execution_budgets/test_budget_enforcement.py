@@ -19,6 +19,7 @@ from ai_multi_agent_platform.execution.budgets import (
     BudgetAdmissionOutcome,
     BudgetConsumptionSource,
     BudgetDimension,
+    BudgetReservation,
     InMemoryTaskBudgetStore,
     SQLiteTaskBudgetStore,
     TaskBudgetEnforcementService,
@@ -50,7 +51,7 @@ class _ReconcileBetweenSnapshotReadsStore(InMemoryTaskBudgetStore):
     def reconcile_after_next_list(self, reservation_id: str) -> None:
         self._reconcile_after_list_id = reservation_id
 
-    def list_reservations(self, task_id: str):  # type: ignore[no-untyped-def]
+    def list_reservations(self, task_id: str) -> tuple[BudgetReservation, ...]:
         reservations = super().list_reservations(task_id)
         reservation_id = self._reconcile_after_list_id
         if reservation_id is not None:
