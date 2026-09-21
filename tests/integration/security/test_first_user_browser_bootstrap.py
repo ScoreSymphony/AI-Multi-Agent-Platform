@@ -101,6 +101,16 @@ def test_fresh_install_bootstrap_creates_admin_policy_and_authenticated_browser_
     assert repeated.body["code"] == "bootstrap_unavailable"
     assert len(authentication.store.users) == 1
 
+    openapi = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
+    assert openapi.status == 200
+    bootstrap_operation = openapi.body["paths"]["/api/v1/auth/bootstrap-admin"]["post"]
+    assert bootstrap_operation["responses"][str(repeated.status)] == {
+        "$ref": "#/components/responses/Error"
+    }
+    assert bootstrap_operation["responses"]["405"] == {
+        "$ref": "#/components/responses/Error"
+    }
+
 
 def test_partial_first_user_bootstrap_can_resume_only_with_existing_credentials(tmp_path) -> None:
     http, authentication, authorization = _http(tmp_path)
