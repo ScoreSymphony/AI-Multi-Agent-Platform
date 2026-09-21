@@ -72,4 +72,4 @@ def test_single_server_reference_keeps_frontend_and_proxy_optional() -> None:
     assert "platform-server smoke" in runbook
     assert "platform --endpoint http://127.0.0.1:8000 doctor" in runbook
     assert "/api/v1/readiness" in runbook
-    assert "#14" in runbook
+    assert "canonical Node/Worker and scheduling contracts" in runbook

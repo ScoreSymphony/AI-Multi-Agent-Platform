@@ -1,9 +1,6 @@
 # CLI authorization and approval outcomes
 
-Issue: #38
-Security boundary: #15
-
-The CLI remains a normal northbound client of the versioned Control Plane. It does not gain authorization because a command looks administrative and it does not bypass the canonical approval gate.
+The CLI remains a normal northbound client of the versioned Control Plane. It does not gain authorization because a command looks administrative and it does not bypass the canonical authorization and Approval boundary.
 
 ## Canonical outcomes
 
@@ -17,14 +14,21 @@ The CLI does not retry, mutate state, or downgrade either outcome into a client-
 
 ## Exact-action behavior
 
-Approvals belong to the canonical #15 authorization system and bind to an immutable proposed action. Once that exact action is approved, repeating the same CLI request observes the canonical allowed state through the same `/api/v1` route.
+Approvals belong to the canonical authorization system and bind to an immutable proposed action. Once that exact action is approved, repeating the same CLI request observes the canonical allowed state through the same `/api/v1` route.
 
 The CLI does not create its own approval cache or treat possession of an approval ID as permission.
 
-## Current approval-management surface
+## Approval-management surface
 
-The repository currently has the canonical #15 approval lifecycle and server-side authorization gate, but it does not yet publish a dedicated versioned Control Plane collection/command surface for listing, approving or rejecting Approval resources.
+The Control Plane publishes the canonical `approvals` collection together with the exact-action `approval.approve` and `approval.deny` commands. The CLI exposes the same northbound surface:
 
-Accordingly, #38 must not invent `platform approval list|approve|deny` commands that call the ApprovalService directly. Those commands can be added only after the owning northbound API exists.
+```text
+platform approval list
+platform approval show <approval_id>
+platform approval approve <approval_id>
+platform approval deny <approval_id>
+```
 
-This does not block correct permission-error handling: CLI regression coverage uses the final composed `ControlPlaneHTTP` and the canonical #15 bridge to prove both `deny` and `require_approval` behavior end to end.
+Approval decisions re-read the canonical Approval, send its exact `requested_action_digest`, and use the ordinary idempotency/correlation boundary. The CLI never calls `ApprovalService` directly and never treats possession of an Approval ID as authority. Server-side authorization, expiry, pending-state validation, decision identity and the canonical Approval lifecycle remain authoritative.
+
+Permission-error handling and Approval management therefore use the same composed Control Plane surface as Web and other clients; no client-specific Approval lifecycle exists.

@@ -122,7 +122,7 @@ Review commands require `expected_revision`, so stale evaluators cannot mutate a
 
 `AutonomyPolicy` bounds automatic work with `max_tasks_per_review`, `max_consecutive_failed_cycles` and an optional human checkpoint. The reference implementation creates at most one Task per review, never creates another Task while equivalent linked work is active, and pauses/degrades the Goal when the failure-cycle limit is reached.
 
-`TaskGenerationPolicy.proposal_required=true` is fail-closed until the progressive #501 Proposal/Specification bridge is explicitly configured: the Goal pauses as blocked instead of silently creating a direct Task.
+`TaskGenerationPolicy.proposal_required=true` is fail-closed until a Proposal/Specification bridge is explicitly configured: the Goal pauses as blocked instead of silently creating a direct Task.
 
 Satisfied, failed, paused or cancelled non-reviewable Goals cannot generate new work. A satisfied/failed Goal can only return to active pursuit through an explicit versioned revision with `reopen_terminal=true`.
 

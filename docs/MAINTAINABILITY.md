@@ -135,6 +135,6 @@ reason = "Generated from the canonical schema definition; hand decomposition wou
 
 A module exemption omits `symbol`. Exemptions for ordinary hand-written orchestration or business logic should be exceptional; a large number of exemptions is itself a maintainability signal.
 
-## #896 completion direction
+## Ongoing use after the #896 completion
 
-The guardrail is the first cohort, not the whole issue. #896 remains open while the highest-risk existing outliers are audited and decomposed behind stable façades. Each refactor cohort must keep the inventory useful, preserve behavior through existing/new regression tests, and leave ownership clearer than before the split.
+Issue #896 is complete; the checked maintainability guardrail and responsibility-first review process remain active repository policy. The historical baseline above is evidence, not a current outlier count. Future refactor cohorts should continue using the generated inventory, preserve behavior through existing/new regression tests, and leave ownership clearer than before each split.
