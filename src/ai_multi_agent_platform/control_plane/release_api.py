@@ -9,7 +9,11 @@ from uuid import uuid4
 from ai_multi_agent_platform.contracts.errors import ContractError
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .extensions import ControlPlaneModule, ControlPlaneRoute
+from .extensions import (
+    ControlPlaneModule,
+    ControlPlaneRoute,
+    _ensure_method_not_allowed_responses,
+)
 from .http import (
     ASGIReceive,
     ASGISend,
@@ -346,7 +350,8 @@ def build_openapi(
         include_approval_decisions=include_approval_decisions,
     )
     _augment_openapi(specification)
-    return _augment_generated_transport_contract(specification)
+    _augment_generated_transport_contract(specification)
+    return _ensure_method_not_allowed_responses(specification)
 
 
 __all__ = [
