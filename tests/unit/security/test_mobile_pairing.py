@@ -161,6 +161,66 @@ def test_mobile_pairing_rejects_expired_cancelled_wrong_and_cross_user_use() -> 
     assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
 
 
+def test_mobile_pairing_rate_limits_idless_fallback_abuse() -> None:
+    auth = _service()
+    user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    auth.mobile_pairing.create_challenge(
+        user.user_id,
+        "https://platform.example",
+        now=NOW,
+    )
+
+    for attempt in range(5):
+        with pytest.raises(AuthenticationError) as invalid:
+            auth.mobile_pairing.consume_challenge(
+                None,
+                f"WRONG-{attempt}",
+                device_name="Attacker",
+                now=NOW + timedelta(seconds=attempt),
+            )
+        assert invalid.value.failure is AuthenticationFailure.INVALID_CREDENTIALS
+
+    with pytest.raises(AuthenticationError) as limited:
+        auth.mobile_pairing.consume_challenge(
+            None,
+            "WRONG-FINAL",
+            device_name="Attacker",
+            now=NOW + timedelta(seconds=5),
+        )
+    assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
+
+
+def test_mobile_device_management_is_owner_bound() -> None:
+    auth = _service()
+    alice = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
+    bob = auth.create_local_user("bob", PASSWORD, now=NOW)
+    grant = auth.mobile_pairing.create_challenge(
+        alice.user_id,
+        "https://platform.example",
+        now=NOW,
+    )
+    device, _ = auth.mobile_pairing.consume_challenge(
+        grant.pairing_id,
+        grant.secret,
+        device_name="Alice phone",
+        now=NOW + timedelta(seconds=1),
+    )
+
+    with pytest.raises(KeyError):
+        auth.mobile_pairing.rename_device(
+            bob.user_id,
+            device.device_id,
+            "Stolen phone",
+            now=NOW + timedelta(seconds=2),
+        )
+    with pytest.raises(KeyError):
+        auth.mobile_pairing.revoke_device(
+            bob.user_id,
+            device.device_id,
+            now=NOW + timedelta(seconds=2),
+        )
+
+
 def test_mobile_pairing_requires_tls_for_remote_origin() -> None:
     auth = _service()
     user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
