@@ -196,6 +196,32 @@ def add_auth_parsers(
     credential_revoke = credential_commands.add_parser("revoke", help="revoke one credential")
     credential_revoke.add_argument("credential_id")
 
+    mobile = auth_commands.add_parser(
+        "mobile",
+        help="pair and manage mobile companion devices",
+    )
+    mobile_commands = mobile.add_subparsers(dest="mobile_command", required=True)
+    mobile_pair = mobile_commands.add_parser(
+        "pair",
+        help="create a short-lived mobile pairing code/QR payload",
+    )
+    mobile_pair.add_argument(
+        "--server-origin",
+        help="public Control Plane origin encoded into the pairing payload; defaults to profile endpoint",
+    )
+    mobile_cancel = mobile_commands.add_parser(
+        "cancel",
+        help="cancel one unused mobile pairing challenge",
+    )
+    mobile_cancel.add_argument("pairing_id")
+    mobile_commands.add_parser("list", help="list paired mobile devices")
+    mobile_rename = mobile_commands.add_parser("rename", help="rename one paired mobile device")
+    mobile_rename.add_argument("device_id")
+    mobile_rename.add_argument("--name", required=True)
+    mobile_revoke = mobile_commands.add_parser("revoke", help="revoke one paired mobile device")
+    mobile_revoke.add_argument("device_id")
+    mobile_commands.add_parser("revoke-all", help="revoke all active paired mobile devices")
+
     token = auth_commands.add_parser(
         "token",
         help="activate or clear an already-issued bearer/service credential",
@@ -428,6 +454,56 @@ def _execute_auth(
         renderer.success(client.post(f"/auth/sessions/{_segment(args.session_id)}:revoke"))
         return 0
 
+    if args.command == "mobile":
+        if args.mobile_command == "pair":
+            server_origin = args.server_origin or _endpoint_origin(profile.endpoint)
+            renderer.success(
+                client.post(
+                    "/auth/mobile-pairings",
+                    body={"server_origin": server_origin},
+                )
+            )
+            return 0
+        if args.mobile_command == "cancel":
+            renderer.success(
+                client.post(
+                    f"/auth/mobile-pairings/{_segment(args.pairing_id)}:cancel"
+                )
+            )
+            return 0
+        if args.mobile_command == "list":
+            renderer.success(client.get("/auth/mobile-devices"))
+            return 0
+        if args.mobile_command == "rename":
+            renderer.success(
+                client.post(
+                    f"/auth/mobile-devices/{_segment(args.device_id)}:rename",
+                    body={"display_name": args.name},
+                )
+            )
+            return 0
+        if args.mobile_command == "revoke":
+            _require_confirmation(
+                args,
+                f"revoke mobile device {args.device_id}",
+                stdin=stdin,
+                stdout=renderer.stdout,
+            )
+            renderer.success(
+                client.post(
+                    f"/auth/mobile-devices/{_segment(args.device_id)}:revoke"
+                )
+            )
+            return 0
+        _require_confirmation(
+            args,
+            "revoke all active mobile devices",
+            stdin=stdin,
+            stdout=renderer.stdout,
+        )
+        renderer.success(client.post("/auth/mobile-devices:revoke-all"))
+        return 0
+
     if args.command == "credential":
         if args.credential_command == "list":
             renderer.success(client.get("/auth/credentials"))
@@ -520,6 +596,15 @@ def _execute_approval(
         body=body,
         idempotency_key=args.idempotency_key,
     )
+
+
+def _endpoint_origin(endpoint: str) -> str:
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        raise ProfileError("profile endpoint must be an absolute URL")
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _safe_local_auth_status(
