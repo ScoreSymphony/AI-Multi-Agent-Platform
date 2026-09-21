@@ -1,6 +1,6 @@
 # Evaluation reproducibility and EvalManifest
 
-Issue #594 hardens the existing #19 Evaluation framework. It does not introduce a second evaluation lifecycle. `EvaluationCase`, `EvaluationSuite`, `EvaluationRun`, `EvaluationAttempt`, `EvaluationResult`, aggregation and regression remain owned by #19; `EvalManifest` is immutable reproducibility evidence bound to one `EvaluationRun`.
+This reproducibility layer hardens the canonical Evaluation framework without introducing a second evaluation lifecycle. `EvaluationCase`, `EvaluationSuite`, `EvaluationRun`, `EvaluationAttempt`, `EvaluationResult`, aggregation and regression remain owned by the Evaluation domain; `EvalManifest` is immutable reproducibility evidence bound to one `EvaluationRun`.
 
 ## Goals
 
@@ -83,7 +83,7 @@ Read projections retain raw per-repeat outcomes and also provide explanatory sta
 - mean score when all samples expose scores;
 - population score variance when all samples expose scores.
 
-These statistics are derived evidence only. Raw `EvaluationResult` records remain the source evidence, and regression semantics continue to require an explicit `AggregationPolicy` when repeated samples are compared through the #19 regression engine.
+These statistics are derived evidence only. Raw `EvaluationResult` records remain the source evidence, and regression semantics continue to require an explicit `AggregationPolicy` when repeated samples are compared through the canonical regression engine.
 
 ## Manifest comparison
 
@@ -127,11 +127,11 @@ Paired A/B evaluations should use the same repeat policy, fixture/source evidenc
 
 ## Regression integration
 
-`EvaluationRunner` and `EvaluationService.compare_runs()` gate #19 regression/improvement claims on manifest compatibility first.
+`EvaluationRunner` and `EvaluationService.compare_runs()` gate regression/improvement claims on manifest compatibility first.
 
 - `unknown`: a comparison claim is rejected because canonical manifest evidence is missing.
 - `incomparable`: the claim is rejected and blocking fields are reported.
-- `directly_comparable` / `comparable_with_warnings`: the normal #19 regression engine may proceed.
+- `directly_comparable` / `comparable_with_warnings`: the normal regression engine may proceed.
 
 Repeated comparisons still require an explicit `AggregationPolicy`. If that policy requires equal sample counts, the runner checks the **actual completed repetition count**, including after stability-based early stopping.
 
@@ -159,13 +159,13 @@ No CLI or Web surface owns provider sessions, evaluator internals or a second ev
 
 The existing reference deterministic CI profile remains no-paid-service capable. It can produce canonical manifests using local/reference components and does not require a model judge or external provider.
 
-This #594 hardening does not change the ownership of CI or performance methodology. #440 remains responsible for performance benchmarks; the manifest only classifies environment/resource drift when performance-sensitive comparison is requested.
+This reproducibility hardening does not change the ownership of CI or performance methodology. Performance benchmarks remain owned by the benchmark subsystem; the manifest only classifies environment/resource drift when performance-sensitive comparison is requested.
 
 ## Compatibility and migration notes
 
 - `EvalManifest` schema `1.0` remains readable.
 - New manifests are emitted as schema `1.1`.
-- Existing #19 `EvaluationRun`/`EvaluationResult` persistence remains canonical.
+- Existing `EvaluationRun`/`EvaluationResult` persistence remains canonical.
 - Legacy `seed` inputs remain accepted but are explicitly classified as insufficient proof of provider seed control.
 - Comparison-policy references remain visible evidence but are not treated as candidate execution drift.
 - No provider-private session ID becomes a canonical identifier as part of this migration.

@@ -20,12 +20,14 @@ The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, 
 > Status snapshot: 2026-09-20
 
 The usable single-node prototype gate has passed and is maintained by the repository's
-prototype-acceptance profiles. The planned `0.1.0` prototype milestone was never formally
-published or tagged.
+prototype-acceptance profiles. The planned platform `0.1.0` prototype milestone was never formally published or tagged.
+Optional Android client artifacts may be published independently under `mobile-v*` tags; those
+client releases do not constitute a platform release and do not change the V1 baseline.
 
 The full platform-conformance gate required by the version policy for the operational
-baseline, is complete. Because the repository has progressed beyond the prototype gate without an
-intervening formal release, the first formal publication now targets **`1.0.0`**.
+baseline is complete. Because the platform has progressed beyond the prototype gate without an
+intervening formal platform release, the first formal platform publication now targets
+**`1.0.0`**.
 The project will not create a retroactive `0.1.0` release merely to preserve the old planned
 sequence.
 

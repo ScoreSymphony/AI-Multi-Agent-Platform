@@ -92,13 +92,13 @@ They may evolve without public deprecation as long as changes preserve the compa
 
 ## Relationship to repository `0.x` versioning
 
-The repository currently declares package version `0.0.1`, and no formal GitHub release has yet been published. The repository/package version and feature stability therefore answer different questions.
+The repository currently declares platform package version `0.0.1`, and no formal platform release has yet been published. Separately versioned optional client artifacts such as `mobile-v*` releases do not change the platform release train or the stability classification of server/runtime surfaces. The repository/package version and feature stability therefore answer different questions.
 
 - The repository version describes the release train as a whole.
 - A feature stability label describes the compatibility promise for a specific named public surface.
 - `0.x` must **not** be interpreted as “every public surface is Experimental”.
 - A Stable surface can have stricter compatibility rules than the repository's package-level `0.x` version would imply in generic Semantic Versioning.
-- Before the first published release, Stable classifications are contributor-facing compatibility commitments for changes landing on `main`; after publication they also become release-to-release commitments for releases containing the surface.
+- Before the first published platform release, Stable classifications are contributor-facing compatibility commitments for changes landing on `main`; after platform publication they also become release-to-release commitments for platform releases containing the surface.
 - A `0.x` minor release may contain intentional breaking changes to Beta/Experimental surfaces under the rules above, but must not silently break a Stable surface or bypass a stricter surface-specific versioning mechanism. Stable surfaces use their own versioned replacement/deprecation mechanism.
 - Repository patch releases remain backward-compatible fixes across all documented public surfaces except unavoidable security/correctness emergencies.
 

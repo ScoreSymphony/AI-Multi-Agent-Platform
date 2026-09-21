@@ -1,8 +1,13 @@
 # Android APK distribution
 
 Mobile baseline: optional mobile client profile
-Terminal physical-device acceptance: validated separately from distribution workflow acceptance
-The Android companion is distributed directly through GitHub Releases. Google Play, an app-store
+Distribution status: signed `mobile-v0.1.0` and `mobile-v0.1.1` artifacts have been published
+Terminal physical-device/update acceptance: separate evidence gate; not established by release publication
+
+The Android companion is distributed directly through GitHub Releases. Published signed APKs prove
+the distribution/signing path; they do not by themselves establish complete data-preserving
+N -> N+1 update support. That support remains acceptance-gated on retained real-device update
+evidence and is not part of the required platform V1 baseline. Google Play, an app-store
 account, Expo EAS and any other paid build/distribution service are not required.
 
 ## Release identity
@@ -85,7 +90,7 @@ directory, never uploads it, and never exposes these secrets to pull-request job
 
 The key owner is the repository release owner/maintainers, not CI. Keep at least two encrypted,
 offline backups in separate locations plus the password/recovery information under equivalent
-access controls. Test restore access before the first official release.
+access controls. Retain periodic restore-access evidence and verify recovery material before any signer recovery or planned rotation; do not assume an untested backup is usable.
 
 ### Rotation and loss
 
@@ -192,7 +197,7 @@ verification and wrong-signer distinction without exposing production material. 
 publication additionally proves protected-key signing, signer continuity after the first release,
 checksum generation and expected GitHub Release assets.
 
-Clean install/launch against a remote Control Plane and N -> N+1 data-preserving update are retained
-as real-device evidence. The terminal physical Android/VPS journey, including a wrong-signature
-update rejection on a real device, is validated separately so the distribution workflow is not confused
-with product-level device acceptance.
+Clean install/launch against a remote Control Plane and N -> N+1 data-preserving update require
+retained real-device evidence. The terminal physical Android/VPS journey, including a
+wrong-signature update rejection on a real device, must be validated separately so the distribution
+workflow is not confused with product-level device acceptance.

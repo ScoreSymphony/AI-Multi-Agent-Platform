@@ -46,7 +46,9 @@ the protected GitHub release workflow; local/debug workflows do not have the pro
 
 Direct APK distribution, signing-key custody, checksum/signature verification and update
 semantics are documented in
-`docs/operations/MOBILE_ANDROID_DISTRIBUTION.md`.
+`docs/operations/MOBILE_ANDROID_DISTRIBUTION.md`. Signed `mobile-v*` artifacts are optional
+client releases, not the platform `1.0.0` release. Complete data-preserving in-place update
+support remains acceptance-gated on retained real-device evidence.
 
 ## Authentication and secrets
 

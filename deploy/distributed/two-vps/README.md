@@ -1,17 +1,13 @@
 # Two-VPS private-tunnel reference topology
 
-Repository preparation: #562  
-Real reference-host execution and retained live evidence: #829
-
 This directory contains a credential-free **deployment reference**, not a new platform contract.
-The canonical #14 Node/Worker/scheduler path, #35 transport, #36 service authentication, #15
-authorization and #240 distributed composition remain authoritative.
+The canonical Node/Worker/scheduler path, message transport, service authentication, authorization
+and distributed composition remain authoritative.
 
-Issue #562 owns this repository-side topology, placeholder configuration and validation tooling.
-Issue #829 owns actually deploying the topology on independent VPS/reference hosts and retaining the
-sanitized live evidence. The `issue562-*` evidence/schema names remain stable because they identify
-the repository contract introduced by #562; they do not imply that physical-host execution is still
-owned by #562.
+Repository-side topology, placeholder configuration and validation tooling are maintained here.
+Real reference-host execution is retained as sanitized external evidence. Existing `issue562-*`
+evidence/schema names remain stable historical evidence identifiers; they do not define current
+runtime ownership or require the issue tracker to operate this topology.
 
 The reference uses WireGuard because it is self-hosted and easy to reproduce. WireGuard is not a
 canonical dependency: another private tunnel may be substituted when it preserves the same network
@@ -38,7 +34,8 @@ canonical Node/Worker/Task/Run identity.
 
 The complete operator procedure, firewall matrix, failure/recovery phases and evidence commands are
 in [`docs/operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md`](../../../docs/operations/TWO_VPS_PRIVATE_TUNNEL_ACCEPTANCE.md).
-That runbook is prepared under #562 and executed on real hosts under #829.
+That runbook defines both repository-side preparation and the separately retained real-host
+execution evidence.
 
 ## Network invariant
 
@@ -51,9 +48,9 @@ Host A Control Plane / scheduler
           | private tunnel only
           +---- Worker protocol HTTPS ----+
           |                               |
-          +---- #35 message transport ----+----> Host B canonical Worker
+          +---- message transport ----+----> Host B canonical Worker
 ```
 
 Tunnel encryption does not replace platform/service identity. The remote reporter still uses the
-#36 Worker credential and #15 authorization. The message transport still uses its supported TLS +
+canonical Worker credential and authorization. The message transport still uses its supported TLS +
 HMAC and/or mTLS mode.

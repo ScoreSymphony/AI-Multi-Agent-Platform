@@ -52,9 +52,12 @@ Baseline defaults:
 
 `InMemoryAuthenticationStore` is the deterministic reference store used by unit and
 contract fixtures. It deliberately stores only password/token verifiers and safe
-credential metadata. Production persistence can replace this storage boundary without
-changing `AuthenticatedActor`, credential formats or Control Plane authentication
-semantics. A production deployment must bind authentication state to its durable persistence profile before claiming restart-persistent account storage.
+credential metadata. The supported single-node composition uses
+`SqliteAuthenticationStore` at `db/authentication.sqlite3`, so local accounts, browser
+sessions, credentials, pairing challenges and paired-device metadata use durable authentication
+persistence across normal restarts. Other deployment profiles may replace this storage boundary
+without changing `AuthenticatedActor`, credential formats or Control Plane authentication
+semantics.
 
 Credential scope is part of the authoritative `StoredCredential` record and must be
 persisted atomically with the credential. A durable implementation must never persist a
@@ -62,12 +65,16 @@ credential while dropping or defaulting away its scope because that could widen 
 
 ## First-user bootstrap and recovery
 
-For an empty authentication store, `bootstrap_first_admin(username, password)` creates the
-first local user. It is allowed exactly while no local users exist.
+At the low-level authentication service boundary, `bootstrap_first_admin(username, password)`
+creates only the first local user and is allowed exactly while no local users exist. Successful
+authentication by itself never grants authorization.
 
-The name describes the operator bootstrap flow, not a permission grant. The deployment
-bootstrap must separately install an explicit authorization policy for whichever administrator
-rights are desired.
+The supported browser-first and operator bootstrap composition uses
+`FirstUserBootstrapService` around that authentication primitive. It coordinates the durable
+authentication and authorization stores, installs the explicit initial administrator policy,
+establishes the browser session, and can recover the narrow partial state where the first account
+was persisted but its initial policy was not. `GET /api/v1/auth/bootstrap-status` exposes only
+the minimal public initialization state needed by clients.
 
 Password recovery is intentionally not exposed as an unauthenticated HTTP endpoint.
 A trusted local/operator recovery workflow calls:
@@ -220,8 +227,10 @@ It authenticates the request first and then delegates authorization and the oper
 the current Control Plane composition rather than inheriting authority from a historical
 HTTP implementation.
 
-Public endpoints are limited to the platform root/health/readiness/OpenAPI plus local
-bootstrap/login. Protected requests authenticate using either:
+Public endpoints are limited to the platform root/health/readiness/OpenAPI, first-user
+bootstrap status/bootstrap, login, and one-time Mobile pairing consumption. Mobile pairing
+consumption is authorized by its short-lived single-use pairing proof rather than by an existing
+browser session or bearer credential. Other protected requests authenticate using either:
 
 ```text
 Authorization: Bearer <personal/service/worker/... credential>
@@ -242,6 +251,7 @@ contracts internally.
 ### Local auth routes
 
 ```text
+GET  /api/v1/auth/bootstrap-status
 POST /api/v1/auth/bootstrap-admin
 POST /api/v1/auth/login
 GET  /api/v1/auth/me

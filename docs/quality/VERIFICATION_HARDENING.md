@@ -1,6 +1,6 @@
 # Canonical Verification hardening
 
-This document records the post-#224 hardening required to make issue #86 effective in the production-shaped reference composition, not only in isolated Verification tests.
+This document records the hardening required to make canonical Verification effective in the production-shaped reference composition, not only in isolated Verification tests.
 
 ## Standard single-node composition
 
@@ -9,8 +9,8 @@ This document records the post-#224 hardening required to make issue #86 effecti
 - `SqliteVerificationService` stores policies, requests, immutable results and audit history in `verification.sqlite3`;
 - `SqliteVerificationCompletionAuthority` stores Task-to-policy/exact-subject requirements in the same durable Verification database namespace;
 - `PlatformKernel` receives that completion authority, so every task-level success path is subject to the canonical Verification gate;
-- the Verification Control Plane collections and human-review commands are registered on the existing #32 extension seam;
-- `VerificationTimelineReader` is bound to the existing #16 timeline projection;
+- the Verification Control Plane collections and human-review commands are registered on the existing Control Plane extension seam;
+- `VerificationTimelineReader` is bound to the existing observability timeline projection;
 - `CanonicalVerificationRuntime` and `KernelFileVerificationEvidenceResolver` are exposed by the deployment for safe request creation.
 
 Tasks with no Verification requirement preserve the existing success behavior. Merely enabling the completion authority does not force review globally.
@@ -58,7 +58,7 @@ Expired requests therefore have an explicit deterministic completion-policy effe
 
 These hardenings do not move Task lifecycle ownership into Verification. Verification derives and records evidence and returns deterministic completion decisions. `PlatformKernel` remains the only canonical component that emits Task lifecycle transitions.
 
-A rejected Verification continues to block the Task as canonical `WAITING` with `verification:rejected`; it does not rewrite a successful execution Run as failed. This preserves the established distinction between execution truth and acceptance truth. A later policy or product decision may introduce a separate terminal acceptance transition, but #86 does not silently reinterpret `RunStatus.SUCCEEDED`.
+A rejected Verification continues to block the Task as canonical `WAITING` with `verification:rejected`; it does not rewrite a successful execution Run as failed. This preserves the established distinction between execution truth and acceptance truth. A later policy or product decision may introduce a separate terminal acceptance transition, but the Verification contract does not silently reinterpret `RunStatus.SUCCEEDED`.
 
 ## Regression coverage
 
@@ -97,6 +97,6 @@ Kernel `result.attached` and `artifact.attached` mutations notify completion aut
 
 Output invalidation is ordered before the canonical `result.attached` / `artifact.attached` commit. If Verification invalidation cannot be completed, the changed output is not committed and the previously verified output remains canonical. If the kernel commit fails after a successful invalidation, the system instead fails closed: the old binding stays cleared and the unchanged output must be reverified rather than allowing an unverified output to inherit an older PASS.
 
-`VerificationPolicy.risk_classification` uses the existing #15 `RiskClassification` vocabulary. `ReviewerIndependence.forbid_self_verification_risk_classes` can forbid self-verification only for selected policy risk classes while preserving lower-risk policy behavior.
+`VerificationPolicy.risk_classification` uses the canonical `RiskClassification` vocabulary. `ReviewerIndependence.forbid_self_verification_risk_classes` can forbid self-verification only for selected policy risk classes while preserving lower-risk policy behavior.
 
 Reviewer Teams are coordination context, not a new lifecycle authority. `ReviewerAgentRuntime.start_review()` can pin a concrete reviewer Agent to an exact Agent Team revision; membership and member revision are validated before execution, the resulting `AgentRunRecord.team` preserves Team provenance, and the canonical `VerificationResult` remains attributable to the concrete reviewer Agent.

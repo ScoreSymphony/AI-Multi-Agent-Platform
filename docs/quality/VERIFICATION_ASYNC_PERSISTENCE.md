@@ -1,6 +1,6 @@
 # Verification async persistence
 
-Issue #892 moves persistence-bearing Verification work out of asyncio runtime hotpaths without replacing the canonical #86 Verification lifecycle.
+Persistence-bearing Verification work is kept out of asyncio runtime hotpaths without replacing the canonical Verification lifecycle.
 
 ## Runtime boundary
 
@@ -48,13 +48,13 @@ The synchronous `PolicyMetadataReviewerResolver` remains a compatibility seam. `
 
 ## Repository provenance boundary
 
-Two asynchronous coding-batch Verification consumers first read canonical #82 repository-run provenance: `CanonicalRepositoryOutputVerifier.ensure_request()` and `CanonicalCodingVerificationCoordinator.ensure_request()`. Repository/Git provenance owns that storage boundary, so Verification does not introduce a second provenance executor.
+Two asynchronous coding-batch Verification consumers first read canonical repository-run provenance: `CanonicalRepositoryOutputVerifier.ensure_request()` and `CanonicalCodingVerificationCoordinator.ensure_request()`. Repository/Git provenance owns that storage boundary, so Verification does not introduce a second provenance executor.
 
-The Repository Provenance #892 track provides `AsyncRepositoryProvenanceGetReader` and `as_async_repository_provenance_get_reader(...)`. Both coding-batch Verification bridges normalize their synchronous compatibility reader through that Repository-owned runtime boundary and await it from `ensure_request()`. A native async Repository backend may be supplied directly through the same contract. Existing synchronous completion/offline methods continue to use the synchronous reader where their API is intentionally synchronous.
+The Repository Provenance runtime provides `AsyncRepositoryProvenanceGetReader` and `as_async_repository_provenance_get_reader(...)`. Both coding-batch Verification bridges normalize their synchronous compatibility reader through that Repository-owned runtime boundary and await it from `ensure_request()`. A native async Repository backend may be supplied directly through the same contract. Existing synchronous completion/offline methods continue to use the synchronous reader where their API is intentionally synchronous.
 
 This keeps SQLite repository-provenance reads off the event loop while preserving storage ownership: Verification persistence uses `verification-persistence`, and Repository provenance persistence uses the separately owned bounded `repository-provenance-persistence` boundary.
 
-## Verification evidence for #892
+## Verification evidence
 
 Integration coverage exercises:
 
