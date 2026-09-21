@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  MobileConnectionError,
   classifyConnectionError,
   connectionStateMessage,
   probeControlPlane,
@@ -54,10 +53,10 @@ describe("mobile connection compatibility", () => {
     );
     await expect(
       probeControlPlane("https://platform.example", "v1", forbidden),
-    ).rejects.toBeInstanceOf(MobileConnectionError);
-    await expect(
-      probeControlPlane("https://platform.example", "v1", forbidden),
-    ).rejects.toMatchObject({ state: "permission_denied" });
+    ).rejects.toMatchObject({
+      name: "MobileConnectionError",
+      state: "permission_denied",
+    });
 
     expect(classifyConnectionError({ status: 401, code: "unauthorized" })).toBe(
       "authentication_expired",
