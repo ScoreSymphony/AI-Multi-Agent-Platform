@@ -593,6 +593,45 @@ export default function App() {
             Pair this phone from an already authenticated Web or CLI session. The QR/code is
             short-lived and single-use; the resulting device credential is kept in OS secure storage.
           </Text>
+          <Text style={styles.muted}>
+            App {MOBILE_APP_VERSION} · Android build {MOBILE_ANDROID_VERSION_CODE} · Control Plane {SUPPORTED_CONTROL_PLANE_API_VERSION}
+          </Text>
+          <Text style={styles.notice}>{connectionStateMessage(connectionState)}</Text>
+
+          {profiles.length ? (
+            <Section title="Saved platforms">
+              {profiles.map((profile) => (
+                <View key={profile.id} style={styles.card}>
+                  <Text style={styles.cardTitle}>{profile.displayName}</Text>
+                  <Text selectable>{profile.baseUrl}</Text>
+                  <Text style={styles.muted}>
+                    API {profile.apiVersion ?? "not checked"} · Last connected {profile.lastSuccessfulConnection ?? "never"}
+                  </Text>
+                  <View style={styles.actions}>
+                    <Button
+                      title={busy && activeProfile?.id === profile.id ? "Connecting…" : "Connect"}
+                      onPress={() => void connectProfile(profile.id)}
+                      disabled={busy}
+                    />
+                    <Button
+                      title="Remove"
+                      onPress={() => void removeProfile(profile.id)}
+                      disabled={busy}
+                    />
+                  </View>
+                </View>
+              ))}
+            </Section>
+          ) : null}
+
+          <Section title="Add or pair platform">
+            <Text style={styles.label}>Profile name</Text>
+            <TextInput
+              value={profileName}
+              onChangeText={setProfileName}
+              style={styles.input}
+              placeholder="Home VPS"
+            />
 
           <Text style={styles.label}>Device name</Text>
           <TextInput
@@ -666,6 +705,38 @@ export default function App() {
             onPress={() => void pairFallbackCode()}
             disabled={busy}
           />
+          </Section>
+
+          <Section title="App updates">
+            <Text style={styles.muted}>
+              Update discovery reads only official GitHub Release metadata. Installation always remains an explicit Android sideload action.
+            </Text>
+            <Button
+              title={checkingUpdate ? "Checking…" : "Check official GitHub releases"}
+              onPress={() => void checkForUpdates()}
+              disabled={checkingUpdate}
+            />
+            {updateInfo ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>{updateInfo.message}</Text>
+                {updateInfo.apkSha256 ? (
+                  <Text selectable>APK SHA-256: {updateInfo.apkSha256}</Text>
+                ) : null}
+                {updateInfo.releasePageUrl ? (
+                  <Button
+                    title="Open official release"
+                    onPress={() => void openOfficialUpdate(updateInfo.releasePageUrl!)}
+                  />
+                ) : null}
+                {updateInfo.state === "update_available" && updateInfo.apkUrl ? (
+                  <Button
+                    title="Download official APK"
+                    onPress={() => void openOfficialUpdate(updateInfo.apkUrl!)}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </Section>
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </ScrollView>
       </SafeAreaView>
@@ -676,8 +747,9 @@ export default function App() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>AI Multi-Agent Platform</Text>
+          <Text style={styles.headerTitle}>{activeProfile?.displayName ?? "AI Multi-Agent Platform"}</Text>
           <Text style={styles.muted}>{actor.actor_type}:{actor.actor_id}</Text>
+          <Text style={styles.muted}>{connectionStateMessage(connectionState)}</Text>
         </View>
         <Button title="Sign out" onPress={() => void signOut()} />
       </View>
@@ -706,6 +778,70 @@ export default function App() {
 
         {tab === "dashboard" ? (
           <>
+            <Section title="Connection">
+              <Text>Profile: {activeProfile?.displayName ?? "unknown"}</Text>
+              <Text selectable>Server: {activeProfile?.baseUrl ?? client.baseUrl}</Text>
+              <Text>App: {MOBILE_APP_VERSION} · Android build {MOBILE_ANDROID_VERSION_CODE}</Text>
+              <Text>Control Plane API: {compatibility?.apiVersion ?? "not checked"}</Text>
+              <Text>
+                Advertised resources: {compatibility?.resources.length ?? 0}
+              </Text>
+              {profiles.length > 1 ? (
+                <>
+                  <Text style={styles.label}>Switch platform</Text>
+                  <View style={styles.actions}>
+                    {profiles
+                      .filter((profile) => profile.id !== activeProfile?.id)
+                      .map((profile) => (
+                        <Button
+                          key={profile.id}
+                          title={profile.displayName}
+                          onPress={() => void connectProfile(profile.id)}
+                          disabled={busy}
+                        />
+                      ))}
+                  </View>
+                </>
+              ) : null}
+            </Section>
+            <Section title="App updates">
+              <Text style={styles.muted}>
+                Official GitHub Release metadata only. No APK is ever installed automatically.
+              </Text>
+              <Button
+                title={checkingUpdate ? "Checking…" : "Check for update"}
+                onPress={() => void checkForUpdates()}
+                disabled={checkingUpdate}
+              />
+              {updateInfo ? (
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>{updateInfo.message}</Text>
+                  {updateInfo.latestVersion ? (
+                    <Text>Latest official mobile version: {updateInfo.latestVersion}</Text>
+                  ) : null}
+                  {updateInfo.apkSha256 ? (
+                    <Text selectable>APK SHA-256: {updateInfo.apkSha256}</Text>
+                  ) : null}
+                  {updateInfo.releaseNotes ? (
+                    <Text>{updateInfo.releaseNotes}</Text>
+                  ) : null}
+                  <View style={styles.actions}>
+                    {updateInfo.releasePageUrl ? (
+                      <Button
+                        title="Release notes"
+                        onPress={() => void openOfficialUpdate(updateInfo.releasePageUrl!)}
+                      />
+                    ) : null}
+                    {updateInfo.state === "update_available" && updateInfo.apkUrl ? (
+                      <Button
+                        title="Download APK"
+                        onPress={() => void openOfficialUpdate(updateInfo.apkUrl!)}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+            </Section>
             <Section title="Status">
               <Text>Control Plane: {health}</Text>
               <Text>Tasks: {tasks.length}</Text>
