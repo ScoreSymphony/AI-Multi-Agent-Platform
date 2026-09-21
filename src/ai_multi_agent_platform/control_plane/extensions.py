@@ -36,7 +36,6 @@ from .http import (
     _require_supported_version,
     _split_version,
 )
-from .openapi_errors import ensure_method_not_allowed_responses
 from .models import (
     API_VERSION,
     APIException,
@@ -45,6 +44,7 @@ from .models import (
     api_exception_from_contract,
     paginate,
 )
+from .openapi_errors import ensure_method_not_allowed_responses
 from .openapi import build_openapi as build_base_openapi
 from .service import ControlPlane as BaseControlPlane
 from .service import ScopeStore
