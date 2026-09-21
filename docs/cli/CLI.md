@@ -1,7 +1,5 @@
 # Canonical CLI
 
-Issue: #38
-
 The `platform` command is a northbound client of the versioned Control Plane. It must never use kernel repositories, databases, Hermes, Forge, MCP servers, model-provider SDKs, workers, or other backend-private interfaces directly.
 
 ```text
@@ -14,9 +12,9 @@ platform CLI
 canonical application services
 ```
 
-## Foundation scope
+## Scope and evolution
 
-This first #38 slice provides the CLI foundation that can be implemented solely on top of #32:
+The CLI foundation is built solely on the versioned Control Plane and remains the compatibility boundary for every later domain-specific command:
 
 - installable `platform` entry point;
 - local and remote non-secret target profiles;
@@ -237,22 +235,23 @@ platform-completion fish | source
 
 The helper completes the current command hierarchy, command options, and finite option choices such as `--direction` and `--owner-type`. Dynamic resource IDs are intentionally not fetched during tab completion, so completion cannot cause network access or administrative side effects.
 
-## Initial doctor contract
+## Doctor contract
 
-`platform doctor` currently validates the foundation that exists today:
+`platform doctor` validates the current Control Plane and composed operational surface:
 
-- CLI configuration parsed successfully;
-- `/api/v1` is reachable;
-- API major is compatible (`v1`);
-- canonical health endpoint responds;
-- canonical readiness endpoint responds.
+- CLI configuration parses successfully;
+- `/api/v1` is reachable and API-major compatible (`v1`);
+- canonical health and readiness endpoints respond with valid schemas;
+- canonical readiness state is classified as `healthy`, `degraded`, or `blocking`;
+- provider health and declared dependency health are evaluated with operator guidance;
+- when the compute surface is composed, canonical Node/Worker health and optional host-pressure state are inspected without treating an absent optional compute profile as a baseline failure.
 
-The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Provider/worker/auth/secret/permission checks are added only after the corresponding canonical platform domains exist.
+The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. A missing optional surface remains non-blocking; an invalid canonical health schema or failed required readiness dependency fails closed.
 
 ## Verification
 
 CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). Integration/contract tests exercise HTTP-style transports so the CLI remains on the real versioned Control Plane boundary rather than direct kernel or repository access.
 
-## Progressive #38 work still open
+## Extension model
 
-This document does not close #38. Later work should continue extending the same client when owning canonical APIs require additional CLI surfaces. Evaluation is now integrated through #19 and must remain API-first.
+Additional domain-specific commands may extend the same client as canonical APIs evolve. They must continue to use the versioned Control Plane, shared authentication/error/output contracts, and the composed parser tree rather than introducing direct backend access or a second command registry.
