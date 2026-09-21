@@ -324,6 +324,22 @@ def test_asgi_route_semantics_precede_malformed_json_validation() -> None:
         assert valid_route_status == 400
         assert valid_route["code"] == "invalid_json"
 
+        repeated_separator_status, repeated_separator = await invoke(
+            "POST",
+            "/api/v1//projects",
+            b"{",
+        )
+        assert repeated_separator_status == 400
+        assert repeated_separator["code"] == "invalid_json"
+
+        repeated_unknown_status, repeated_unknown = await invoke(
+            "POST",
+            "/api/v1//does-not-exist/nested",
+            b"{",
+        )
+        assert repeated_unknown_status == 404
+        assert repeated_unknown["code"] == "not_found"
+
         non_object_wrong_method_status, non_object_wrong_method = await invoke(
             "POST",
             "/api/v1/health",

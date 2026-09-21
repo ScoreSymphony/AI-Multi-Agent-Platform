@@ -151,11 +151,9 @@ class ControlPlaneRoute:
 
     def __post_init__(self) -> None:
         method = self.method.upper().strip()
-        path = self.path.rstrip("/") or "/"
+        path = _normalize_route_path(self.path)
         if not method:
             raise ValueError("Control Plane route method must be non-blank")
-        if not path.startswith("/"):
-            raise ValueError("Control Plane route path must be absolute")
         object.__setattr__(self, "method", method)
         object.__setattr__(self, "path", path)
 
@@ -633,7 +631,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                         segments[1],
                     )
                     return self._response(200, item, request_id, correlation_id)
-                normalized_path = request.path.rstrip("/") or "/"
+                normalized_path = _normalize_route_path(request.path)
                 registered_routes = getattr(
                     self._extended_control_plane,
                     "registered_routes",
@@ -696,7 +694,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
             and base_response.body.get("message") == "route not found"
         )
         if is_route_not_found:
-            normalized_path = request.path.rstrip("/") or "/"
+            normalized_path = _normalize_route_path(request.path)
             registered_routes = getattr(
                 self._extended_control_plane,
                 "registered_routes",
@@ -916,13 +914,17 @@ def _claim(
     claims[key] = owner
 
 
+def _normalize_route_path(path: str) -> str:
+    if not path.startswith("/"):
+        raise ValueError("Control Plane route path must be absolute")
+    return "/" + "/".join(segment for segment in path.split("/") if segment)
+
+
 def _route_key(method: str, path: str) -> tuple[str, str]:
     normalized_method = method.upper().strip()
-    normalized_path = path.rstrip("/") or "/"
+    normalized_path = _normalize_route_path(path)
     if not normalized_method:
         raise ValueError("Control Plane route method must be non-blank")
-    if not normalized_path.startswith("/"):
-        raise ValueError("Control Plane route path must be absolute")
     return normalized_method, normalized_path
 
 
