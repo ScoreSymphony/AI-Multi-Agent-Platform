@@ -147,13 +147,25 @@ class TaskBudgetEnforcementService(TaskBudgetAdmission):
         reservations = await asyncio.to_thread(self._store.list_reservations, task_id)
         dimensions: list[BudgetDimensionSnapshot] = []
         for limit in policy.limits:
-            consumption = await self._consumption(policy, limit, observed_at=now)
-            reserved = sum(
-                reservation.quantity
-                for reservation in reservations
-                if reservation.dimension is limit.dimension
-                and reservation.state is ReservationState.ACTIVE
-            )
+            if limit.source is BudgetConsumptionSource.RUNTIME_COUNTER:
+                consumed, reserved = await asyncio.to_thread(
+                    self._store.runtime_counter_snapshot,
+                    task_id,
+                    limit.dimension,
+                    now,
+                )
+                consumption = BudgetConsumption(
+                    consumed=consumed,
+                    source=limit.source,
+                )
+            else:
+                consumption = await self._consumption(policy, limit, observed_at=now)
+                reserved = sum(
+                    reservation.quantity
+                    for reservation in reservations
+                    if reservation.dimension is limit.dimension
+                    and reservation.state is ReservationState.ACTIVE
+                )
             dimensions.append(
                 BudgetDimensionSnapshot(
                     limit=limit,
