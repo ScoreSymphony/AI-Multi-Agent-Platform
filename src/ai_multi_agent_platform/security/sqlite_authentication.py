@@ -175,7 +175,8 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
                     metadata_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(user_id) REFERENCES auth_users(user_id) ON DELETE CASCADE,
-                    FOREIGN KEY(credential_id) REFERENCES auth_credentials(credential_id) ON DELETE CASCADE
+                    FOREIGN KEY(credential_id)
+                        REFERENCES auth_credentials(credential_id) ON DELETE CASCADE
                 );
                 CREATE TABLE IF NOT EXISTS auth_external_mappings (
                     provider_id TEXT NOT NULL,
@@ -258,8 +259,9 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
     def _load_mobile_pairings(self) -> dict[str, MobilePairingChallenge]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT pairing_id, user_id, server_origin, secret_verifier, created_at, expires_at, "
-                "protocol_version, consumed_at, cancelled_at, failed_attempts, correlation_id "
+                "SELECT pairing_id, user_id, server_origin, secret_verifier, created_at, "
+                "expires_at, protocol_version, consumed_at, cancelled_at, failed_attempts, "
+                "correlation_id "
                 "FROM auth_mobile_pairings"
             ).fetchall()
         return {
