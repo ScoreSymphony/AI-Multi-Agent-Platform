@@ -84,7 +84,9 @@ def test_status_document_declares_maintained_sources_without_tracker_ownership()
 
 def test_status_keeps_issue_and_pr_chronology_historical() -> None:
     status = (ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8")
-    assert "Issue- and pull-request-specific integration chronology is historical provenance" in status
+    assert (
+        "Issue- and pull-request-specific integration chronology is historical provenance" in status
+    )
     assert "github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/" not in status
     assert "github.com/ScoreSymphony/AI-Multi-Agent-Platform/pull/" not in status
     assert "The #728 staging branch is kept synchronized" not in status
@@ -100,7 +102,6 @@ def test_roadmap_points_to_maintained_guidance_without_live_tracker_semantics() 
     assert "[Release process](RELEASE_PROCESS.md)" in roadmap
     assert (
         "[`docs/history/issues/IMPLEMENTATION_ROADMAP_2026-09-07.md`]"
-        "(history/issues/IMPLEMENTATION_ROADMAP_2026-09-07.md)"
-        in roadmap
+        "(history/issues/IMPLEMENTATION_ROADMAP_2026-09-07.md)" in roadmap
     )
     assert "GitHub issues and their explicit dependencies are authoritative" not in roadmap
