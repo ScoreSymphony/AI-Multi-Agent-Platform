@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.security.authentication import AuthenticatedActor
+from ai_multi_agent_platform.security.authentication import (
+    AuthenticatedActor,
+    IssuedCredential,
+    MobilePairingGrant,
+)
 
 from .http import HTTPRequest, HTTPResponse
 from .models import API_VERSION
@@ -32,7 +37,7 @@ def handle_public_mobile_auth_route(
         protocol_version=_required_string(request.body, "protocol_version"),
         correlation_id=correlation_id,
     )
-    return owner._response(
+    return _typed_response(owner, 
         201,
         {
             "device": owner._authentication.mobile_pairing.safe_device(device),
@@ -63,7 +68,7 @@ async def handle_public_mobile_auth_route_async(
         protocol_version=_required_string(request.body, "protocol_version"),
         correlation_id=correlation_id,
     )
-    return owner._response(
+    return _typed_response(owner, 
         201,
         {
             "device": await owner._runtime_authentication.safe_mobile_device(device),
@@ -166,7 +171,7 @@ async def _handle_pairing_management(
             _required_string(request.body, "server_origin"),
             correlation_id=correlation_id,
         )
-        return owner._response(201, _pairing_grant(grant), request_id, correlation_id)
+        return _typed_response(owner, 201, _pairing_grant(grant), request_id, correlation_id)
 
     if request.method == "POST" and relative.startswith("/auth/mobile-pairings/"):
         pairing_id = relative.removeprefix("/auth/mobile-pairings/").removesuffix(":cancel")
@@ -186,7 +191,7 @@ async def _handle_pairing_management(
             pairing_id,
             correlation_id=correlation_id,
         )
-        return owner._response(
+        return _typed_response(owner, 
             200,
             {"id": pairing_id, "cancelled": True},
             request_id,
@@ -221,7 +226,7 @@ async def _handle_pairing_management_async(
             _required_string(request.body, "server_origin"),
             correlation_id=correlation_id,
         )
-        return owner._response(201, _pairing_grant(grant), request_id, correlation_id)
+        return _typed_response(owner, 201, _pairing_grant(grant), request_id, correlation_id)
 
     if request.method == "POST" and relative.startswith("/auth/mobile-pairings/"):
         pairing_id = relative.removeprefix("/auth/mobile-pairings/").removesuffix(":cancel")
@@ -241,7 +246,7 @@ async def _handle_pairing_management_async(
             pairing_id,
             correlation_id=correlation_id,
         )
-        return owner._response(
+        return _typed_response(owner, 
             200,
             {"id": pairing_id, "cancelled": True},
             request_id,
@@ -274,7 +279,7 @@ async def _handle_device_management(
             owner._authentication.mobile_pairing.safe_device(device)
             for device in owner._authentication.mobile_pairing.list_devices(user_id)
         ]
-        return owner._response(200, {"items": items}, request_id, correlation_id)
+        return _typed_response(owner, 200, {"items": items}, request_id, correlation_id)
 
     if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
         await _authorize_device_action(
@@ -290,7 +295,7 @@ async def _handle_device_management(
             user_id,
             correlation_id=correlation_id,
         )
-        return owner._response(200, {"revoked": count}, request_id, correlation_id)
+        return _typed_response(owner, 200, {"revoked": count}, request_id, correlation_id)
 
     return await _handle_one_device(
         owner,
@@ -327,7 +332,7 @@ async def _handle_device_management_async(
         items: list[JsonValue] = [
             await owner._runtime_authentication.safe_mobile_device(device) for device in devices
         ]
-        return owner._response(200, {"items": items}, request_id, correlation_id)
+        return _typed_response(owner, 200, {"items": items}, request_id, correlation_id)
 
     if request.method == "POST" and relative == "/auth/mobile-devices:revoke-all":
         await _authorize_device_action(
@@ -343,7 +348,7 @@ async def _handle_device_management_async(
             user_id,
             correlation_id=correlation_id,
         )
-        return owner._response(200, {"revoked": count}, request_id, correlation_id)
+        return _typed_response(owner, 200, {"revoked": count}, request_id, correlation_id)
 
     return await _handle_one_device_async(
         owner,
@@ -387,7 +392,7 @@ async def _handle_one_device(
             _required_string(request.body, "display_name"),
             correlation_id=correlation_id,
         )
-        return owner._response(
+        return _typed_response(owner, 
             200,
             owner._authentication.mobile_pairing.safe_device(device),
             request_id,
@@ -409,7 +414,7 @@ async def _handle_one_device(
             device_id,
             correlation_id=correlation_id,
         )
-        return owner._response(
+        return _typed_response(owner, 
             200,
             {"id": device_id, "revoked": True},
             request_id,
@@ -449,7 +454,7 @@ async def _handle_one_device_async(
             _required_string(request.body, "display_name"),
             correlation_id=correlation_id,
         )
-        return owner._response(
+        return _typed_response(owner, 
             200,
             await owner._runtime_authentication.safe_mobile_device(device),
             request_id,
@@ -471,7 +476,7 @@ async def _handle_one_device_async(
             device_id,
             correlation_id=correlation_id,
         )
-        return owner._response(
+        return _typed_response(owner, 
             200,
             {"id": device_id, "revoked": True},
             request_id,
@@ -574,6 +579,20 @@ def mobile_auth_openapi_paths(csrf_parameter: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _typed_response(
+    owner: Any,
+    status: int,
+    body: Any,
+    request_id: str,
+    correlation_id: str,
+) -> HTTPResponse:
+    responder = cast(
+        Callable[[int, Any, str, str], HTTPResponse],
+        owner._response,
+    )
+    return responder(status, body, request_id, correlation_id)
+
+
 async def _authorize(
     owner: Any,
     request: HTTPRequest,
@@ -596,7 +615,7 @@ async def _authorize(
     )
 
 
-def _pairing_grant(grant: Any) -> dict[str, JsonValue]:
+def _pairing_grant(grant: MobilePairingGrant) -> dict[str, JsonValue]:
     return {
         "id": grant.pairing_id,
         "server_origin": grant.server_origin,
@@ -608,7 +627,7 @@ def _pairing_grant(grant: Any) -> dict[str, JsonValue]:
     }
 
 
-def _issued_credential(issued: Any) -> dict[str, JsonValue]:
+def _issued_credential(issued: IssuedCredential) -> dict[str, JsonValue]:
     return {
         "id": issued.credential_id,
         "secret": issued.secret,
