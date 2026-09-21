@@ -227,8 +227,10 @@ It authenticates the request first and then delegates authorization and the oper
 the current Control Plane composition rather than inheriting authority from a historical
 HTTP implementation.
 
-Public endpoints are limited to the platform root/health/readiness/OpenAPI plus local
-bootstrap/login. Protected requests authenticate using either:
+Public endpoints are limited to the platform root/health/readiness/OpenAPI, first-user
+bootstrap status/bootstrap, login, and one-time Mobile pairing consumption. Mobile pairing
+consumption is authorized by its short-lived single-use pairing proof rather than by an existing
+browser session or bearer credential. Other protected requests authenticate using either:
 
 ```text
 Authorization: Bearer <personal/service/worker/... credential>
