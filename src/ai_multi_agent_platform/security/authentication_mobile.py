@@ -147,6 +147,51 @@ class MobilePairingService:
         correlation_id: str | None = None,
     ) -> tuple[PairedMobileDevice, IssuedCredential]:
         current = authentication_now(now)
+        display_name, supplied, rate_key = self._prepare_consumption(
+            pairing_id,
+            code,
+            device_name=device_name,
+            protocol_version=protocol_version,
+            now=current,
+        )
+        with self._lock:
+            challenge = self._validate_pairing_proof(
+                pairing_id,
+                supplied,
+                rate_key=rate_key,
+                now=current,
+                correlation_id=correlation_id,
+            )
+            device, issued = self._issue_mobile_device(
+                challenge,
+                display_name=display_name,
+                platform=platform,
+                metadata=metadata,
+                rate_key=rate_key,
+                now=current,
+            )
+
+        self.authentication._audit(
+            "auth.mobile_pairing_consumed",
+            now=current,
+            success=True,
+            actor_id=challenge.user_id,
+            subject_id=device.device_id,
+            credential_id=issued.credential_id,
+            correlation_id=correlation_id or challenge.correlation_id,
+            metadata={"platform": device.platform or "unknown"},
+        )
+        return device, issued
+
+    def _prepare_consumption(
+        self,
+        pairing_id: str | None,
+        code: str,
+        *,
+        device_name: str,
+        protocol_version: str,
+        now,
+    ) -> tuple[str, str, str]:
         if protocol_version != _PAIRING_PROTOCOL_VERSION:
             raise MobilePairingError("unsupported mobile pairing protocol version")
         display_name = device_name.strip()
@@ -156,90 +201,92 @@ class MobilePairingService:
         if not supplied:
             raise MobilePairingError("pairing code must not be blank")
         rate_key = f"mobile-pairing:{pairing_id or 'fallback'}"
-        if not self.authentication.rate_limiter.allow(rate_key, now=current):
+        if not self.authentication.rate_limiter.allow(rate_key, now=now):
             raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
+        return display_name, supplied, rate_key
 
-        with self._lock:
-            challenge = self._challenge_for_proof(pairing_id, supplied, current)
-            if challenge is None:
-                self.authentication.rate_limiter.record(rate_key, success=False, now=current)
-                raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
-            pairing_id = challenge.pairing_id
-            if challenge.cancelled_at is not None:
-                raise MobilePairingError("mobile pairing challenge is cancelled")
-            if challenge.consumed_at is not None:
-                raise AuthenticationError(AuthenticationFailure.REPLAY_REJECTED)
-            if current >= challenge.expires_at:
-                raise AuthenticationError(AuthenticationFailure.CREDENTIAL_EXPIRED)
-            if challenge.failed_attempts >= self.max_failed_attempts:
-                raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
+    def _validate_pairing_proof(
+        self,
+        pairing_id: str | None,
+        supplied: str,
+        *,
+        rate_key: str,
+        now,
+        correlation_id: str | None,
+    ) -> MobilePairingChallenge:
+        challenge = self._challenge_for_proof(pairing_id, supplied, now)
+        if challenge is None:
+            self.authentication.rate_limiter.record(rate_key, success=False, now=now)
+            raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
+        if challenge.cancelled_at is not None:
+            raise MobilePairingError("mobile pairing challenge is cancelled")
+        if challenge.consumed_at is not None:
+            raise AuthenticationError(AuthenticationFailure.REPLAY_REJECTED)
+        if now >= challenge.expires_at:
+            raise AuthenticationError(AuthenticationFailure.CREDENTIAL_EXPIRED)
+        if challenge.failed_attempts >= self.max_failed_attempts:
+            raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
+        if hmac.compare_digest(secret_verifier(supplied), challenge.secret_verifier):
+            return challenge
 
-            if not hmac.compare_digest(secret_verifier(supplied), challenge.secret_verifier):
-                failed = challenge.failed_attempts + 1
-                self.store.mobile_pairings[pairing_id] = replace(
-                    challenge,
-                    failed_attempts=failed,
-                )
-                self.authentication._audit(
-                    "auth.mobile_pairing_consumed",
-                    now=current,
-                    success=False,
-                    actor_id=challenge.user_id,
-                    subject_id=pairing_id,
-                    correlation_id=correlation_id,
-                    metadata={"failure": "invalid_proof", "failed_attempts": failed},
-                )
-                self.authentication.rate_limiter.record(
-                    rate_key,
-                    success=False,
-                    now=current,
-                )
-                if failed >= self.max_failed_attempts:
-                    raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
-                raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
-
-            self.authentication.rate_limiter.record(rate_key, success=True, now=current)
-            # Mark the proof consumed before issuing the durable bearer credential. The lock
-            # keeps concurrent in-process replays from both succeeding.
-            self.store.mobile_pairings[pairing_id] = replace(
-                challenge,
-                consumed_at=current,
-            )
-            issued = self.authentication.create_credential(
-                challenge.user_id,
-                ActorType.HUMAN,
-                CredentialKind.MOBILE,
-                purpose=f"mobile device: {display_name}",
-                now=current,
-                scope=_MOBILE_CREDENTIAL_SCOPE,
-            )
-            device_id = new_id("mobile_device")
-            device = PairedMobileDevice(
-                device_id=device_id,
-                user_id=challenge.user_id,
-                credential_id=issued.credential_id,
-                display_name=display_name,
-                server_origin=challenge.server_origin,
-                created_at=current,
-                platform=(
-                    platform.strip()
-                    if isinstance(platform, str) and platform.strip()
-                    else None
-                ),
-                metadata=metadata or {},
-            )
-            self.store.mobile_devices[device_id] = device
-
+        failed = challenge.failed_attempts + 1
+        self.store.mobile_pairings[challenge.pairing_id] = replace(
+            challenge,
+            failed_attempts=failed,
+        )
         self.authentication._audit(
             "auth.mobile_pairing_consumed",
-            now=current,
-            success=True,
+            now=now,
+            success=False,
             actor_id=challenge.user_id,
-            subject_id=device_id,
-            credential_id=issued.credential_id,
-            correlation_id=correlation_id or challenge.correlation_id,
-            metadata={"platform": device.platform or "unknown"},
+            subject_id=challenge.pairing_id,
+            correlation_id=correlation_id,
+            metadata={"failure": "invalid_proof", "failed_attempts": failed},
         )
+        self.authentication.rate_limiter.record(rate_key, success=False, now=now)
+        if failed >= self.max_failed_attempts:
+            raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
+        raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
+
+    def _issue_mobile_device(
+        self,
+        challenge: MobilePairingChallenge,
+        *,
+        display_name: str,
+        platform: str | None,
+        metadata: dict[str, JsonValue] | None,
+        rate_key: str,
+        now,
+    ) -> tuple[PairedMobileDevice, IssuedCredential]:
+        self.authentication.rate_limiter.record(rate_key, success=True, now=now)
+        # Consume before issuing the durable credential while holding the service lock.
+        self.store.mobile_pairings[challenge.pairing_id] = replace(
+            challenge,
+            consumed_at=now,
+        )
+        issued = self.authentication.create_credential(
+            challenge.user_id,
+            ActorType.HUMAN,
+            CredentialKind.MOBILE,
+            purpose=f"mobile device: {display_name}",
+            now=now,
+            scope=_MOBILE_CREDENTIAL_SCOPE,
+        )
+        device = PairedMobileDevice(
+            device_id=new_id("mobile_device"),
+            user_id=challenge.user_id,
+            credential_id=issued.credential_id,
+            display_name=display_name,
+            server_origin=challenge.server_origin,
+            created_at=now,
+            platform=(
+                platform.strip()
+                if isinstance(platform, str) and platform.strip()
+                else None
+            ),
+            metadata=metadata or {},
+        )
+        self.store.mobile_devices[device.device_id] = device
         return device, issued
 
     def list_devices(self, user_id: str) -> tuple[PairedMobileDevice, ...]:
