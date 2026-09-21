@@ -27,6 +27,7 @@ from ai_multi_agent_platform.security.authentication_hardening import (
 
 from .authentication import (
     _augment_authentication_openapi,
+    _authentication_route_error,
     _cookies,
     _header,
     _optional_datetime,
@@ -76,7 +77,10 @@ class AuthenticatedControlPlaneHTTP(_ReleaseAuthenticatedControlPlaneHTTP):
         try:
             relative = _relative_path(request.path)
 
-            if relative.startswith("/auth/"):
+            if relative == "/auth" or relative.startswith("/auth/"):
+                route_error = _authentication_route_error(request.method, relative)
+                if route_error is not None:
+                    raise route_error
                 if _public_route(request.method, relative):
                     response = await self._public_auth_route_async(
                         request,
