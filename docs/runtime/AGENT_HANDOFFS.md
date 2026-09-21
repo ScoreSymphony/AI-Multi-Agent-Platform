@@ -228,7 +228,7 @@ prepared-read scope:
 2. compare requested revision/digest when supplied;
 3. preserve the canonical source Project/Workspace scope in the authorization request and reject
    a conflicting caller Project scope;
-4. issue the canonical Authorization read decision for the actual Agent actor;
+4. request the canonical Authorization read decision for the actual Agent actor;
 5. only after an `ALLOW` decision expose that exact reference to synchronous `HandoffService`;
 6. clear the prepared-read scope when the operation ends.
 
