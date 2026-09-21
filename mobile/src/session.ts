@@ -271,7 +271,7 @@ export class MobileSessionStore {
           displayName: normalizeDisplayName(displayName, existing.displayName),
         }
       : {
-          id: profileIdFor(normalizedBaseUrl),
+          id: newProfileId(),
           displayName: normalizeDisplayName(displayName, defaultDisplayName(normalizedBaseUrl)),
           baseUrl: normalizedBaseUrl,
           lastSuccessfulConnection: null,
@@ -305,7 +305,7 @@ export class MobileSessionStore {
 
     const baseUrl = normalizeServerUrl(legacyServer);
     const profile: ServerProfile = {
-      id: profileIdFor(baseUrl),
+      id: newProfileId(),
       displayName: defaultDisplayName(baseUrl),
       baseUrl,
       lastSuccessfulConnection: null,
@@ -446,8 +446,8 @@ function parseServerProfile(value: unknown): ServerProfile {
   if (!isRecord(value)) throw new Error("Stored mobile server profile is invalid");
   const baseUrl = normalizeServerUrl(requireStoredString(value.baseUrl, "baseUrl"));
   const id = requireStoredString(value.id, "id");
-  if (id !== profileIdFor(baseUrl)) {
-    throw new Error("Stored mobile server profile identity does not match its server");
+  if (!/^profile-[0-9a-f]{32}$/.test(id)) {
+    throw new Error("Stored mobile server profile identity is invalid");
   }
   return {
     id,
@@ -474,19 +474,26 @@ function requireProfile(document: ProfileDocument, profileId: string): ServerPro
 }
 
 function tokenKey(profileId: string): string {
-  if (!/^profile-[0-9a-f]{8}$/.test(profileId)) {
+  if (!/^profile-[0-9a-f]{32}$/.test(profileId)) {
     throw new Error("Mobile server profile identifier is invalid");
   }
   return `${PROFILE_TOKEN_PREFIX}${profileId}`;
 }
 
-function profileIdFor(baseUrl: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < baseUrl.length; index += 1) {
-    hash ^= baseUrl.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
+function newProfileId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) {
+    const compact = uuid.replace(/-/g, "").toLowerCase();
+    if (/^[0-9a-f]{32}$/.test(compact)) return `profile-${compact}`;
   }
-  return `profile-${hash.toString(16).padStart(8, "0")}`;
+
+  let fallback = "";
+  while (fallback.length < 32) {
+    fallback += Math.floor(Math.random() * 0x1_0000_0000)
+      .toString(16)
+      .padStart(8, "0");
+  }
+  return `profile-${fallback.slice(0, 32)}`;
 }
 
 function defaultDisplayName(baseUrl: string): string {
