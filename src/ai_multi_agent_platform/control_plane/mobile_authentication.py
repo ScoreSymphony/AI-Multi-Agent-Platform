@@ -35,6 +35,7 @@ def handle_public_mobile_auth_route(
         platform=platform,
         metadata=_optional_object(request.body.get("metadata"), "metadata"),
         protocol_version=_required_string(request.body, "protocol_version"),
+        caller_ref=request.transport_peer,
         correlation_id=correlation_id,
     )
     return _typed_response(
@@ -67,6 +68,7 @@ async def handle_public_mobile_auth_route_async(
         platform=_optional_string(request.body.get("platform"), "platform"),
         metadata=_optional_object(request.body.get("metadata"), "metadata"),
         protocol_version=_required_string(request.body, "protocol_version"),
+        caller_ref=request.transport_peer,
         correlation_id=correlation_id,
     )
     return _typed_response(

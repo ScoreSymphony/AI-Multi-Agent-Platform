@@ -330,6 +330,26 @@ def test_rate_control_hook_blocks_repeated_failed_login() -> None:
     assert limited.value.failure is AuthenticationFailure.RATE_LIMITED
 
 
+def test_failure_rate_limiter_bounds_dynamic_keys_and_clears_success() -> None:
+    limiter = InMemoryFailureRateLimiter(
+        max_failures=1,
+        window=timedelta(minutes=5),
+        max_keys=2,
+    )
+    limiter.record("first", success=False, now=NOW)
+    limiter.record("second", success=False, now=NOW + timedelta(seconds=1))
+    assert limiter.allow("first", now=NOW + timedelta(seconds=2)) is False
+    assert limiter.allow("second", now=NOW + timedelta(seconds=2)) is False
+
+    limiter.record("third", success=False, now=NOW + timedelta(seconds=2))
+    assert limiter.allow("first", now=NOW + timedelta(seconds=3)) is True
+    assert limiter.allow("second", now=NOW + timedelta(seconds=3)) is False
+    assert limiter.allow("third", now=NOW + timedelta(seconds=3)) is False
+
+    limiter.record("second", success=True, now=NOW + timedelta(seconds=3))
+    assert limiter.allow("second", now=NOW + timedelta(seconds=3)) is True
+
+
 def test_external_identity_requires_explicit_mapping_and_claims_do_not_become_permissions() -> None:
     auth = _service()
     user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)

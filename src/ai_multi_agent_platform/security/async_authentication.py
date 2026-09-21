@@ -154,6 +154,7 @@ class AsyncAuthenticationService(Protocol):
         platform: str | None = None,
         metadata: dict[str, JsonValue] | None = None,
         protocol_version: str = "1",
+        caller_ref: str | None = None,
         correlation_id: str | None = None,
     ) -> tuple[PairedMobileDevice, IssuedCredential]: ...
 
@@ -528,6 +529,7 @@ class AsyncAuthenticationServiceAdapter:
         platform: str | None = None,
         metadata: dict[str, JsonValue] | None = None,
         protocol_version: str = "1",
+        caller_ref: str | None = None,
         correlation_id: str | None = None,
     ) -> tuple[PairedMobileDevice, IssuedCredential]:
         return await self._run(
@@ -538,6 +540,7 @@ class AsyncAuthenticationServiceAdapter:
                 platform=platform,
                 metadata=metadata,
                 protocol_version=protocol_version,
+                caller_ref=caller_ref,
                 correlation_id=correlation_id,
             ),
             message="failed to persist mobile pairing consumption",

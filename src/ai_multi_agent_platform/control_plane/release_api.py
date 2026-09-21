@@ -175,6 +175,7 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
             query=request.query,
             body=request.body,
             trusted_actor=request.trusted_actor,
+            transport_peer=request.transport_peer,
         )
         try:
             response = await super().handle(boundary_request)

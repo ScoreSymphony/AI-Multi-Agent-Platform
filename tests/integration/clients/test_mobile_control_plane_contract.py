@@ -49,6 +49,7 @@ async def _public_request(
     path: str,
     *,
     body: dict[str, object] | None = None,
+    transport_peer: str | None = None,
 ):
     return await deployment.http.handle(
         HTTPRequest(
@@ -56,6 +57,7 @@ async def _public_request(
             path=path,
             headers={"content-type": "application/json"},
             body=body or {},
+            transport_peer=transport_peer,
         )
     )
 
@@ -293,5 +295,77 @@ def test_mobile_pairing_uses_public_one_time_exchange_and_server_revocation(
             "/api/v1/auth/mobile-devices/{device_id}:revoke",
         ):
             assert path in openapi.body["paths"]
+
+    asyncio.run(scenario())
+
+
+def test_mobile_fallback_pairing_abuse_is_partitioned_through_control_plane(
+    tmp_path: Path,
+) -> None:
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "platform",
+            secure_cookie=False,
+        )
+    )
+    admin = deployment.bootstrap_admin("mobile-fallback-admin", secrets.token_urlsafe(32))
+    bootstrap = deployment.authentication.create_personal_access_token(
+        admin.user_id,
+        purpose="mobile-fallback-bootstrap",
+    )
+
+    async def scenario() -> None:
+        created = await _request(
+            deployment,
+            bootstrap.secret,
+            "POST",
+            "/api/v1/auth/mobile-pairings",
+            body={"server_origin": "https://platform.example"},
+        )
+        assert created.status == 201, created.body
+
+        for _ in range(5):
+            invalid = await _public_request(
+                deployment,
+                "POST",
+                "/api/v1/auth/mobile-pairings:consume",
+                body={
+                    "code": "WRONG-FALLBACK-CODE",
+                    "device_name": "Attacker",
+                    "platform": "android",
+                    "protocol_version": "1",
+                },
+                transport_peer="127.0.0.1",
+            )
+            assert invalid.status == 401, invalid.body
+
+        limited = await _public_request(
+            deployment,
+            "POST",
+            "/api/v1/auth/mobile-pairings:consume",
+            body={
+                "code": "WRONG-FALLBACK-CODE",
+                "device_name": "Attacker",
+                "platform": "android",
+                "protocol_version": "1",
+            },
+            transport_peer="127.0.0.1",
+        )
+        assert limited.status == 429, limited.body
+
+        valid = await _public_request(
+            deployment,
+            "POST",
+            "/api/v1/auth/mobile-pairings:consume",
+            body={
+                "code": created.body["code"],
+                "device_name": "Legitimate Android",
+                "platform": "android",
+                "protocol_version": "1",
+            },
+            transport_peer="127.0.0.1",
+        )
+        assert valid.status == 201, valid.body
+        assert valid.body["device"]["user_id"] == admin.user_id
 
     asyncio.run(scenario())
