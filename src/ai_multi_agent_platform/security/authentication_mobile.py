@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import secrets
 import threading
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import datetime, timedelta
 from string import ascii_uppercase, digits
@@ -183,10 +184,9 @@ class MobilePairingService:
                 now=current,
             )
 
-        self.authentication._audit(
+        self._audit_committed_pairing(
             "auth.mobile_pairing_consumed",
             now=current,
-            success=True,
             actor_id=challenge.user_id,
             subject_id=device.device_id,
             credential_id=issued.credential_id,
@@ -289,35 +289,101 @@ class MobilePairingService:
         rate_key: str,
         now: datetime,
     ) -> tuple[PairedMobileDevice, IssuedCredential]:
-        self.authentication.rate_limiter.record(rate_key, success=True, now=now)
-        # Consume before issuing the durable credential while holding the service lock.
-        self.store.mobile_pairings[challenge.pairing_id] = replace(
-            challenge,
-            consumed_at=now,
+        transaction_factory = getattr(self.store, "mobile_pairing_transaction", None)
+        transaction = (
+            transaction_factory(challenge.pairing_id)
+            if callable(transaction_factory)
+            else nullcontext()
         )
-        issued = cast(
-            IssuedCredential,
-            self.authentication.create_credential(
-                challenge.user_id,
-                ActorType.HUMAN,
-                CredentialKind.MOBILE,
-                purpose=f"mobile device: {display_name}",
-                now=now,
-                scope=_MOBILE_CREDENTIAL_SCOPE,
-            ),
-        )
-        device = PairedMobileDevice(
-            device_id=new_id("mobile_device"),
-            user_id=challenge.user_id,
+        purpose = f"mobile device: {display_name}"
+        issued: IssuedCredential | None = None
+        device: PairedMobileDevice | None = None
+        try:
+            with transaction:
+                # Durable stores may bind these three mutations to one transaction.
+                self.store.mobile_pairings[challenge.pairing_id] = replace(
+                    challenge,
+                    consumed_at=now,
+                )
+                issued = cast(
+                    IssuedCredential,
+                    self.authentication.create_credential(
+                        challenge.user_id,
+                        ActorType.HUMAN,
+                        CredentialKind.MOBILE,
+                        purpose=purpose,
+                        now=now,
+                        scope=_MOBILE_CREDENTIAL_SCOPE,
+                        _emit_created_audit=False,
+                    ),
+                )
+                device = PairedMobileDevice(
+                    device_id=new_id("mobile_device"),
+                    user_id=challenge.user_id,
+                    credential_id=issued.credential_id,
+                    display_name=display_name,
+                    server_origin=challenge.server_origin,
+                    created_at=now,
+                    platform=(
+                        platform.strip() if isinstance(platform, str) and platform.strip() else None
+                    ),
+                    metadata=metadata or {},
+                )
+                self.store.mobile_devices[device.device_id] = device
+                self.authentication.rate_limiter.record(rate_key, success=True, now=now)
+        except BaseException:
+            self._restore_failed_issue(challenge, issued=issued, device=device)
+            raise
+
+        if issued is None or device is None:
+            raise RuntimeError("mobile pairing issuance completed without a credential and device")
+        self._audit_committed_pairing(
+            "auth.credential_created",
+            now=now,
+            actor_id=challenge.user_id,
             credential_id=issued.credential_id,
-            display_name=display_name,
-            server_origin=challenge.server_origin,
-            created_at=now,
-            platform=(platform.strip() if isinstance(platform, str) and platform.strip() else None),
-            metadata=metadata or {},
+            metadata={"kind": CredentialKind.MOBILE.value, "purpose": purpose},
         )
-        self.store.mobile_devices[device.device_id] = device
         return device, issued
+
+    def _audit_committed_pairing(
+        self,
+        event: str,
+        *,
+        now: datetime,
+        actor_id: str,
+        subject_id: str | None = None,
+        credential_id: str | None = None,
+        correlation_id: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
+    ) -> None:
+        try:
+            self.authentication._audit(
+                event,
+                now=now,
+                success=True,
+                actor_id=actor_id,
+                subject_id=subject_id,
+                credential_id=credential_id,
+                correlation_id=correlation_id,
+                metadata=metadata,
+            )
+        # error-boundary: allow-broad-catch=cleanup committed pairing delivery outranks audit export
+        except Exception:
+            return
+
+    def _restore_failed_issue(
+        self,
+        challenge: MobilePairingChallenge,
+        *,
+        issued: IssuedCredential | None,
+        device: PairedMobileDevice | None,
+    ) -> None:
+        if device is not None and device.device_id in self.store.mobile_devices:
+            dict.__delitem__(self.store.mobile_devices, device.device_id)
+        if issued is not None and issued.credential_id in self.store.credentials:
+            dict.__delitem__(self.store.credentials, issued.credential_id)
+        dict.__setitem__(self.store.mobile_pairings, challenge.pairing_id, challenge)
 
     def list_devices(self, user_id: str) -> tuple[PairedMobileDevice, ...]:
         return tuple(

@@ -73,6 +73,7 @@ class AuthenticationCredentialService:
         expires_at: datetime | None = None,
         now: datetime | None = None,
         scope: Mapping[str, JsonValue] | None = None,
+        _emit_created_audit: bool = True,
     ) -> IssuedCredential:
         current = authentication_now(now)
         if not owner_id.strip() or not purpose.strip():
@@ -97,14 +98,15 @@ class AuthenticationCredentialService:
             scope=stored_scope,
             expires_at=expires_at,
         )
-        self.audit(
-            "auth.credential_created",
-            now=current,
-            success=True,
-            actor_id=owner_id,
-            credential_id=credential_id,
-            metadata={"kind": kind.value, "purpose": purpose.strip()},
-        )
+        if _emit_created_audit:
+            self.audit(
+                "auth.credential_created",
+                now=current,
+                success=True,
+                actor_id=owner_id,
+                credential_id=credential_id,
+                metadata={"kind": kind.value, "purpose": purpose.strip()},
+            )
         return IssuedCredential(
             credential_id=credential_id,
             secret=f"amp1.{credential_id}.{secret}",
