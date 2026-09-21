@@ -42,6 +42,11 @@ export interface MobileDeviceSummary {
   id: string;
   user_id: string;
   credential_id: string;
+  scope: {
+    actions: string[];
+    resource_types: string[];
+    resource_ids: string[];
+  } | null;
   display_name: string;
   server_origin: string;
   platform: string | null;
