@@ -57,9 +57,7 @@ def test_authentication_route_shape_precedes_authentication() -> None:
         ("GET", "/api/v1/auth", 404, "not_found"),
     )
     for method, route, expected_status, expected_code in cases:
-        response = asyncio.run(
-            http.handle(HTTPRequest(method=method, path=route, headers=headers))
-        )
+        response = asyncio.run(http.handle(HTTPRequest(method=method, path=route, headers=headers)))
         assert response.status == expected_status
         assert response.body["code"] == expected_code
         assert response.body["request_id"] == "request-1330"
