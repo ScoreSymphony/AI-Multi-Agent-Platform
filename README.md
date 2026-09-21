@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/src/assets/brand-icon.png" alt="AI Multi-Agent Platform icon" width="96" />
+</p>
+
 # AI Multi-Agent Platform
 
 A general-purpose, self-hostable AI Multi-Agent Platform for turning goals into durable, observable work carried out by one or more specialized agents.
