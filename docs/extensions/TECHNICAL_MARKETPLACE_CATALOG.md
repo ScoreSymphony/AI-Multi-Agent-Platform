@@ -1,6 +1,6 @@
 # Curated Technical Marketplace Catalog
 
-Issue #638 productizes the generic Registry/Marketplace foundation from issue #81 as a curated ecosystem view of technical components for the AI Multi-Agent Platform.
+The technical Marketplace catalog productizes the generic Registry/Marketplace foundation as a curated ecosystem view of technical components for the AI Multi-Agent Platform.
 
 ## Product identity
 
@@ -20,9 +20,9 @@ The default Marketplace experience is for developer and agent infrastructure:
 
 Ordinary SaaS connectors remain valid canonical Registry items, but they are not the product identity or default home surface of the technical Marketplace.
 
-## Ownership boundary with #81
+## Ownership boundary with the generic Registry/Marketplace
 
-Issue #81 continues to own the generic distribution engine:
+The generic Registry/Marketplace continues to own the distribution engine:
 
 - `RegistryProvider` and filesystem/offline providers;
 - canonical `RegistryItem` metadata;
@@ -33,7 +33,7 @@ Issue #81 continues to own the generic distribution engine:
 - owner-domain routing;
 - the graphical `/marketplace` route.
 
-Issue #638 does not create a second package manager, installation lifecycle or trust model. It adds a technical taxonomy, curated reference data, discovery-source gates and a product-facing presentation on top of those contracts.
+The technical catalog does not create a second package manager, installation lifecycle or trust model. It adds a technical taxonomy, curated reference data, discovery-source gates and a product-facing presentation on top of those contracts.
 
 ## Technical taxonomy
 
@@ -56,11 +56,11 @@ model-and-dataset-tooling
 music-ai
 ```
 
-A component may carry multiple categories when evidence supports the overlap. The Marketplace defaults to technical components only but preserves an explicit `All Registry assets` path for generic #81 browsing.
+A component may carry multiple categories when evidence supports the overlap. The Marketplace defaults to technical components only but preserves an explicit `All Registry assets` path for generic Registry browsing.
 
 ## Technical metadata without a second Registry schema
 
-Issue #638 intentionally does not fork `RegistryItem`. Product metadata is derived from canonical categories plus structured tags.
+The technical catalog intentionally does not fork `RegistryItem`. Product metadata is derived from canonical categories plus structured tags.
 
 Supported lifecycle values are `discovered`, `candidate`, `pilot`, `adopted`, `reference`, `deferred`, `rejected`, `deprecated` and `unknown`.
 
@@ -129,7 +129,7 @@ An upstream GitHub repository is not automatically a canonical platform package.
 
 The override is fail-closed:
 
-- omitting it preserves #81 routing;
+- omitting it preserves generic Registry routing;
 - only `manual` is accepted as an override;
 - it can reduce an item to discovery/reference distribution;
 - it cannot turn an item into a plugin or portable import;
@@ -147,7 +147,7 @@ catalogs/technical-components/
 
 `catalog.json` is the primary catalog and `catalog.fragment.*.json` files are additive reviewed fragments loaded deterministically in filename order by the existing `FilesystemRegistryProvider`. Provider mismatches, unsupported catalog schema versions and duplicate item/version identities fail closed. Artifact paths remain confined to the catalog root.
 
-As of the 2026-09-10 #638 closeout pass, the loaded technical catalog contains **at least 78 reviewed records** across the canonical technical taxonomy. The exact loaded inventory is defined by `catalog.json` together with all loaded `catalog.fragment.*.json` files. `CURATION_QUEUE.md` records promotion history, review outcomes and unresolved research leads; it is not the authoritative item-by-item inventory.
+As of the 2026-09-10 catalog closeout pass, the loaded technical catalog contains **at least 78 reviewed records** across the canonical technical taxonomy. The exact loaded inventory is defined by `catalog.json` together with all loaded `catalog.fragment.*.json` files. `CURATION_QUEUE.md` records promotion history, review outcomes and unresolved research leads; it is not the authoritative item-by-item inventory.
 
 The reviewed inventory includes the architecture-derived Code Intelligence seed (`ProjectAtlas`, `Graphify`, `CodeGraph`, `Understand Anything`), the wider agent/framework/specification/memory/evaluation/execution/inference/retrieval groups, and the reviewed ScoreSymphony/domain ML candidates. Restricted, archived or policy-incompatible projects are represented as explicit `reference` or `deferred` records rather than silently promoted as active installs.
 
@@ -175,7 +175,7 @@ The queue is deliberately not loadable by `FilesystemRegistryProvider`. It recor
 1. guessing metadata merely to make cards look complete;
 2. presenting an unreviewed upstream as if it were trusted or installable.
 
-A lead may be resolved by promotion, explicit reference/deferred/rejected classification, or by documenting that no sufficiently unambiguous current upstream identity exists. Names such as Cursor Agent, Kiro, Open Agent, Fable/Fabel, TurboVec, AgentShield, Colibri and the Hugging Face umbrella remain documented research boundaries rather than guessed catalog identities. Their ambiguity is not missing Registry execution code and is not a reason to weaken #638's verification requirements.
+A lead may be resolved by promotion, explicit reference/deferred/rejected classification, or by documenting that no sufficiently unambiguous current upstream identity exists. Names such as Cursor Agent, Kiro, Open Agent, Fable/Fabel, TurboVec, AgentShield, Colibri and the Hugging Face umbrella remain documented research boundaries rather than guessed catalog identities. Their ambiguity is not missing Registry execution code and is not a reason to weaken the catalog's verification requirements.
 
 ## Discovery-source seam
 
@@ -216,7 +216,7 @@ Before adding or materially changing a loaded external component entry:
 9. use manual distribution until a real platform-owned adapter/package path exists;
 10. record lifecycle/evaluation status separately from Registry trust;
 11. preserve the project's no-mandatory-recurring-paid-service policy;
-12. route any real future installation/integration through existing #81, #15, security, evaluation and owner-domain boundaries.
+12. route any real future installation/integration through existing Registry/Marketplace, Authorization, security, evaluation and owner-domain boundaries.
 
 Repository redirects or moves must be resolved to the current canonical identity before promotion. Non-standard or mixed licensing must be recorded literally enough that the Marketplace does not imply standard SPDX compatibility. Archived projects must not retain active-candidate semantics merely because they were historically listed in architecture notes.
 
