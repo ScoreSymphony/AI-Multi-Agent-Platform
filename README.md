@@ -72,28 +72,26 @@ https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/dep
 ```
 
 Copy that URL into Hostinger's **Compose from URL** field. The repository landing page itself is not
-the Compose URL. The new-install profile is a true zero-configuration Hostinger path: the dedicated
-Caddy gateway publishes only ports 80/443, reads the VPS hostname through the host UTS namespace,
-and—when it matches Hostinger's managed `srvNNNNNN.hstgr.cloud` form—derives the application
-hostname as `${COMPOSE_PROJECT_NAME}.<vps-hostname>`. The first raw-IP HTTP access redirects to
-that canonical HTTPS origin, while Web and Control Plane stay private.
+the Compose URL. The zero-config Hostinger path now assumes Hostinger's Traefik project is already
+running, which is the supported shared-edge topology when ports 80/443 are in use. The platform
+does **not** bind 80/443 itself. Instead, the dedicated gateway joins `traefik-proxy`, reads the
+VPS hostname through the host UTS namespace, derives
+`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`, and lets Traefik route only that Hostinger
+hostname to Caddy with TLS passthrough. Web and Control Plane remain private.
 
-Existing installations already tracking
-`deploy/docker/docker-compose.hostinger.yml` or
-`deploy/docker/docker-compose.hostinger-https.yml` keep their previous shared-Traefik-compatible
-topology. Those compatibility entry points intentionally do not start binding host ports 80/443
-during an ordinary redeploy.
-
-No `TRAEFIK_HOST`, shared Docker network, Hostinger Traefik project, Docker socket, host filesystem
-mount, or external discovery service is required for this default path. Set
+No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required
+for this zero-config profile. A small bootstrap HTTP port defaults to `:18080` and performs only a
+redirect to the canonical HTTPS origin; it never proxies Web/API traffic. Set
 `AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to override the automatically derived
 Hostinger hostname with your own DNS name.
 
-If ports 80/443 on the VPS are already owned by Hostinger's shared Traefik because multiple public
-Docker projects share one edge, use the advanced
-[`docker-compose.hostinger-shared-traefik.yml`](deploy/docker/docker-compose.hostinger-shared-traefik.yml)
-profile instead. Detailed zero-config, shared-Traefik, backup/restore and alternate-edge guidance
-lives in [`deploy/docker/README.md`](deploy/docker/README.md).
+Existing installations already tracking
+`deploy/docker/docker-compose.hostinger.yml` or
+`deploy/docker/docker-compose.hostinger-https.yml` keep their previous migration-safe topology.
+If the VPS does **not** run Hostinger Traefik and ports 80/443 are free, use
+[`docker-compose.hostinger-direct.yml`](deploy/docker/docker-compose.hostinger-direct.yml)
+instead. Detailed Hostinger, backup/restore and alternate-edge guidance lives in
+[`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
