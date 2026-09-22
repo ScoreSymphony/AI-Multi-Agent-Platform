@@ -464,6 +464,7 @@ def test_hostinger_direct_gateway_derives_managed_vps_hostname(tmp_path: Path) -
     result = _run_hostinger_gateway_entrypoint(
         tmp_path,
         {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "direct",
             "FAKE_HOSTNAME": "srv123456.hstgr.cloud",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
         },
@@ -482,6 +483,7 @@ def test_hostinger_direct_gateway_explicit_domain_overrides_host_hostname(
     result = _run_hostinger_gateway_entrypoint(
         tmp_path,
         {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "direct",
             "AI_MAP_PUBLIC_DOMAIN": "agents.example.com",
             "FAKE_HOSTNAME": "srv123456.hstgr.cloud",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
@@ -498,6 +500,7 @@ def test_hostinger_direct_gateway_rejects_unmanaged_host_hostname(tmp_path: Path
     result = _run_hostinger_gateway_entrypoint(
         tmp_path,
         {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "direct",
             "FAKE_HOSTNAME": "custom.example.com",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
         },
@@ -570,7 +573,8 @@ def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
 
-    assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
+    assert "main/deploy/docker/docker-compose.hostinger-zero-config.yml" in runbook
+    assert "docker-compose.hostinger.yml" in runbook
     assert "docker-compose.hostinger-shared-traefik.yml" in runbook
     assert "docker-compose.hostinger-external-edge.yml" in runbook
     assert "docker-compose.hostinger-https.yml" in runbook
@@ -621,7 +625,7 @@ def test_readme_exposes_hostinger_compose_url_directly() -> None:
     normalized = " ".join(readme.split())
     compose_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
-        "main/deploy/docker/docker-compose.hostinger.yml"
+        "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
     )
 
     assert compose_url in readme
