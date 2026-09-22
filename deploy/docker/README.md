@@ -193,67 +193,74 @@ Control Plane route prefix is not stripped.
 ## Hostinger Docker Manager
 
 Hostinger's **Compose from URL** flow expects a direct URL to a Docker Compose file rather than
-only the repository root. The repository ships two standalone profiles so TLS ownership is explicit.
+only the repository root. The standard Hostinger profile is HTTPS-first: following the normal link
+must not expose the browser UI on public HTTP port 8080.
 
-### Option A — existing external TLS edge
+### Standard path — built-in automatic HTTPS
 
-Use this profile when Hostinger's proxy, an already-running Caddy/Nginx/Traefik instance, or another
-trusted edge already owns public ports 80/443 and the certificate lifecycle:
+Use this URL for the normal Hostinger deployment:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger.yml
 ```
 
-This profile publishes the Web service on host port `8080` by default. Route the external HTTPS
-origin to that port. Set `AI_MAP_PUBLIC_PORT` only when the host-side Web port must differ.
-
-### Option B — built-in automatic HTTPS edge
-
-Use this profile when the VPS itself may bind public TCP ports 80 and 443 and no other service
-already owns them:
-
-```text
-https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-https.yml
-```
+The default profile keeps the Control Plane and Web service private, publishes only ports 80/443
+through the repository-owned Caddy edge, and keeps `AI_MAP_SECURE_COOKIE=true`.
 
 Before deploying:
 
 1. create a DNS `A` record (and an `AAAA` record only when IPv6 is intentionally configured)
    for the chosen hostname and point it at the VPS;
-2. make sure inbound TCP ports 80 and 443 are reachable and not already bound by Hostinger's
-   external proxy or another web server;
+2. make sure inbound TCP ports 80 and 443 are reachable and not already bound by another public
+   reverse proxy or web server;
 3. set the Docker Manager environment variable `AI_MAP_PUBLIC_DOMAIN` to the hostname only, for
    example `agents.example.com` — do not include `https://`, a path or a port;
 4. deploy the Compose project.
 
-The `https-edge` service runs pinned Caddy, obtains and renews the public certificate through its
-normal ACME flow, redirects HTTP to HTTPS, and forwards the complete same-origin request to the
-private `web:8080` service. The Web service then preserves `/api/*` while proxying to the private
-Control Plane. Neither Web nor Control Plane has a host-published port in this profile.
+If `AI_MAP_PUBLIC_DOMAIN` is missing, Compose fails before deployment instead of falling back to
+an insecure public HTTP UI. Caddy obtains and renews the certificate through automatic HTTPS,
+redirects HTTP to HTTPS, and forwards the complete same-origin request to private `web:8080`.
+The Web service preserves `/api/*` while proxying to the private Control Plane.
 
-Certificate and ACME state live in the named `caddy-data` and `caddy-config` volumes. Normal
-container recreation keeps those volumes. Do not use `docker compose down -v` for a normal
-restart because it removes those TLS volumes and the canonical `platform-data` volume.
+Certificate and ACME state live in the named `caddy-data` and `caddy-config` volumes. Canonical
+platform state remains in the same `platform-data` volume contract, so redeploying the same
+Compose project name from the former Hostinger profile does not intentionally create a new data
+store. Do not use `docker compose down -v` during migration or normal restart.
 
-After Caddy has obtained the certificate, verify the public origin:
+After certificate issuance, verify the public origin:
 
 ```bash
 curl --fail https://agents.example.com/api/v1/health
 curl --fail https://agents.example.com/api/v1/readiness
 ```
 
-Then open the same HTTPS origin in the browser and create/sign in to the administrator account.
-If certificate issuance does not complete, first verify DNS, public reachability of ports 80/443,
-and that another reverse proxy is not already occupying those ports. Do not work around issuance
-failure by disabling Secure cookies.
+Then open that HTTPS origin in the browser. Do not use `http://<server-ip>:8080` for the standard
+Hostinger deployment.
 
-Both Hostinger Compose files deliberately use the public Git repository itself as the Docker build
-context. This keeps **Compose from URL** self-contained and avoids depending on Hostinger placing
-sibling repository files next to the downloaded YAML. For CI or local validation from the
-repository checkout, `AI_MAP_SOURCE_CONTEXT=../..` can replace the remote Git build context;
-relative build contexts are resolved from `deploy/docker/`.
+The previously introduced
+`deploy/docker/docker-compose.hostinger-https.yml` remains as a compatibility alias for the same
+HTTPS-first topology.
 
-Hostinger is only an operator example. Neither profile contains Hostinger-specific API credentials,
+### Alternative — pre-existing external TLS edge
+
+Only use the explicit external-edge profile when Hostinger, Caddy, Nginx, Traefik or another
+trusted reverse proxy already owns HTTPS and public ports 80/443:
+
+```text
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-external-edge.yml
+```
+
+That alternative publishes the Web service on host port `8080` by default so the existing TLS
+edge can proxy to it. `AI_MAP_PUBLIC_PORT` may change that host-side port. Browser users must
+still enter through the operator-provided HTTPS origin, never the direct HTTP port.
+
+All Hostinger Compose files use the public Git repository itself as the Docker build context. This
+keeps **Compose from URL** self-contained and avoids depending on Hostinger placing sibling files
+next to the downloaded YAML. For CI or local validation from the repository checkout,
+`AI_MAP_SOURCE_CONTEXT=../..` can replace the remote Git build context; relative build contexts
+are resolved from `deploy/docker/`.
+
+Hostinger is only an operator example. The profiles contain no Hostinger-specific API credentials,
 VPS identifiers or canonical platform roles.
 
 ## Configuration
@@ -261,10 +268,11 @@ VPS identifiers or canonical platform roles.
 The checked-in Compose profile contains no credentials. Supported deployment overrides are kept
 small intentionally:
 
-- `AI_MAP_PUBLIC_PORT` — host-side Web port for the external-edge Hostinger/root Compose profile,
-  default `8080`;
-- `AI_MAP_PUBLIC_DOMAIN` — required hostname for `docker-compose.hostinger-https.yml`; the
-  built-in Caddy edge uses it for automatic HTTPS;
+- `AI_MAP_PUBLIC_DOMAIN` — required hostname for the default `docker-compose.hostinger.yml`
+  (and its `docker-compose.hostinger-https.yml` compatibility alias); the built-in Caddy edge uses
+  it for automatic HTTPS;
+- `AI_MAP_PUBLIC_PORT` — host-side Web port only for the explicit
+  `docker-compose.hostinger-external-edge.yml` alternative, default `8080`;
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
