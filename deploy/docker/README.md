@@ -189,14 +189,18 @@ Do not disable Secure cookies to make public HTTP work.
 ## Hostinger Docker Manager
 
 Hostinger Docker Manager's **Compose from URL** flow expects the direct URL of a Docker Compose
-file. Use this maintained Compose URL:
+file. For a **new installation**, use this maintained zero-configuration Compose URL:
 
 ```text
-https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger.yml
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-zero-config.yml
 ```
 
 Copy that URL into Hostinger's **Compose from URL** field. The GitHub repository page itself is the
 project source, not the Compose-file URL for this flow.
+
+The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` URLs are
+kept migration-safe for existing deployments that already follow the shared-Traefik-compatible
+topology. They intentionally do not start binding host ports 80/443 during an ordinary redeploy.
 
 ### Zero-configuration HTTPS on Hostinger
 
@@ -259,9 +263,12 @@ The Hostinger Traefik project must already be running and its shared external ne
 An optional `AI_MAP_PUBLIC_DOMAIN` still overrides the derived
 `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` hostname.
 
-The `docker-compose.hostinger-https.yml` file remains a compatibility alias for the zero-config
-default profile. The explicit `docker-compose.hostinger-external-edge.yml` alternative remains
-available only for operators using a separately managed non-Traefik reverse proxy.
+The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` files
+remain compatibility entry points for existing shared-Traefik-style deployments. New installations
+that want the zero-configuration direct HTTPS edge should use
+`docker-compose.hostinger-zero-config.yml`. The explicit
+`docker-compose.hostinger-external-edge.yml` alternative remains available only for operators
+using a separately managed non-Traefik reverse proxy.
 
 Canonical platform state remains in `platform-data`. TLS state for the default Hostinger gateway
 is retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
@@ -269,8 +276,8 @@ is retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not u
 
 ## Configuration
 
-The checked-in default Hostinger profile contains no credentials. Supported deployment overrides
-are intentionally small:
+The checked-in zero-configuration Hostinger profile contains no credentials. Supported deployment
+overrides are intentionally small:
 
 - `AI_MAP_PUBLIC_DOMAIN` — optional explicit public hostname. When absent, the zero-config
   Hostinger profile derives the application hostname from the validated VPS hostname;
