@@ -29,13 +29,17 @@ changes.
 
 ## Build model
 
-The source tree remains Expo/React Native. CI regenerates the native Android project with
-`expo prebuild`, removes Expo's generated debug-key signing from the production release build,
-and assembles the APK with Gradle. The build artifact is unsigned at this point.
+The source tree remains Expo/React Native. Pull requests run only the fast mobile release
+validation contract: locked dependency installation, release-configuration validation,
+typechecking, tests and Expo configuration checks. They do not generate the native Android
+project, invoke Gradle, assemble an APK, or perform APK signing.
 
-Pull requests then exercise the complete signing and signature-verification mechanics with a
-throwaway CI keystore. A deliberately different throwaway signer must produce a different
-certificate fingerprint. Production signing secrets are not available to this job.
+The native Android project is regenerated with `expo prebuild` only for an explicit
+`workflow_dispatch` run. That release run removes Expo's generated debug-key signing from the
+production release build, assembles the APK with Gradle, and exercises signing and
+signature-verification mechanics with a throwaway CI keystore before production publication. A
+deliberately different throwaway signer must produce a different certificate fingerprint.
+Production signing secrets are not available to pull-request jobs.
 
 Only the `publish` job of `.github/workflows/mobile-android-release.yml` can access the official
 signing identity. It runs only for an explicit `workflow_dispatch` publication request on
@@ -105,8 +109,9 @@ planned compatibility migration with separate acceptance evidence.
 1. Update `mobile/package.json.version` and `mobile/app.json.expo.version` to the same semantic
    version.
 2. Increase `mobile/app.json.expo.android.versionCode`.
-3. Merge the change to `main` only after normal repository checks and the mobile Android release
-   workflow are green.
+3. Merge the change to `main` only after normal repository checks and the lightweight mobile
+   Android pull-request validation are green. A full APK build is not required for every pull
+   request.
 4. In GitHub Actions, dispatch **Mobile Android release** on `main`, enter the exact configured
    version, and set `publish=true`.
 5. Approve the protected `mobile-production` Environment gate.
@@ -192,10 +197,12 @@ key or second Task/Run lifecycle authority.
 
 ## Acceptance evidence
 
-CI proves clean native release assembly, APK metadata validation, ephemeral signing, signature
-verification and wrong-signer distinction without exposing production material. An official
-publication additionally proves protected-key signing, signer continuity after the first release,
-checksum generation and expected GitHub Release assets.
+Pull-request CI proves the mobile source/configuration contract without spending time on APK
+assembly. An explicit mobile release workflow run proves clean native release assembly, APK
+metadata validation, ephemeral signing, signature verification and wrong-signer distinction
+without exposing production material. An official publication additionally proves protected-key
+signing, signer continuity after the first release, checksum generation and expected GitHub Release
+assets.
 
 Clean install/launch against a remote Control Plane and N -> N+1 data-preserving update require
 retained real-device evidence. The terminal physical Android/VPS journey, including a
