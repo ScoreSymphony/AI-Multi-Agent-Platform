@@ -10,7 +10,7 @@ The repository keeps durable CI organized by stable responsibility rather than b
 - `governance.yml` — pull-request dependency review only.
 - `governance-maintenance.yml` — issue metadata validation and scheduled/manual upstream discovery.
 - `repository-quality.yml` — pull-request test-layout policy and collection reconciliation.
-- `repository-maintenance.yml` — bounded orphaned Actions-history cleanup; it runs on a weekly schedule, by explicit manual dispatch, and once when its own definition changes on `main`.
+- `repository-maintenance.yml` — bounded orphaned Actions-history cleanup; it runs on a weekly schedule, by explicit manual dispatch, and when workflow definitions change on `main`.
 - `conformance.yml` — path-scoped pull-request conformance plus scheduled/manual platform, MCP and acceptance evidence.
 - `benchmark-smoke.yml` and `performance-extended-smoke.yml` — durable benchmark and pressure/fault smoke coverage.
 - `ha-postgres.yml` — PostgreSQL HA coordination and persistence acceptance.
@@ -124,8 +124,10 @@ Workflow consolidation must preserve the identities of checks that are still int
 
 ## Actions history cleanup
 
-Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-maintenance.yml` therefore compares completed workflow runs with the workflow definitions that still exist in the repository. A run is eligible for cleanup only when its recorded path starts with `.github/workflows/` and that exact path is absent from the current repository workflow inventory.
+Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-maintenance.yml` therefore compares completed workflow runs with the workflow definitions that still exist in the repository. A run is eligible for cleanup only when its recorded path starts with `.github/workflows/` and that exact path is absent from the current active workflow inventory.
 
-This deliberately excludes active workflow definitions and GitHub-managed workflow surfaces whose run paths are not repository workflow files. Deletion remains bounded by a hard per-run cap so an unexpected inventory change cannot erase an unbounded amount of history in one maintenance execution.
+Routine cleanup is deliberately bounded. Weekly runs and workflow-definition changes inspect at most 10 pages of 100 recent completed runs, plus recently deleted workflow registrations. Histories of orphaned workflow IDs discovered there are also read with the same 10-page budget. Repeated maintenance runs therefore make steady progress without paginating the repository's complete Actions history on every execution.
 
-The cleanup runs weekly, can be requested explicitly through `workflow_dispatch`, and also runs when `repository-maintenance.yml` itself is changed on `main`. The self-path-scoped push trigger lets cleanup-policy changes take effect immediately without adding a routine check to unrelated default-branch pushes. Keeping maintenance outside `repository-quality.yml` also prevents maintenance jobs from appearing as pull-request checks.
+A manual dispatch can set `full_history_scan=true` when older legacy workflow history needs a one-time deep cleanup. That mode may paginate the complete Actions history, but deletion remains capped at 4,000 runs per execution. Active workflow paths and non-repository GitHub-managed workflow surfaces are never selected.
+
+The workflow runs on changes under `.github/workflows/**` on `main`, on a weekly schedule, or by explicit manual dispatch. It remains outside `repository-quality.yml` and does not subscribe to pull requests, so maintenance does not become a merge-gate check.
