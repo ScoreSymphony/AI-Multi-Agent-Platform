@@ -123,6 +123,16 @@
           "test_result": "664 passed"
         }
       ]
+    },
+    "resharding_trigger": {
+      "run_id": 35743773680,
+      "head_sha": "7704c9d4c9036cae1a47502776094a7a2a5f8e79",
+      "captured_at": "2026-09-22",
+      "integration_wall_seconds": 395.443,
+      "test_result": "2668 passed, 58 skipped",
+      "slowest_module": "tests.integration.recovery.test_cross_store_integrity",
+      "slowest_module_seconds": 23.918,
+      "note": "The unsplit integration lane exceeded the 330-second runtime guard; a rerun then hit the seven-minute outer job timeout. The suite is split by stable responsibility while preserving the same aggregate critical-path guard."
     }
   },
   "lane_budgets": {
@@ -136,11 +146,6 @@
       "slow_test_seconds": 10,
       "slow_module_seconds": 15
     },
-    "integration": {
-      "wall_seconds": 330,
-      "slow_test_seconds": 15,
-      "slow_module_seconds": 20
-    },
     "system-regression": {
       "wall_seconds": 240,
       "slow_test_seconds": 15,
@@ -150,13 +155,23 @@
       "wall_seconds": 480,
       "slow_test_seconds": 30,
       "slow_module_seconds": 60
+    },
+    "integration-core": {
+      "wall_seconds": 330,
+      "slow_test_seconds": 15,
+      "slow_module_seconds": 20
+    },
+    "integration-recovery-deployment": {
+      "wall_seconds": 330,
+      "slow_test_seconds": 15,
+      "slow_module_seconds": 30
     }
   },
   "aggregate_budgets": {
     "frontend-independent-python-ci": {
       "matrix_job_timeout_seconds": 420,
       "pytest_critical_path_seconds": 330,
-      "rationale": "The integration lane has healthy pytest runs at 120.435s, 122.020s and 277.123s; its full matrix-job wall times include 140s, 148s and 315s observations. A 330-second pytest guard and 350-second frontend-independent Python validation guard leave measured runner-variance headroom while still detecting major regressions. The seven-minute matrix timeout is an outer fail-safe with enough headroom for the 350-second validation guard to record evidence and fail deterministically, not the normal target.",
+      "rationale": "The original integration lane exceeded the retained 330-second critical-path guard at 395.443s on run 35743773680 while all 2668 tests passed. CI now splits integration into core and recovery/deployment responsibility shards without parallelizing tests inside a shard. The 330-second pytest critical-path guard and 350-second validation guard remain unchanged; the seven-minute matrix timeout remains an outer fail-safe.",
       "validation_critical_path_seconds": 350
     },
     "full-local-python-suite": {
