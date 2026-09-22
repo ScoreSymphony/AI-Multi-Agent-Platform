@@ -230,10 +230,10 @@ The Compose labels use project-scoped `HostRegexp` and `HostSNIRegexp` rules:
   hostname;
 - there is no catch-all TLS router, so unrelated HTTPS projects remain untouched.
 
-The gateway also publishes a bootstrap HTTP mapping on
-`${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080`. That listener performs **only** a redirect to
-the canonical HTTPS origin and never proxies Web/API traffic. This gives Hostinger an ordinary
-published port for initial access while Traefik remains the sole owner of 80/443.
+The zero-config profile publishes **no application host port**. This is deliberate: a real
+Hostinger VPS may allow only the standard web ports through its firewall, so relying on an
+arbitrary high port such as 18080 makes an otherwise healthy deployment unreachable. Hostinger
+Traefik is therefore the only public ingress path.
 
 The normal flow is therefore:
 
@@ -241,8 +241,11 @@ The normal flow is therefore:
 2. paste the zero-config Compose URL above;
 3. click **Deploy**;
 4. wait for the three platform containers to become healthy/running;
-5. open the published bootstrap access or Hostinger's **Open** action;
-6. the request redirects to `https://<project>.srvNNNNNN.hstgr.cloud`.
+5. open the canonical HTTPS Hostinger hostname
+   `https://<project>.srvNNNNNN.hstgr.cloud` (or Hostinger's **Open** action when hPanel exposes
+   the Traefik route).
+
+No additional firewall rule for a platform-specific high port is required.
 
 The gateway does **not** receive the host network namespace, Docker socket, host filesystem mounts,
 privileged mode, or an external IP/hostname discovery service. It runs read-only, drops all
@@ -304,10 +307,6 @@ overrides are intentionally small:
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
-
-The zero-config profile additionally supports
-`AI_MAP_HOSTINGER_BOOTSTRAP_PORT` to override the redirect-only bootstrap port (default
-`18080`).
 
 The following variables are only for the explicit
 `docker-compose.hostinger-shared-traefik.yml` profile:
