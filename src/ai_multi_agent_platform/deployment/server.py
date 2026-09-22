@@ -18,6 +18,7 @@ from ai_multi_agent_platform.backup import (
     require_blocked_restore_run,
     validate_restored_single_node,
 )
+from ai_multi_agent_platform.configuration import ConfigurationError
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import RunStatus
@@ -49,6 +50,16 @@ from .startup_recovery import (
 )
 
 DeploymentBuilder = Callable[[SingleNodeConfig], SingleNodeDeployment]
+
+
+def _report_configuration_error(exc: ConfigurationError) -> int:
+    print(f"single-node configuration error: {exc}", file=sys.stderr)
+    print(
+        "Review config/single-node.env.example and the configured AI_MAP_* values/files, "
+        "correct the reported setting, then retry the same platform server command.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,7 +127,11 @@ def main(
     deployment_builder: DeploymentBuilder = build_single_node_deployment,
 ) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
-    config = load_single_node_config()
+    try:
+        config = load_single_node_config()
+    except ConfigurationError as exc:
+        return _report_configuration_error(exc)
+
     maintenance = MaintenanceStateStore.for_data_dir(config.data_dir)
     try:
         maintenance_state = maintenance.read()
@@ -183,7 +198,10 @@ def main(
     # and durable version vectors disagree: store constructors may initialize or inspect durable
     # schemas, which must remain exclusively owned by the offline upgrade process until activation
     # succeeds.
-    deployment = deployment_builder(config)
+    try:
+        deployment = deployment_builder(config)
+    except ConfigurationError as exc:
+        return _report_configuration_error(exc)
 
     if args.command == "bootstrap-admin":
         password = _read_password(password_stdin=bool(args.password_stdin))
