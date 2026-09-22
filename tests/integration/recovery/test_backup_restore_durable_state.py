@@ -21,6 +21,8 @@ from ai_multi_agent_platform.backup import (
     verify_backup,
 )
 from ai_multi_agent_platform.backup.inventory import required_single_node_store_paths
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
+from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.distributed import (
     DistributedRegistry,
@@ -36,6 +38,15 @@ from ai_multi_agent_platform.distributed import (
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus, new_id
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
+from ai_multi_agent_platform.verification import (
+    VerificationOutcome,
+    VerificationPolicy,
+    VerificationResult,
+    VerificationStage,
+    VerificationSubject,
+    VerifierIdentity,
+    VerifierKind,
+)
 
 PASSWORD = "correct horse battery staple"
 
@@ -153,6 +164,128 @@ def test_single_node_backup_restore_preserves_canonical_state_on_new_data_root(
         smoke = await restored.run_reference_smoke()
         assert smoke.task_status is TaskStatus.SUCCEEDED
         assert smoke.run_status is RunStatus.SUCCEEDED
+
+    asyncio.run(scenario())
+
+
+def test_backup_restore_preserves_exact_auxiliary_verification_evidence_binding(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        source_config = SingleNodeConfig(
+            data_dir=tmp_path / "verification-source", secure_cookie=False
+        )
+        deployment = build_single_node_deployment(source_config)
+        admin = deployment.bootstrap_admin("admin", PASSWORD)
+        task = await deployment.kernel.create_task(
+            idempotency_key="backup-verification:create",
+            title="Backup verification provenance",
+            objective="Preserve immutable auxiliary evidence across backup and restore",
+            owner_type="user",
+            owner_id=admin.user_id,
+        )
+        primary_artifact_id = new_id("artifact")
+        evidence_artifact_id = new_id("artifact")
+        await deployment.kernel.attach_artifact(
+            idempotency_key="backup-verification:primary",
+            task_id=task.task_id,
+            artifact_id=primary_artifact_id,
+        )
+        await deployment.kernel.attach_artifact(
+            idempotency_key="backup-verification:evidence",
+            task_id=task.task_id,
+            artifact_id=evidence_artifact_id,
+        )
+        context = DataAccessContext(
+            operation=OperationContext(
+                correlation_id=task.task_id,
+                owner_type="user",
+                owner_id=admin.user_id,
+            ),
+            actor_ref="service:verification",
+            task_id=task.task_id,
+        )
+        primary_file = await deployment.files.create_file(b"primary", context)
+        reviewed_file = await deployment.files.create_file(b"auxiliary evidence", context)
+        await deployment.files.link_artifact(primary_file.file_id, primary_artifact_id, context)
+        await deployment.files.link_artifact(
+            reviewed_file.file_id,
+            evidence_artifact_id,
+            context,
+        )
+        policy = deployment.verification.register_policy(
+            VerificationPolicy(
+                name="backup-auxiliary-evidence",
+                stages=(VerificationStage("review", VerifierKind.HUMAN),),
+            )
+        )
+        request = await deployment.verification_runtime.request_verification(
+            task_id=task.task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            subject_type="artifact",
+            subject_id=primary_artifact_id,
+            correlation_id=task.task_id,
+        )
+        recorded = await deployment.verification_runtime.submit_result(
+            VerificationResult(
+                verification_id=request.verification_id,
+                verifier=VerifierIdentity(
+                    verifier_ref="user:reviewer",
+                    kind=VerifierKind.HUMAN,
+                    read_only=True,
+                ),
+                outcome=VerificationOutcome.PASS,
+                subject=request.subject,
+                evidence_artifact_ids=(evidence_artifact_id,),
+            )
+        )
+        expected = VerificationSubject(
+            subject_type="artifact",
+            subject_id=evidence_artifact_id,
+            revision=reviewed_file.file_id,
+            digest=f"sha256:{reviewed_file.sha256}",
+        )
+        assert recorded.evidence_bindings == (expected,)
+
+        backup = create_single_node_backup(
+            data_dir=source_config.data_dir,
+            destination=tmp_path / "verification-backup",
+            platform_version=__version__,
+            quiesced=True,
+        )
+        restored_root = restore_single_node_backup(
+            backup_dir=backup,
+            target_data_dir=tmp_path / "verification-restored",
+            expected_platform_version=__version__,
+        )
+        restored = build_single_node_deployment(
+            SingleNodeConfig(data_dir=restored_root, secure_cookie=False)
+        )
+        restored_result = restored.verification.result_for(request.verification_id)
+        assert restored_result is not None
+        assert restored_result.evidence_bindings == (expected,)
+        assert restored_result.evidence_bindings_complete is True
+
+        later_file = await restored.files.create_file(b"later relinked evidence", context)
+        await restored.files.link_artifact(
+            later_file.file_id,
+            evidence_artifact_id,
+            context,
+        )
+        historical = restored.verification.result_for(request.verification_id)
+        assert historical is not None
+        assert historical.evidence_bindings == (expected,)
+        assert historical.evidence_bindings_complete is True
+
+        with pytest.raises(ContractError) as ambiguous:
+            await restored.verification_runtime.evidence.resolve_subject(
+                task_id=task.task_id,
+                subject_type="artifact",
+                subject_id=evidence_artifact_id,
+            )
+        assert ambiguous.value.code is ErrorCode.CONTRACT_VIOLATION
 
     asyncio.run(scenario())
 

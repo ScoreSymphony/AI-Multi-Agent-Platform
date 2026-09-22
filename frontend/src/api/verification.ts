@@ -66,6 +66,8 @@ export interface CanonicalVerificationResult {
   verifier: VerificationVerifier;
   findings: VerificationFinding[];
   evidence_artifact_ids: string[];
+  evidence_bindings: VerificationSubject[];
+  evidence_bindings_complete: boolean;
   checks_executed: string[];
   errors: VerificationErrorRecord[];
   started_at: string;

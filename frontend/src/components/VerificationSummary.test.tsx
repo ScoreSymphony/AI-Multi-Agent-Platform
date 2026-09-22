@@ -78,6 +78,15 @@ const verification: CanonicalVerification = {
     },
     findings: [],
     evidence_artifact_ids: ["artifact_evidence"],
+    evidence_bindings: [
+      {
+        type: "artifact",
+        id: "artifact_evidence",
+        revision: "file_evidence",
+        digest: "sha256:evidence",
+      },
+    ],
+    evidence_bindings_complete: true,
     checks_executed: ["human_review"],
     errors: [],
     started_at: "2026-09-04T00:00:30+00:00",

@@ -18,15 +18,18 @@ from ai_multi_agent_platform.verification import (
     VerificationCompletionAuthority,
     VerificationOutcome,
     VerificationPolicy,
+    VerificationResult,
     VerificationService,
     VerificationStage,
     VerificationSubject,
+    VerifierIdentity,
     VerifierKind,
 )
 from ai_multi_agent_platform.verification.control_plane import (
     VERIFICATION_COLLECTION,
     VERIFICATION_COMMANDS,
     VERIFICATION_REQUIREMENT_COLLECTION,
+    VERIFICATION_RESULT_COLLECTION,
     VERIFICATION_REVIEW_COLLECTION,
     register_verification_control_plane,
 )
@@ -347,5 +350,60 @@ def test_human_reject_and_request_changes_are_canonical_commands(
             assert decision.state is CompletionState.REPAIR_REQUIRED
         else:
             assert decision.state is CompletionState.REJECTED
+
+    asyncio.run(scenario())
+
+
+def test_verification_result_history_exposes_only_safe_evidence_binding_metadata() -> None:
+    async def scenario() -> None:
+        kernel, verification, completion, _, _, http = await _stack()
+        task, request = await _human_request(kernel, verification, completion)
+        artifact_id = new_id("artifact")
+        binding = VerificationSubject(
+            subject_type="artifact",
+            subject_id=artifact_id,
+            revision=new_id("file"),
+            digest="sha256:" + "e" * 64,
+        )
+        recorded = verification.submit_result(
+            VerificationResult(
+                verification_id=request.verification_id,
+                verifier=VerifierIdentity(
+                    verifier_ref="user:reviewer",
+                    kind=VerifierKind.HUMAN,
+                    read_only=True,
+                ),
+                outcome=VerificationOutcome.PASS,
+                subject=request.subject,
+                evidence_artifact_ids=(artifact_id,),
+                evidence_bindings=(binding,),
+            )
+        )
+
+        response = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/{VERIFICATION_RESULT_COLLECTION}/{recorded.verification_result_id}",
+                headers=_headers(),
+            )
+        )
+        assert response.status == 200
+        assert isinstance(response.body, dict)
+        assert response.body["evidence_artifact_ids"] == [artifact_id]
+        assert response.body["evidence_bindings_complete"] is True
+        assert response.body["evidence_bindings"] == [
+            {
+                "type": "artifact",
+                "id": artifact_id,
+                "revision": binding.revision,
+                "digest": binding.digest,
+            }
+        ]
+        encoded = str(response.body)
+        assert "content" not in response.body
+        assert "file_body" not in encoded
+        assert "storage_path" not in encoded
+        assert "provider_private" not in encoded
+        assert response.body["task_id"] == task.task_id
 
     asyncio.run(scenario())

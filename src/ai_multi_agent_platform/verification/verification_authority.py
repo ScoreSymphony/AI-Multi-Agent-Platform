@@ -308,6 +308,14 @@ class VerificationService:
                 ErrorCode.FORBIDDEN,
                 "raw verification results are disabled; use CanonicalVerificationRuntime",
             )
+        if (
+            _canonical_result_token is _CANONICAL_RESULT_TOKEN
+            and not result.evidence_bindings_complete
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical verification result requires exact auxiliary evidence bindings",
+            )
         request = self.get_request(result.verification_id)
         if request.status is not VerificationRequestStatus.PENDING:
             raise ContractError(

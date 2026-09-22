@@ -408,6 +408,12 @@ def test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_en
         assert verification_result["outcome"] == VerificationOutcome.PASS.value
         assert verification_result["subject"] == verification_view.body["subject"]
         assert verification_result["evidence_artifact_ids"] == [artifact_id]
+        assert verification_result["evidence_bindings_complete"] is True
+        assert len(verification_result["evidence_bindings"]) == 1
+        assert verification_result["evidence_bindings"][0]["id"] == artifact_id
+        assert verification_result["evidence_bindings"][0]["type"] == "artifact"
+        assert verification_result["evidence_bindings"][0]["revision"].startswith("file_")
+        assert verification_result["evidence_bindings"][0]["digest"].startswith("sha256:")
 
         completed = await deployment.kernel.complete_task(
             idempotency_key="issue-46:complete",

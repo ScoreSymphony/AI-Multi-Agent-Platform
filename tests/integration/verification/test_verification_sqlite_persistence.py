@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -14,8 +15,10 @@ from ai_multi_agent_platform.verification import (
     VerificationOutcome,
     VerificationPolicy,
     VerificationRequestStatus,
+    VerificationResult,
     VerificationStage,
     VerificationSubject,
+    VerifierIdentity,
     VerifierKind,
 )
 
@@ -249,3 +252,118 @@ def test_corrupt_or_unknown_persisted_schema_fails_closed(tmp_path) -> None:
     with pytest.raises(ContractError) as exc_info:
         SqliteVerificationService(path)
     assert exc_info.value.code is ErrorCode.BACKEND_ERROR
+
+
+def test_auxiliary_evidence_bindings_survive_sqlite_restart(tmp_path) -> None:
+    path = tmp_path / "verification.sqlite"
+    service = SqliteVerificationService(path)
+    policy = service.register_policy(
+        VerificationPolicy(
+            name="durable-evidence",
+            stages=(VerificationStage("review", VerifierKind.HUMAN),),
+        )
+    )
+    task_id = new_id("task")
+    exact = result_subject()
+    request = service.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="review",
+        subject=exact,
+        result_id=exact.subject_id,
+        correlation_id=task_id,
+    )
+    artifact_id = new_id("artifact")
+    binding = VerificationSubject(
+        subject_type="artifact",
+        subject_id=artifact_id,
+        revision=new_id("file"),
+        digest="sha256:" + "a" * 64,
+    )
+    recorded = service.submit_result(
+        VerificationResult(
+            verification_id=request.verification_id,
+            verifier=VerifierIdentity(
+                verifier_ref="user:reviewer",
+                kind=VerifierKind.HUMAN,
+                read_only=True,
+            ),
+            outcome=VerificationOutcome.PASS,
+            subject=exact,
+            evidence_artifact_ids=(artifact_id,),
+            evidence_bindings=(binding,),
+        )
+    )
+    assert recorded.evidence_bindings_complete is True
+
+    restored = SqliteVerificationService(path)
+    restored_result = restored.result_for(request.verification_id)
+    assert restored_result is not None
+    assert restored_result.evidence_artifact_ids == (artifact_id,)
+    assert restored_result.evidence_bindings == (binding,)
+    assert restored_result.evidence_bindings_complete is True
+
+
+def test_legacy_result_without_auxiliary_bindings_restores_fail_closed(tmp_path) -> None:
+    path = tmp_path / "verification.sqlite"
+    service = SqliteVerificationService(path)
+    policy = service.register_policy(
+        VerificationPolicy(
+            name="legacy-evidence",
+            stages=(VerificationStage("review", VerifierKind.HUMAN),),
+        )
+    )
+    task_id = new_id("task")
+    exact = result_subject()
+    request = service.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="review",
+        subject=exact,
+        result_id=exact.subject_id,
+        correlation_id=task_id,
+    )
+    artifact_id = new_id("artifact")
+    binding = VerificationSubject(
+        subject_type="artifact",
+        subject_id=artifact_id,
+        revision=new_id("file"),
+        digest="sha256:" + "b" * 64,
+    )
+    service.submit_result(
+        VerificationResult(
+            verification_id=request.verification_id,
+            verifier=VerifierIdentity(
+                verifier_ref="user:reviewer",
+                kind=VerifierKind.HUMAN,
+                read_only=True,
+            ),
+            outcome=VerificationOutcome.PASS,
+            subject=exact,
+            evidence_artifact_ids=(artifact_id,),
+            evidence_bindings=(binding,),
+        )
+    )
+
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            "SELECT payload FROM verification_snapshots WHERE namespace = ?",
+            ("verification-service",),
+        ).fetchone()
+        assert row is not None
+        document = json.loads(row[0])
+        result_fields = document["results"][0]["fields"]
+        assert result_fields.pop("evidence_bindings") is not None
+        connection.execute(
+            "UPDATE verification_snapshots SET payload = ? WHERE namespace = ?",
+            (json.dumps(document, sort_keys=True), "verification-service"),
+        )
+
+    restored = SqliteVerificationService(path)
+    restored_result = restored.result_for(request.verification_id)
+    assert restored_result is not None
+    assert restored_result.evidence_artifact_ids == (artifact_id,)
+    assert restored_result.evidence_bindings == ()
+    assert restored_result.evidence_bindings_complete is False

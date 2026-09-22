@@ -769,6 +769,8 @@ def _result_resource(result: VerificationResult) -> dict[str, JsonValue]:
             for finding in result.findings
         ],
         "evidence_artifact_ids": list(result.evidence_artifact_ids),
+        "evidence_bindings": [_subject_resource(binding) for binding in result.evidence_bindings],
+        "evidence_bindings_complete": result.evidence_bindings_complete,
         "checks_executed": list(result.checks_executed),
         "errors": [
             {"code": error.code, "message": error.message, "retryable": error.retryable}

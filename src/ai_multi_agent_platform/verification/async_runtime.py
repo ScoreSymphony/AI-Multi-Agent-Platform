@@ -116,11 +116,11 @@ class AsyncCanonicalVerificationRuntime(CanonicalVerificationRuntime):
                 ErrorCode.CONTRACT_VIOLATION,
                 "verification result subject differs from current canonical evidence",
             )
-        await self._evidence.validate_evidence_artifacts(
+        canonical_result = await self._with_canonical_evidence_bindings(
             task_id=request.task_id,
-            artifact_ids=result.evidence_artifact_ids,
+            result=result,
         )
-        return await self._runtime_verification.submit_canonical_result(result)
+        return await self._runtime_verification.submit_canonical_result(canonical_result)
 
     async def run_deterministic(
         self,

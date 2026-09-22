@@ -112,4 +112,66 @@ describe("Verification detail state coverage", () => {
     expect(html).not.toContain(">Request changes</button>");
     expect(html).not.toContain(">Reject</button>");
   });
+
+  it("renders immutable auxiliary evidence metadata without file content", () => {
+    const reviewed: CanonicalVerification = {
+      ...verification,
+      status: "completed",
+      verification_result: {
+        id: "verification_result_123",
+        verification_id: verification.id,
+        outcome: "pass",
+        subject: verification.subject,
+        verifier: {
+          ref: "user:reviewer",
+          kind: "human",
+          agent_id: null,
+          agent_revision: null,
+          model_config_id: null,
+          provider_id: null,
+          read_only: true,
+        },
+        findings: [],
+        evidence_artifact_ids: ["artifact_evidence"],
+        evidence_bindings: [
+          {
+            type: "artifact",
+            id: "artifact_evidence",
+            revision: "file_reviewed",
+            digest: "sha256:reviewed-evidence",
+          },
+        ],
+        evidence_bindings_complete: true,
+        checks_executed: ["human_review"],
+        errors: [],
+        started_at: "2026-09-19T10:01:00Z",
+        completed_at: "2026-09-19T10:02:00Z",
+        metadata: {},
+      },
+    };
+    const html = renderWithRouter(
+      <VerificationDetailView
+        verification={reviewed}
+        requirement={null}
+        history={[]}
+        comment=""
+        evidenceText=""
+        busy={false}
+        loadError={null}
+        requirementError={null}
+        actionError={null}
+        canReview={false}
+        onComment={vi.fn()}
+        onEvidence={vi.fn()}
+        onReview={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("file_reviewed");
+    expect(html).toContain("sha256:reviewed-evidence");
+    expect(html).not.toContain("file body");
+    expect(html).not.toContain("storage path");
+  });
+
 });

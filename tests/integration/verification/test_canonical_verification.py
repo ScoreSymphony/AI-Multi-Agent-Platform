@@ -321,6 +321,11 @@ async def test_canonical_verification_reuses_request_and_binds_full_diff_to_outp
             checks_executed=("repository_tests", "diff_review"),
         )
     )
+    assert submitted.evidence_bindings_complete is True
+    assert len(submitted.evidence_bindings) == 1
+    assert submitted.evidence_bindings[0].subject_id == artifacts[1]
+    assert submitted.evidence_bindings[0].revision.startswith("file_")
+    assert submitted.evidence_bindings[0].digest == f"sha256:{2:064x}"
 
     workstream = review.record_completed(
         batch_id,

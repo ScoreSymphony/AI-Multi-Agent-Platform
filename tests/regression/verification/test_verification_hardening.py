@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -419,6 +420,227 @@ def test_file_backed_artifact_subject_and_evidence_validate_real_checksum(tmp_pa
                 subject_id=artifact_id,
             )
         assert mismatch.value.code is ErrorCode.CONTRACT_VIOLATION
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("evidence_case", "expected_code"),
+    [
+        ("unknown", ErrorCode.NOT_FOUND),
+        ("ambiguous", ErrorCode.CONTRACT_VIOLATION),
+        ("non_ready", ErrorCode.CONTRACT_VIOLATION),
+        ("checksum_invalid", ErrorCode.CONTRACT_VIOLATION),
+    ],
+)
+def test_auxiliary_evidence_submission_rejects_noncanonical_evidence(
+    tmp_path: Path,
+    evidence_case: str,
+    expected_code: ErrorCode,
+) -> None:
+    async def scenario() -> None:
+        repository = InMemoryKernelRepository()
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=repository,
+        )
+        task = await kernel.create_task(
+            idempotency_key=f"aux-evidence-reject:{evidence_case}:create",
+            title="Reject invalid auxiliary evidence",
+            objective="Fail closed before persisting a verification result",
+            owner_type="user",
+            owner_id="issue-1295",
+        )
+        primary_artifact_id = new_id("artifact")
+        evidence_artifact_id = new_id("artifact")
+        await kernel.attach_artifact(
+            idempotency_key=f"aux-evidence-reject:{evidence_case}:primary",
+            task_id=task.task_id,
+            artifact_id=primary_artifact_id,
+        )
+
+        files_root = tmp_path / "files"
+        files_db = tmp_path / "files.sqlite"
+        files = LocalFileProvider(files_root, files_db)
+        context = DataAccessContext(
+            operation=OperationContext(
+                correlation_id=task.task_id,
+                owner_type="user",
+                owner_id="issue-1295",
+            ),
+            actor_ref="user:issue-1295",
+            task_id=task.task_id,
+        )
+        primary_file = await files.create_file(b"primary", context)
+        await files.link_artifact(primary_file.file_id, primary_artifact_id, context)
+
+        if evidence_case != "unknown":
+            await kernel.attach_artifact(
+                idempotency_key=f"aux-evidence-reject:{evidence_case}:supporting",
+                task_id=task.task_id,
+                artifact_id=evidence_artifact_id,
+            )
+            reviewed_file = await files.create_file(b"reviewed evidence", context)
+            await files.link_artifact(reviewed_file.file_id, evidence_artifact_id, context)
+            if evidence_case == "ambiguous":
+                later_file = await files.create_file(b"ambiguous evidence", context)
+                await files.link_artifact(later_file.file_id, evidence_artifact_id, context)
+            elif evidence_case == "non_ready":
+                with sqlite3.connect(files_db) as connection:
+                    connection.execute(
+                        "UPDATE data_files SET state = ? WHERE file_id = ?",
+                        ("pending", reviewed_file.file_id),
+                    )
+            elif evidence_case == "checksum_invalid":
+                (files_root / reviewed_file.file_id).write_bytes(b"tampered evidence")
+
+        resolver = KernelFileVerificationEvidenceResolver(kernel, repository, files)
+        service = VerificationService(
+            require_canonical_subjects=True,
+            require_canonical_results=True,
+        )
+        completion = VerificationCompletionAuthority(service)
+        runtime = CanonicalVerificationRuntime(completion, resolver)
+        policy = service.register_policy(
+            VerificationPolicy(
+                name=f"reject-{evidence_case}-auxiliary-evidence",
+                stages=(VerificationStage("review", VerifierKind.HUMAN),),
+            )
+        )
+        request = await runtime.request_verification(
+            task_id=task.task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            subject_type="artifact",
+            subject_id=primary_artifact_id,
+            correlation_id=task.task_id,
+        )
+
+        with pytest.raises(ContractError) as rejected:
+            await runtime.submit_result(
+                VerificationResult(
+                    verification_id=request.verification_id,
+                    verifier=VerifierIdentity(
+                        verifier_ref="user:reviewer",
+                        kind=VerifierKind.HUMAN,
+                        read_only=True,
+                    ),
+                    outcome=VerificationOutcome.PASS,
+                    subject=request.subject,
+                    evidence_artifact_ids=(evidence_artifact_id,),
+                )
+            )
+
+        assert rejected.value.code is expected_code
+        assert service.result_for(request.verification_id) is None
+        assert (
+            service.get_request(request.verification_id).status is VerificationRequestStatus.PENDING
+        )
+
+    asyncio.run(scenario())
+
+
+def test_auxiliary_evidence_binding_survives_later_artifact_relink(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        repository = InMemoryKernelRepository()
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=repository,
+        )
+        task = await kernel.create_task(
+            idempotency_key="aux-evidence:create",
+            title="Immutable auxiliary evidence",
+            objective="Bind reviewed evidence to one exact FileRecord",
+            owner_type="user",
+            owner_id="issue-1295",
+        )
+        primary_artifact_id = new_id("artifact")
+        evidence_artifact_id = new_id("artifact")
+        await kernel.attach_artifact(
+            idempotency_key="aux-evidence:primary",
+            task_id=task.task_id,
+            artifact_id=primary_artifact_id,
+        )
+        await kernel.attach_artifact(
+            idempotency_key="aux-evidence:supporting",
+            task_id=task.task_id,
+            artifact_id=evidence_artifact_id,
+        )
+        files = LocalFileProvider(tmp_path / "files", tmp_path / "files.sqlite")
+        context = DataAccessContext(
+            operation=OperationContext(
+                correlation_id=task.task_id,
+                owner_type="user",
+                owner_id="issue-1295",
+            ),
+            actor_ref="user:issue-1295",
+            task_id=task.task_id,
+        )
+        primary_file = await files.create_file(b"primary", context)
+        reviewed_file = await files.create_file(b"reviewed evidence", context)
+        await files.link_artifact(primary_file.file_id, primary_artifact_id, context)
+        await files.link_artifact(reviewed_file.file_id, evidence_artifact_id, context)
+
+        resolver = KernelFileVerificationEvidenceResolver(kernel, repository, files)
+        service = VerificationService(
+            require_canonical_subjects=True,
+            require_canonical_results=True,
+        )
+        completion = VerificationCompletionAuthority(service)
+        runtime = CanonicalVerificationRuntime(completion, resolver)
+        policy = service.register_policy(
+            VerificationPolicy(
+                name="immutable-auxiliary-evidence",
+                stages=(VerificationStage("review", VerifierKind.HUMAN),),
+            )
+        )
+        request = await runtime.request_verification(
+            task_id=task.task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            subject_type="artifact",
+            subject_id=primary_artifact_id,
+            correlation_id=task.task_id,
+        )
+        recorded = await runtime.submit_result(
+            VerificationResult(
+                verification_id=request.verification_id,
+                verifier=VerifierIdentity(
+                    verifier_ref="user:reviewer",
+                    kind=VerifierKind.HUMAN,
+                    read_only=True,
+                ),
+                outcome=VerificationOutcome.PASS,
+                subject=request.subject,
+                evidence_artifact_ids=(evidence_artifact_id,),
+            )
+        )
+        expected_binding = VerificationSubject(
+            subject_type="artifact",
+            subject_id=evidence_artifact_id,
+            revision=reviewed_file.file_id,
+            digest=f"sha256:{reviewed_file.sha256}",
+        )
+        assert recorded.evidence_bindings == (expected_binding,)
+        assert recorded.evidence_bindings_complete is True
+
+        later_file = await files.create_file(b"different later evidence", context)
+        await files.link_artifact(later_file.file_id, evidence_artifact_id, context)
+        with pytest.raises(ContractError) as ambiguous:
+            await resolver.resolve_subject(
+                task_id=task.task_id,
+                subject_type="artifact",
+                subject_id=evidence_artifact_id,
+            )
+        assert ambiguous.value.code is ErrorCode.CONTRACT_VIOLATION
+
+        historical = service.result_for(request.verification_id)
+        assert historical is not None
+        assert historical.evidence_bindings == (expected_binding,)
 
     asyncio.run(scenario())
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -381,6 +381,33 @@ class CanonicalVerificationRuntime:
             causation_id=causation_id,
         )
 
+    async def _with_canonical_evidence_bindings(
+        self,
+        *,
+        task_id: str,
+        result: VerificationResult,
+    ) -> VerificationResult:
+        """Snapshot exact auxiliary Artifact provenance after canonical validation."""
+
+        await self._evidence.validate_evidence_artifacts(
+            task_id=task_id,
+            artifact_ids=result.evidence_artifact_ids,
+        )
+        bindings: list[VerificationSubject] = []
+        for artifact_id in result.evidence_artifact_ids:
+            binding = await self._evidence.resolve_subject(
+                task_id=task_id,
+                subject_type="artifact",
+                subject_id=artifact_id,
+            )
+            if binding.subject_type != "artifact" or binding.subject_id != artifact_id:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "verification evidence resolver returned a mismatched artifact binding",
+                )
+            bindings.append(binding)
+        return replace(result, evidence_bindings=tuple(bindings))
+
     async def submit_result(self, result: VerificationResult) -> VerificationResult:
         request = self._completion.verification.get_request(result.verification_id)
         canonical_subject = await self._evidence.resolve_subject(
@@ -393,12 +420,12 @@ class CanonicalVerificationRuntime:
                 ErrorCode.CONTRACT_VIOLATION,
                 "verification result subject differs from current canonical evidence",
             )
-        await self._evidence.validate_evidence_artifacts(
+        canonical_result = await self._with_canonical_evidence_bindings(
             task_id=request.task_id,
-            artifact_ids=result.evidence_artifact_ids,
+            result=result,
         )
         return self._completion.verification.submit_result(
-            result, _canonical_result_token=_CANONICAL_RESULT_TOKEN
+            canonical_result, _canonical_result_token=_CANONICAL_RESULT_TOKEN
         )
 
     async def run_deterministic(

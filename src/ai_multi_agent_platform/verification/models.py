@@ -356,6 +356,7 @@ class VerificationResult:
     verification_result_id: str = field(default_factory=lambda: new_id("verification_result"))
     findings: tuple[VerificationFinding, ...] = ()
     evidence_artifact_ids: tuple[str, ...] = ()
+    evidence_bindings: tuple[VerificationSubject, ...] = ()
     checks_executed: tuple[str, ...] = ()
     errors: tuple[VerificationError, ...] = ()
     started_at: datetime = field(default_factory=utc_now)
@@ -369,6 +370,21 @@ class VerificationResult:
             validate_id(artifact_id, "artifact")
         if len(set(self.evidence_artifact_ids)) != len(self.evidence_artifact_ids):
             raise ValueError("verification evidence artifact IDs must be unique")
+        binding_ids: list[str] = []
+        for binding in self.evidence_bindings:
+            if binding.subject_type != "artifact":
+                raise ValueError("verification evidence bindings must reference artifacts")
+            if binding.subject_id not in self.evidence_artifact_ids:
+                raise ValueError(
+                    "verification evidence binding must reference an evidence artifact ID"
+                )
+            binding_ids.append(binding.subject_id)
+        if len(set(binding_ids)) != len(binding_ids):
+            raise ValueError("verification evidence bindings must be unique")
+        if binding_ids and tuple(binding_ids) != self.evidence_artifact_ids:
+            raise ValueError(
+                "verification evidence bindings must cover evidence artifact IDs in order"
+            )
         for check in self.checks_executed:
             _require_nonblank(check, "verification check name")
         if len(set(self.checks_executed)) != len(self.checks_executed):
@@ -378,6 +394,16 @@ class VerificationResult:
         if self.completed_at < self.started_at:
             raise ValueError("verification completed_at cannot precede started_at")
         object.__setattr__(self, "metadata", _freeze_metadata(self.metadata))
+
+    @property
+    def evidence_bindings_complete(self) -> bool:
+        """Whether every auxiliary Artifact has exact immutable reviewed provenance."""
+
+        return (
+            len(self.evidence_bindings) == len(self.evidence_artifact_ids)
+            and tuple(binding.subject_id for binding in self.evidence_bindings)
+            == self.evidence_artifact_ids
+        )
 
 
 @dataclass(frozen=True, slots=True)

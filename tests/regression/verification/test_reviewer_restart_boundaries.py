@@ -67,6 +67,13 @@ class MutableEvidence:
         subject_id: str,
     ) -> VerificationSubject:
         assert task_id == self.context.task_id
+        if subject_type == "artifact":
+            return VerificationSubject(
+                subject_type="artifact",
+                subject_id=subject_id,
+                revision=f"fixture:{subject_id}",
+                digest=f"sha256:fixture:{subject_id}",
+            )
         assert subject_type == self.context.subject.subject_type
         assert subject_id == self.context.subject.subject_id
         return self.context.subject
