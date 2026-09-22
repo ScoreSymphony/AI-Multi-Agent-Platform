@@ -103,28 +103,28 @@ bootstrap and sign-in on non-loopback HTTP origins before credentials are submit
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
 default. New Hostinger Docker Manager Compose-from-URL installs use
 `deploy/docker/docker-compose.hostinger-zero-config.yml`, not the GitHub repository landing page.
-That new-install profile is self-contained and HTTPS-first: only its dedicated Caddy gateway
-publishes host ports 80/443; Web and Control Plane remain private on the platform network and
-Secure cookies remain enabled. The historical `docker-compose.hostinger.yml` and
-`docker-compose.hostinger-https.yml` entry points remain on their previous
-shared-Traefik-compatible topology so an existing deployment can redeploy without unexpectedly
-competing for ports 80/443.
+That new-install profile is HTTPS-first and coexists with Hostinger's shared Traefik edge:
+Traefik remains the only owner of host ports 80/443, while Web and Control Plane remain private on
+the platform network and Secure cookies remain enabled. The gateway joins the existing external
+`traefik-proxy` network and also joins only the host UTS namespace (`uts: host`) so it can read
+the VPS kernel hostname without using the host network namespace, Docker socket, host filesystem,
+Hostinger API credentials or an external discovery service.
 
-The gateway joins only the host UTS namespace (`uts: host`) so it can read the VPS kernel hostname
-without using the host network namespace, Docker socket, host filesystem, Hostinger API credentials
-or an external discovery service. When the hostname matches Hostinger's managed default form
-`srvNNNNNN.hstgr.cloud`, the gateway derives
-`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`, obtains public HTTPS automatically and redirects
-raw-IP HTTP access to that canonical origin. An explicit `AI_MAP_PUBLIC_DOMAIN` overrides this
-automatic hostname selection. If neither an explicit domain nor a recognized Hostinger-managed
-hostname is available, the gateway remains fail-closed and serves setup guidance only.
+When the hostname matches Hostinger's managed default form `srvNNNNNN.hstgr.cloud`, the gateway
+derives `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. Traefik uses narrowly scoped
+HostRegexp/HostSNIRegexp routes for that project hostname; HTTP reaches Caddy for ACME/redirect
+handling and HTTPS is passed through to Caddy for termination. A bootstrap HTTP mapping defaults to
+host port 18080 and redirects only to the canonical HTTPS origin. An explicit
+`AI_MAP_PUBLIC_DOMAIN` overrides automatic hostname selection. If neither an explicit domain nor
+a recognized Hostinger-managed hostname is available, the gateway remains fail-closed.
 
-For VPSes where ports 80/443 are already owned by a shared Hostinger Traefik edge, use
-`deploy/docker/docker-compose.hostinger-shared-traefik.yml` instead. That advanced profile retains
-the explicit `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK` and `AI_MAP_TRAEFIK_EXTERNAL` contract
-for multi-project routing. Operators using a separately managed non-Traefik reverse proxy may use
-`deploy/docker/docker-compose.hostinger-external-edge.yml`. The Docker runbook owns the exact
-profile prerequisites and migration steps.
+The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` entry
+points remain migration-safe. For VPSes that do not run Hostinger Traefik and have free ports
+80/443, use `deploy/docker/docker-compose.hostinger-direct.yml`. The explicit
+`docker-compose.hostinger-shared-traefik.yml` profile remains available for operators who prefer
+the older environment-driven `TRAEFIK_HOST` contract, and
+`docker-compose.hostinger-external-edge.yml` remains available for separately managed
+non-Traefik reverse proxies.
 
 ## Browser-first initial setup
 
