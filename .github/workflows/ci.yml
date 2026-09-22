@@ -243,7 +243,11 @@ jobs:
           grep -F 'HostRegexp(' /tmp/hostinger-zero-config.yml
           grep -F 'HostSNIRegexp(' /tmp/hostinger-zero-config.yml
           grep -F 'tls.passthrough: "true"' /tmp/hostinger-zero-config.yml
-          grep -F 'name: traefik-proxy' /tmp/hostinger-zero-config.yml
+          if grep -F 'traefik.docker.network' /tmp/hostinger-zero-config.yml \
+            || grep -F 'name: traefik-proxy' /tmp/hostinger-zero-config.yml; then
+            echo "zero-config Hostinger profile unexpectedly requires a shared Docker network" >&2
+            exit 1
+          fi
           if grep -F 'HostSNI(`*`)' /tmp/hostinger-zero-config.yml; then
             echo "zero-config Hostinger profile must not install a catch-all TLS router" >&2
             exit 1
