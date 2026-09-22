@@ -342,7 +342,7 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert shared_url in runbook
     assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
-    assert "zero-configuration" in runbook
+    assert "Zero-configuration" in runbook
     assert "uts: host" in runbook
     assert "srvNNNNNN.hstgr.cloud" in runbook
     assert "${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud" in runbook
@@ -552,27 +552,28 @@ def test_generic_https_edge_remains_pinned_for_non_hostinger_root_profile() -> N
     assert 'domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
 
 
-def test_hostinger_runbook_documents_traefik_and_alternate_external_edge() -> None:
+def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
 
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
+    assert "docker-compose.hostinger-shared-traefik.yml" in runbook
     assert "docker-compose.hostinger-external-edge.yml" in runbook
     assert "docker-compose.hostinger-https.yml" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL" in runbook
-    assert "ai-map-hostinger-edge" in runbook
     assert "traefik-proxy" in runbook
-    assert "setup.invalid" in runbook
+    assert "srvNNNNNN.hstgr.cloud" in runbook
     assert "hostinger-gateway" in runbook
     assert "fail-closed" in runbook
-    assert "single HTTPS edge" in normalized
-    assert "DNS" in runbook
+    assert "NET_BIND_SERVICE" in runbook
+    assert "ports 80 and 443" in normalized
+    assert "Caddy" in runbook
     hostinger_section = runbook[
         runbook.index("## Hostinger Docker Manager") : runbook.index("## Configuration")
     ]
-    assert "Caddy" not in hostinger_section
+    assert "Caddy" in hostinger_section
 
 
 def test_hostinger_external_edge_profile_remains_explicit_and_non_default() -> None:
