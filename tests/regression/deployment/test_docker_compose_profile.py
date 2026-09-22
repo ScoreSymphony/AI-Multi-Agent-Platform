@@ -257,9 +257,7 @@ def test_hostinger_default_url_profile_uses_shared_traefik_edge() -> None:
     assert '      - "8080"' in web
     assert "traefik.enable=true" in web
     assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}" in web
-    assert (
-        "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)" in web
-    )
+    assert "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)" in web
     assert ".entrypoints=websecure" in web
     assert ".tls.certresolver=letsencrypt" in web
     assert ".loadbalancer.server.port=8080" in web
@@ -338,7 +336,10 @@ def test_hostinger_runbook_documents_traefik_and_alternate_external_edge() -> No
     assert "setup.invalid" in runbook
     assert "single HTTPS edge" in normalized
     assert "DNS" in runbook
-    assert "Caddy" not in runbook[runbook.index("## Hostinger Docker Manager"):runbook.index("## Configuration")]
+    hostinger_section = runbook[
+        runbook.index("## Hostinger Docker Manager") : runbook.index("## Configuration")
+    ]
+    assert "Caddy" not in hostinger_section
 
 
 def test_hostinger_external_edge_profile_remains_explicit_and_non_default() -> None:
