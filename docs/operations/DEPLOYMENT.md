@@ -100,8 +100,8 @@ credentials.
 exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
 reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
 bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
-actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For Hostinger/VPS installs, the standard
-`deploy/docker/docker-compose.hostinger.yml` is HTTPS-first: it requires an explicit public DNS
+actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production default. The standard Hostinger workflow may start from `https://github.com/ScoreSymphony/AI-Multi-Agent-Platform`; the dedicated
+`deploy/docker/docker-compose.hostinger.yml` is the equivalent direct-file profile: it requires an explicit public DNS
 hostname, publishes only a dedicated Caddy edge on ports 80/443, keeps Web/Control Plane private,
 and retains Secure cookies. Operators that already own TLS elsewhere use the explicitly named
 `deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
@@ -493,3 +493,16 @@ and conformance evidence.
 Single-node/single-server production remains a valid topology independently of those optional HA
 extensions. Formal release publication/version finalization remains a separate downstream release
 operation rather than a prerequisite introduced by this deployment guide.
+
+
+## Repository-root Docker deployment contract
+
+The repository-root `docker-compose.yml` is intentionally production-oriented and HTTPS-first.
+This matters for Docker managers that accept a Git repository URL and automatically consume the
+root Compose file. It requires `AI_MAP_PUBLIC_DOMAIN`, publishes only the Caddy edge on ports
+80/443, keeps Web/Control Plane private, and retains the operations backup service plus canonical
+`platform-data`.
+
+Use `docker-compose.local.yml` only for loopback development/CI where host port 8080 is
+intentional. A missing production domain must fail composition rather than silently changing the
+security boundary.
