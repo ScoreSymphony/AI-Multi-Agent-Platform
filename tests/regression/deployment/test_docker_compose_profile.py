@@ -317,6 +317,9 @@ def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisit
     assert "AI_MAP_TRAEFIK_EXTERNAL" in runbook
     assert "ai-map-hostinger-edge" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
+    assert "TRAEFIK_HOST" in runbook
+    assert "${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}" in runbook
+    assert "*.hstgr.cloud" in runbook
     assert "setup.invalid" in runbook
     assert "hostinger-gateway" in runbook
     assert "fail-closed" in runbook
