@@ -83,16 +83,20 @@ namespace. Hostinger may expose that kernel hostname as either `srvNNNNNN` or
 `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. The gateway is then discovered through Traefik's
 Docker provider labels. Web and Control Plane remain private.
 
-No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required
-for this zero-config profile. The platform publishes no host port of its own: public access is
-exclusively through Hostinger Traefik on ports 80/443, so no additional firewall rule for an
-arbitrary high port is required. Set `AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to
-override the automatically derived Hostinger hostname with your own DNS name.
+No `TRAEFIK_HOST`, `AI_MAP_PUBLIC_DOMAIN`, `AI_MAP_TRAEFIK_NETWORK`, or
+`AI_MAP_TRAEFIK_EXTERNAL` value is required for this zero-config profile. The platform publishes
+no host port of its own: public access is exclusively through Hostinger Traefik on ports 80/443,
+so no additional firewall rule for an arbitrary high port is required. The zero-config profile
+advertises no fake fallback hostname; Hostinger's normal **Open** action is expected to use the
+managed `<project>.srvNNNNNN.hstgr.cloud` route directly.
 
 Existing installations already tracking
 `deploy/docker/docker-compose.hostinger.yml` or
 `deploy/docker/docker-compose.hostinger-https.yml` keep their previous migration-safe topology.
-If the VPS does **not** run Hostinger Traefik and ports 80/443 are free, use
+For a custom DNS hostname on the same host-network Traefik topology, use the explicit
+[`docker-compose.hostinger-custom-domain.yml`](deploy/docker/docker-compose.hostinger-custom-domain.yml)
+profile and set `AI_MAP_PUBLIC_DOMAIN`. If the VPS does **not** run Hostinger Traefik and ports
+80/443 are free, use
 [`docker-compose.hostinger-direct.yml`](deploy/docker/docker-compose.hostinger-direct.yml)
 instead. Detailed Hostinger, backup/restore and alternate-edge guidance lives in
 [`deploy/docker/README.md`](deploy/docker/README.md).

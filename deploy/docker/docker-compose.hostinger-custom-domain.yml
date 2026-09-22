@@ -82,25 +82,24 @@ services:
     depends_on:
       web:
         condition: service_healthy
-    uts: host
     environment:
       AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough
-      AI_MAP_PUBLIC_DOMAIN: ""
+      AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}
       AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}
     expose:
       - "80"
       - "443"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=HostRegexp(`^${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}\\.srv[0-9]+\\.hstgr\\.cloud$`)"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.entrypoints=web"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http"
-      - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.loadbalancer.server.port=80"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.rule=HostSNIRegexp(`^${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}\\.srv[0-9]+\\.hstgr\\.cloud$`)"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.entrypoints=websecure"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.tls.passthrough=true"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls"
-      - "traefik.tcp.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.loadbalancer.server.port=443"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-http.rule=Host(`${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-http.entrypoints=web"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-http.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-http"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-http.loadbalancer.server.port=80"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-tls.rule=HostSNI(`${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}`)"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-tls.entrypoints=websecure"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-tls.tls.passthrough=true"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-tls.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-tls"
+      - "traefik.tcp.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-custom-tls.loadbalancer.server.port=443"
     volumes:
       - hostinger-gateway-data:/data
       - hostinger-gateway-config:/config
