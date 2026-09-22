@@ -104,12 +104,14 @@ actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-o
 default. Hostinger Docker Manager's Compose-from-URL flow uses the direct maintained Compose file
 `deploy/docker/docker-compose.hostinger.yml`, not the GitHub repository landing page. That
 Hostinger profile does not bind host ports 80/443. It joins Hostinger's shared external
-`traefik-proxy` network and advertises the Web service through Traefik labels; Hostinger's
-Traefik project is the single TLS owner and routes `websecure` traffic to the Web container's
-internal port 8080. The Control Plane remains private on the platform network and Secure cookies
-remain enabled. Until `AI_MAP_PUBLIC_DOMAIN` is configured, the router uses the reserved
-`setup.invalid` hostname rather than exposing a server-IP HTTP path. Operators using a separately
-managed non-Traefik reverse proxy may instead use the explicitly named
+`traefik-proxy` network through a dedicated ingress gateway; Hostinger's Traefik project is the
+single TLS owner and routes `websecure` traffic to that gateway on internal port 8080. The Web
+service and Control Plane remain private on the platform network and Secure cookies remain enabled.
+Until `AI_MAP_PUBLIC_DOMAIN` is configured, the router uses the reserved `setup.invalid` hostname,
+but the gateway stays in fail-closed setup-pending mode and returns only HTTP 503 guidance without
+proxying Web/API traffic. The shared Traefik project/network must exist before deploying this
+Hostinger profile on a fresh VPS. Operators using a separately managed non-Traefik reverse proxy
+may instead use the explicitly named
 `deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
 the exact Traefik-network, DNS and profile prerequisites.
 
