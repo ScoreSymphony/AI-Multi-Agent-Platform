@@ -84,14 +84,21 @@ def test_routine_main_push_budget_is_ten_checks() -> None:
     assert routine_checks <= 10
 
 
-def test_repository_maintenance_is_manual_only() -> None:
+def test_repository_maintenance_stays_out_of_pr_gate_and_cleans_orphans() -> None:
     maintenance_triggers = _trigger_block("repository-maintenance.yml")
     assert "workflow_dispatch:" in maintenance_triggers
+    assert "schedule:" in maintenance_triggers
+    assert "\n  push:" in maintenance_triggers
+    assert "main" in maintenance_triggers
+    assert '".github/workflows/repository-maintenance.yml"' in maintenance_triggers
     assert "pull_request:" not in maintenance_triggers
-    assert "\n  push:" not in maintenance_triggers
 
+    maintenance = _text("repository-maintenance.yml")
     assert "cleanup-orphaned-actions-history" not in _text("repository-quality.yml")
-    assert "cleanup-orphaned-actions-history" in _text("repository-maintenance.yml")
+    assert "cleanup-orphaned-actions-history" in maintenance
+    assert "listRepoWorkflows" in maintenance
+    assert "path.startsWith('.github/workflows/')" in maintenance
+    assert "!currentPaths.has(run.path)" in maintenance
 
 
 def test_conformance_keeps_pr_and_scheduled_coverage() -> None:
