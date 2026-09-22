@@ -233,10 +233,8 @@ jobs:
             -f deploy/docker/docker-compose.hostinger-zero-config.yml \
             config > /tmp/hostinger-zero-config.yml
           grep -F 'uts: host' /tmp/hostinger-zero-config.yml
-          grep -F 'published: "18080"' /tmp/hostinger-zero-config.yml
-          if grep -F 'published: "80"' /tmp/hostinger-zero-config.yml \
-            || grep -F 'published: "443"' /tmp/hostinger-zero-config.yml; then
-            echo "zero-config Hostinger profile unexpectedly claims Traefik-owned 80/443" >&2
+          if grep -F 'published:' /tmp/hostinger-zero-config.yml; then
+            echo "zero-config Hostinger profile unexpectedly publishes a host port" >&2
             exit 1
           fi
           grep -F 'traefik.enable:' /tmp/hostinger-zero-config.yml
