@@ -59,7 +59,7 @@ docker compose -f docker-compose.yml build
 docker compose -f docker-compose.yml up -d
 ```
 
-It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication in this profile requires an HTTPS external edge because secure cookies remain enabled. The Docker profile is optional and does not replace the recovery-complete systemd/venv single-server baseline; its current recovery and shutdown-override limits are documented in [`deploy/docker/README.md`](deploy/docker/README.md).
+It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication in this profile requires an HTTPS external edge because secure cookies remain enabled. The Docker profile remains optional. Its canonical quiesced backup/replacement-volume restore workflow, full supported shutdown-drain range, and Docker-manager operational caveats are documented in [`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
