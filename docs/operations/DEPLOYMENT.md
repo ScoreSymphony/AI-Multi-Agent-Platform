@@ -101,27 +101,30 @@ exposure should keep secure cookies enabled and terminate TLS at an explicitly c
 reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
 bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
-default. Hostinger Docker Manager's Compose-from-URL flow uses the direct maintained Compose file
-`deploy/docker/docker-compose.hostinger.yml`, not the GitHub repository landing page. That
-Hostinger profile does not bind host ports 80/443. Its first import is self-contained: the
-dedicated ingress gateway joins a Compose-owned isolated ingress network and therefore does not
-require Hostinger's shared Traefik project/network to exist yet. Web and Control Plane remain
-private on the platform network and Secure cookies remain enabled. Before browser use, deploy
-Hostinger Traefik and switch the ingress network to the shared external `traefik-proxy` network
-with `AI_MAP_TRAEFIK_NETWORK=traefik-proxy` and `AI_MAP_TRAEFIK_EXTERNAL=true`; Traefik then
-becomes the single TLS owner and routes `websecure` traffic to the gateway on internal port 8080.
-An explicit `AI_MAP_PUBLIC_DOMAIN` overrides hostname selection. Otherwise the router and
-gateway use `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` when `TRAEFIK_HOST` is configured.
-Hostinger Docker Catalog projects may receive that value as part of their generated project
-environment, but a generic **Compose from URL** import does not guarantee it. For this maintained
-URL flow, operators set `TRAEFIK_HOST` explicitly to the VPS default hostname shown in hPanel
-(for example `srv123456.hstgr.cloud`) together with the shared-network settings before browser
-use. If neither hostname source exists, the gateway stays in fail-closed setup-pending mode and
-returns only HTTP 503 guidance without proxying Web/API traffic; an hPanel **Open** link may then
-resolve only to the intentionally non-public `*.setup.invalid` sentinel. Operators using a separately
-managed non-Traefik reverse proxy may instead use the explicitly named
-`deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
-the exact Traefik-network, DNS and profile prerequisites.
+default. New Hostinger Docker Manager Compose-from-URL installs use
+`deploy/docker/docker-compose.hostinger-zero-config.yml`, not the GitHub repository landing page.
+That new-install profile is self-contained and HTTPS-first: only its dedicated Caddy gateway
+publishes host ports 80/443; Web and Control Plane remain private on the platform network and
+Secure cookies remain enabled. The historical `docker-compose.hostinger.yml` and
+`docker-compose.hostinger-https.yml` entry points remain on their previous
+shared-Traefik-compatible topology so an existing deployment can redeploy without unexpectedly
+competing for ports 80/443.
+
+The gateway joins only the host UTS namespace (`uts: host`) so it can read the VPS kernel hostname
+without using the host network namespace, Docker socket, host filesystem, Hostinger API credentials
+or an external discovery service. When the hostname matches Hostinger's managed default form
+`srvNNNNNN.hstgr.cloud`, the gateway derives
+`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`, obtains public HTTPS automatically and redirects
+raw-IP HTTP access to that canonical origin. An explicit `AI_MAP_PUBLIC_DOMAIN` overrides this
+automatic hostname selection. If neither an explicit domain nor a recognized Hostinger-managed
+hostname is available, the gateway remains fail-closed and serves setup guidance only.
+
+For VPSes where ports 80/443 are already owned by a shared Hostinger Traefik edge, use
+`deploy/docker/docker-compose.hostinger-shared-traefik.yml` instead. That advanced profile retains
+the explicit `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK` and `AI_MAP_TRAEFIK_EXTERNAL` contract
+for multi-project routing. Operators using a separately managed non-Traefik reverse proxy may use
+`deploy/docker/docker-compose.hostinger-external-edge.yml`. The Docker runbook owns the exact
+profile prerequisites and migration steps.
 
 ## Browser-first initial setup
 

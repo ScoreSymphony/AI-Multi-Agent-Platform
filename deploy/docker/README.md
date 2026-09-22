@@ -189,106 +189,111 @@ Do not disable Secure cookies to make public HTTP work.
 ## Hostinger Docker Manager
 
 Hostinger Docker Manager's **Compose from URL** flow expects the direct URL of a Docker Compose
-file. Use this maintained Compose URL:
+file. For a **new installation**, use this maintained zero-configuration Compose URL:
 
 ```text
-https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger.yml
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-zero-config.yml
 ```
 
 Copy that URL into Hostinger's **Compose from URL** field. The GitHub repository page itself is the
 project source, not the Compose-file URL for this flow.
 
-### HTTPS ownership on Hostinger
+The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` URLs are
+kept migration-safe for existing deployments that already follow the shared-Traefik-compatible
+topology. They intentionally do not start binding host ports 80/443 during an ordinary redeploy.
 
-The maintained Hostinger profile deliberately does **not** publish host ports 80 or 443. Hostinger
-documents a shared Traefik project as the single HTTPS edge for Docker Manager: Traefik owns
-80/443, joins a shared external Docker network named `traefik-proxy`, discovers application
-containers from labels, and obtains/renews Let's Encrypt certificates.
+### Zero-configuration HTTPS on Hostinger
 
-The first platform deployment does **not** require Traefik to exist already:
+The maintained default Hostinger profile owns its own HTTPS edge. Only the dedicated
+`hostinger-gateway` publishes host ports 80 and 443; the Web service and Control Plane remain
+private on the `platform` network.
 
-1. paste the Compose URL above and deploy the platform project;
-2. the default composition creates its own isolated `ai-map-hostinger-edge` network, publishes no
-   host ports and leaves the gateway in fail-closed setup-pending mode;
-3. deploy Hostinger's Traefik template/project if it is not already running and verify that its
-   shared external Docker network `traefik-proxy` exists;
-4. read the VPS default hostname from hPanel, for example `srv123456.hstgr.cloud`;
-5. in the **platform project's** Environment variables add:
-   - `TRAEFIK_HOST=srv123456.hstgr.cloud` (replace with that VPS hostname)
-   - `AI_MAP_TRAEFIK_NETWORK=traefik-proxy`
-   - `AI_MAP_TRAEFIK_EXTERNAL=true`
-6. redeploy the platform project;
-7. the platform derives the temporary HTTPS hostname as
-   `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`; use Hostinger's **Open** action or verify
-   `https://<project>.<traefik-host>/api/v1/health`;
-8. optionally configure your own DNS name by pointing it at the VPS, setting
-   `AI_MAP_PUBLIC_DOMAIN=agents.example.com`, and redeploying again.
+For a normal Hostinger VPS, the default kernel hostname has the managed form
+`srvNNNNNN.hstgr.cloud`. The gateway joins only the host UTS namespace with `uts: host`, reads
+that hostname, validates the numeric server-id pattern, and derives:
 
-Hostinger's Docker Catalog/one-click projects may already contain `TRAEFIK_HOST` in their project
-environment. A generic **Compose from URL** import does not guarantee that value, so this runbook
-treats it as an explicit project setting rather than an automatically injected variable.
+```text
+${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
+```
 
-The Web container stays only on the private `platform` network. A dedicated
-`hostinger-gateway` joins the private `platform` network and one ingress network. On a clean
-first import that ingress network is Compose-owned and isolated, so no external Docker resource is
-required and no public route exists. After the two Traefik network variables above are configured,
-the same logical ingress network resolves to Hostinger's external `traefik-proxy` network.
-Traefik then routes HTTPS traffic to the gateway on internal port `8080`; the gateway is the only
-Hostinger ingress path to the private Web service. The Control Plane remains reachable only through
-the private `platform` network on port `8000`.
+Caddy then obtains and renews public HTTPS automatically. Hostinger's initial **Open** action may
+start from the VPS IP/HTTP port; the gateway redirects that request to the derived canonical HTTPS
+origin. No Hostinger project Environment variables are required for this default path.
 
-If the Hostinger Traefik project uses a different shared network name, set
-`AI_MAP_TRAEFIK_NETWORK` to that name while keeping `AI_MAP_TRAEFIK_EXTERNAL=true`.
+The gateway does **not** receive the host network namespace, Docker socket, host filesystem mounts,
+privileged mode, or any external IP/hostname discovery service. It runs read-only, drops all
+capabilities, receives only `NET_BIND_SERVICE` so it can bind 80/443, and stores TLS state in
+dedicated named volumes.
 
-The profile remains importable before any public hostname is available. Hostname selection is
-ordered deliberately: an explicit `AI_MAP_PUBLIC_DOMAIN` wins; otherwise, a configured
-`TRAEFIK_HOST` produces `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` for Hostinger's temporary
-`*.hstgr.cloud` HTTPS address. On a raw **Compose from URL** deployment, do not assume
-`TRAEFIK_HOST` exists until it is added to that project's Environment variables. If neither value
-exists, the Traefik rule falls back to the reserved
-`${COMPOSE_PROJECT_NAME}.setup.invalid` hostname and the gateway runs in fail-closed
-setup-pending mode, returns HTTP 503 guidance for every request, and contains no reverse proxy to
-Web/API. Hostinger may still render **Open** from that label; the resulting `*.setup.invalid`
-NXDOMAIN is intentional until the project environment is completed. The profile never falls back
-to direct public HTTP or to publishing `:8080`, and `AI_MAP_SECURE_COOKIE=true` remains
-unchanged.
+The normal flow is therefore:
 
-If deployment reports that host port 80 or 443 is already in use, do not add another
-application-owned TLS edge; Hostinger Traefik should remain the single owner of those ports.
+1. paste the Compose URL above;
+2. click **Deploy**;
+3. wait for the three containers to become healthy/running;
+4. click **Open**;
+5. the HTTP/IP entry point redirects to
+   `https://<project>.srvNNNNNN.hstgr.cloud`.
 
-The `docker-compose.hostinger-https.yml` file remains a compatibility alias for the same
-Traefik-backed Hostinger topology. The explicit
+If you set `AI_MAP_PUBLIC_DOMAIN=agents.example.com`, that explicit DNS hostname overrides the
+automatic Hostinger hostname. Point the DNS record at the VPS before redeploying so Caddy can
+complete public certificate validation.
+
+If the host hostname is not a recognized Hostinger-managed `srvNNNNNN.hstgr.cloud` value and no
+explicit public domain is configured, the gateway remains fail-closed: it serves only HTTP 503 setup
+guidance and never proxies Web/API traffic.
+
+### Advanced shared-Traefik profile
+
+If ports 80/443 are already owned by Hostinger's shared Traefik because several public Docker
+projects share one edge, do **not** deploy a second direct TLS owner. Use:
+
+```text
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-shared-traefik.yml
+```
+
+That advanced profile preserves the explicit shared-edge contract:
+
+```text
+TRAEFIK_HOST=srv123456.hstgr.cloud
+AI_MAP_TRAEFIK_NETWORK=traefik-proxy
+AI_MAP_TRAEFIK_EXTERNAL=true
+```
+
+The Hostinger Traefik project must already be running and its shared external network must exist.
+An optional `AI_MAP_PUBLIC_DOMAIN` still overrides the derived
+`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` hostname.
+
+The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` files
+remain compatibility entry points for existing shared-Traefik-style deployments. New installations
+that want the zero-configuration direct HTTPS edge should use
+`docker-compose.hostinger-zero-config.yml`. The explicit
 `docker-compose.hostinger-external-edge.yml` alternative remains available only for operators
-using a separately managed non-Traefik reverse proxy that forwards to the host-published Web port.
+using a separately managed non-Traefik reverse proxy.
 
-Canonical platform state remains in `platform-data`. Do not use `docker compose down -v` for
-ordinary redeployments.
+Canonical platform state remains in `platform-data`. TLS state for the default Hostinger gateway
+is retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
+`docker compose down -v` for ordinary redeployments.
 
 ## Configuration
 
-The checked-in Compose profile contains no credentials. Supported deployment overrides are kept
-small intentionally:
+The checked-in zero-configuration Hostinger profile contains no credentials. Supported deployment
+overrides are intentionally small:
 
-- `TRAEFIK_HOST` — for Hostinger **Compose from URL**, set this explicitly in the platform
-  project's Environment variables to the VPS default hostname shown in hPanel, for example
-  `srv123456.hstgr.cloud`. It is then combined with the Compose project name to form the temporary
-  HTTPS hostname;
-- `AI_MAP_PUBLIC_DOMAIN` — optional explicit hostname override used by the default
-  `docker-compose.hostinger.yml` (and its `docker-compose.hostinger-https.yml` compatibility
-  alias). When absent, the configured `TRAEFIK_HOST` is used to derive the temporary hostname as
-  `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`. If neither is available, the gateway remains in
-  fail-closed 503 setup-pending mode;
-- `AI_MAP_TRAEFIK_NETWORK` — ingress network name. The clean-import default is the isolated
-  `ai-map-hostinger-edge`; set it to Hostinger's shared network (normally `traefik-proxy`) before
-  browser use;
-- `AI_MAP_TRAEFIK_EXTERNAL` — whether the ingress network is an already existing external Docker
-  network. It defaults to `false` for clean import; set it to `true` together with
-  `AI_MAP_TRAEFIK_NETWORK=traefik-proxy` after Hostinger Traefik is available;
-- `AI_MAP_PUBLIC_PORT` — host-side Web port only for the explicit
-  `docker-compose.hostinger-external-edge.yml` alternative, default `8080`;
+- `AI_MAP_PUBLIC_DOMAIN` — optional explicit public hostname. When absent, the zero-config
+  Hostinger profile derives the application hostname from the validated VPS hostname;
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
+
+The following variables are only for the advanced
+`docker-compose.hostinger-shared-traefik.yml` profile:
+
+- `TRAEFIK_HOST` — Hostinger VPS hostname, for example `srv123456.hstgr.cloud`;
+- `AI_MAP_TRAEFIK_NETWORK` — shared Traefik network name, normally `traefik-proxy`;
+- `AI_MAP_TRAEFIK_EXTERNAL` — set to `true` for the existing shared Docker network.
+
+`AI_MAP_PUBLIC_PORT` remains specific to
+`docker-compose.hostinger-external-edge.yml`, defaulting to `8080`.
 
 The container-internal data directory, Control Plane port and secure-cookie setting are fixed by
 the reference composition because changing them is not required for ordinary operator use.
