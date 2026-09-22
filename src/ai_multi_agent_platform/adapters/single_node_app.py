@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import Sequence
 
 from ai_multi_agent_platform import __version__
-from ai_multi_agent_platform.configuration import LocalSecretProvider
+from ai_multi_agent_platform.configuration import ConfigurationError, LocalSecretProvider
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.control_plane.models import RequestContext
@@ -341,11 +341,16 @@ def _configure_registry(
     if not config.registry_enabled:
         return None, None
 
-    provider = (
-        build_starter_registry_provider()
-        if config.registry_catalog is None
-        else FilesystemRegistryProvider(config.registry_catalog)
-    )
+    if config.registry_catalog is None:
+        provider = build_starter_registry_provider()
+    else:
+        try:
+            provider = FilesystemRegistryProvider(config.registry_catalog)
+        except (OSError, ValueError) as exc:
+            raise ConfigurationError(
+                "AI_MAP_REGISTRY_CATALOG is invalid or unavailable: "
+                f"{config.registry_catalog}: {exc}"
+            ) from exc
     installations = JsonRegistryInstallationStore(
         deployment.config.database_dir / "registry-installations.json"
     )
