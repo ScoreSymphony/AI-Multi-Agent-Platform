@@ -239,7 +239,7 @@ jobs:
             echo "zero-config Hostinger profile unexpectedly contains Traefik labels" >&2
             exit 1
           fi
-          TRAEFIK_HOST=srv123456.hstgr.cloud \
+          AI_MAP_PUBLIC_DOMAIN= TRAEFIK_HOST=srv123456.hstgr.cloud \
             AI_MAP_TRAEFIK_NETWORK=traefik-proxy \
             AI_MAP_SOURCE_CONTEXT=../.. \
             docker compose \
