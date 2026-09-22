@@ -54,6 +54,12 @@ class _ArtifactFileProvider:
             metadata=metadata or {},
         )
 
+    async def get_file(self, file_id, context):
+        del context
+        if file_id != self.record.file_id:
+            raise KeyError(file_id)
+        return self.record
+
     async def list_files(self, context):
         del context
         return (self.record,)

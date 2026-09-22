@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 from ai_multi_agent_platform.agents import AgentRunStatus
@@ -8,7 +9,7 @@ from ai_multi_agent_platform.context import (
     ContextDataClassification,
     OperationalContextSourceRequest,
 )
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.contracts import DataClassification, OperationContext
 from ai_multi_agent_platform.deployment.context_verification import (
     CanonicalVerificationContextClassificationResolver,
 )
@@ -29,6 +30,28 @@ class _NoFiles:
     async def list_files(self, context):
         del context
         return ()
+
+
+class _ExactFiles:
+    def __init__(self, *, file_id: str, sha256: str) -> None:
+        self.file_id = file_id
+        self.sha256 = sha256
+        self.get_calls: list[str] = []
+
+    async def get_file(self, file_id, context):
+        del context
+        self.get_calls.append(file_id)
+        assert file_id == self.file_id
+        return SimpleNamespace(
+            file_id=file_id,
+            sha256=self.sha256,
+            classification=DataClassification.PUBLIC,
+            metadata={},
+        )
+
+    async def list_files(self, context):
+        del context
+        raise AssertionError("exact historical evidence must not consult mutable Artifact linkage")
 
 
 class _Evidence:
@@ -245,3 +268,53 @@ def test_result_classification_without_exact_provenance_is_reference_only() -> N
     classification = asyncio.run(resolver.classify(source, request, result))
 
     assert classification is ContextDataClassification.SECRET_REFERENCE
+
+
+def test_auxiliary_evidence_classification_uses_exact_reviewed_file_after_relink() -> None:
+    base, source, request, result = _case()
+    artifact_id = new_id("artifact")
+    file_id = new_id("file")
+    digest_hex = "c" * 64
+    binding = VerificationSubject(
+        subject_type="artifact",
+        subject_id=artifact_id,
+        revision=file_id,
+        digest=f"sha256:{digest_hex}",
+    )
+    exact_files = _ExactFiles(file_id=file_id, sha256=digest_hex)
+    resolver = CanonicalVerificationContextClassificationResolver(
+        exact_files,  # type: ignore[arg-type]
+        evidence=base.evidence,
+        agents=base.agents,
+        bundles=base.bundles,
+        run_bindings=base.run_bindings,
+    )
+    bound_result = replace(
+        result,
+        evidence_artifact_ids=(artifact_id,),
+        evidence_bindings=(binding,),
+    )
+
+    classification = asyncio.run(resolver.classify(source, request, bound_result))
+
+    assert classification is ContextDataClassification.INTERNAL
+    assert exact_files.get_calls == [file_id]
+
+
+def test_legacy_auxiliary_evidence_without_binding_remains_reference_only() -> None:
+    base, source, request, result = _case()
+    artifact_id = new_id("artifact")
+    exact_files = _ExactFiles(file_id=new_id("file"), sha256="d" * 64)
+    resolver = CanonicalVerificationContextClassificationResolver(
+        exact_files,  # type: ignore[arg-type]
+        evidence=base.evidence,
+        agents=base.agents,
+        bundles=base.bundles,
+        run_bindings=base.run_bindings,
+    )
+    legacy_result = replace(result, evidence_artifact_ids=(artifact_id,))
+
+    classification = asyncio.run(resolver.classify(source, request, legacy_result))
+
+    assert classification is ContextDataClassification.SECRET_REFERENCE
+    assert exact_files.get_calls == []

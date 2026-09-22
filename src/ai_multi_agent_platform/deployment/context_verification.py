@@ -74,19 +74,33 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
                 )
             )
 
-        for artifact_id in result.evidence_artifact_ids:
-            if (
-                result.subject.subject_type == "artifact"
-                and artifact_id == result.subject.subject_id
-            ):
-                # The exact subject FileRecord revision/digest was already proven above.
-                continue
-            # Canonical Verification validates additional evidence artifacts on submission, but its
-            # durable VerificationResult currently keeps only their Artifact IDs, not the exact
-            # FileRecord revision/digest that was reviewed. A later Artifact-to-File relink must
-            # therefore never justify rendering findings at a weaker current classification.
-            # Keep findings reference-only until exact auxiliary evidence provenance is persisted.
-            classifications.append(DataClassification.SECRET)
+        if not result.evidence_bindings_complete:
+            # A legacy row may repeat the already-exact primary Artifact as evidence. Preserve that
+            # primary subject semantic, but never reconstruct genuinely auxiliary provenance from
+            # mutable current Artifact linkage.
+            unresolved_auxiliary_ids = tuple(
+                artifact_id
+                for artifact_id in result.evidence_artifact_ids
+                if not (
+                    result.subject.subject_type == "artifact"
+                    and artifact_id == result.subject.subject_id
+                )
+            )
+            if unresolved_auxiliary_ids:
+                classifications.append(DataClassification.SECRET)
+        else:
+            for binding in result.evidence_bindings:
+                if result.subject == binding:
+                    # The exact primary Artifact binding was already proven above.
+                    continue
+                classifications.append(
+                    await self._artifact_classification(
+                        source_request,
+                        binding.subject_id,
+                        expected_file_id=binding.revision,
+                        expected_digest=binding.digest,
+                    )
+                )
 
         strongest = strongest_classification(*classifications) or DataClassification.SECRET
         return _context_classification(strongest)
@@ -216,19 +230,22 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
             run_id=request.run_id,
             agent_id=request.agent_id,
         )
-        linked = [
-            record
-            for record in await self.files.list_files(access)
-            if artifact_id in record.artifact_ids
-        ]
-        if len(linked) != 1:
-            # Missing or ambiguous owner evidence cannot justify rendering reviewer prose inline.
-            return DataClassification.SECRET
-        record = linked[0]
-        if expected_file_id is not None and record.file_id != expected_file_id:
-            # The reviewed Artifact revision must still resolve to the exact canonical FileRecord
-            # that Verification bound. A same-ID Artifact projection is not sufficient evidence.
-            return DataClassification.SECRET
+        if expected_file_id is not None:
+            try:
+                record = await self.files.get_file(expected_file_id, access)
+            except (ContractError, KeyError):
+                return DataClassification.SECRET
+        else:
+            linked = [
+                record
+                for record in await self.files.list_files(access)
+                if artifact_id in record.artifact_ids
+            ]
+            if len(linked) != 1:
+                # Missing or ambiguous owner evidence cannot justify rendering reviewer prose
+                # inline.
+                return DataClassification.SECRET
+            record = linked[0]
         if expected_digest is not None and f"sha256:{record.sha256}" != expected_digest:
             # Never inherit a weaker classification from content that no longer matches the
             # immutable digest captured by the Verification subject.

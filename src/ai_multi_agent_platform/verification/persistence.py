@@ -672,6 +672,11 @@ def _decode(value: Any) -> Any:
         if data_type is None or not isinstance(raw_fields, dict):
             raise _corrupt("persisted verification dataclass is unsupported")
         decoded_fields = {str(key): _decode(item) for key, item in raw_fields.items()}
+        if data_type is VerificationResult and "evidence_bindings" not in decoded_fields:
+            # Legacy rows predate immutable auxiliary evidence provenance. Preserve them as
+            # explicitly incomplete; consumers must fail closed rather than reconstructing
+            # historical provenance from mutable current Artifact-to-File linkage.
+            decoded_fields["evidence_bindings"] = ()
         try:
             return data_type(**decoded_fields)
         except (TypeError, ValueError) as exc:

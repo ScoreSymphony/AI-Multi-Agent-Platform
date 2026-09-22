@@ -457,13 +457,28 @@ function VerificationResultCard({ verification }: { verification: CanonicalVerif
       <h3>Evidence</h3>
       {result.evidence_artifact_ids.length ? (
         <ul>
-          {result.evidence_artifact_ids.map((artifactId) => (
-            <li key={artifactId}>
-              <AppLink href={`/artifacts/${encodeURIComponent(artifactId)}`}>
-                <CanonicalId value={artifactId} />
-              </AppLink>
-            </li>
-          ))}
+          {result.evidence_artifact_ids.map((artifactId, index) => {
+            const binding = result.evidence_bindings_complete
+              ? result.evidence_bindings[index]
+              : undefined;
+            return (
+              <li key={artifactId}>
+                <AppLink href={`/artifacts/${encodeURIComponent(artifactId)}`}>
+                  <CanonicalId value={artifactId} />
+                </AppLink>
+                {binding ? (
+                  <>
+                    {" · file revision "}
+                    <code>{binding.revision}</code>
+                    {" · "}
+                    <code>{binding.digest}</code>
+                  </>
+                ) : (
+                  <> · exact historical provenance unavailable</>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p>No evidence Artifacts recorded.</p>
