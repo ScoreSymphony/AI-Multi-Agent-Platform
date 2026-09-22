@@ -41,15 +41,24 @@ derive_hostinger_domain() {
     srv*.hstgr.cloud)
       vps_id="${host_hostname#srv}"
       vps_id="${vps_id%.hstgr.cloud}"
-      case "$vps_id" in
-        ""|*[!0-9]*) return 1 ;;
-      esac
-      domain="$project_name.$host_hostname"
-      domain_source="Hostinger VPS hostname"
-      return 0
+      managed_hostname="$host_hostname"
+      ;;
+    srv*)
+      vps_id="${host_hostname#srv}"
+      managed_hostname="$host_hostname.hstgr.cloud"
+      ;;
+    *)
+      return 1
       ;;
   esac
-  return 1
+
+  case "$vps_id" in
+    ""|*[!0-9]*) return 1 ;;
+  esac
+
+  domain="$project_name.$managed_hostname"
+  domain_source="Hostinger VPS hostname"
+  return 0
 }
 
 if [ -n "$explicit_domain" ]; then
