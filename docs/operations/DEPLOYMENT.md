@@ -100,11 +100,12 @@ credentials.
 exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
 reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
 bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
-actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For
-Hostinger/VPS installs that do not already have an external TLS owner, the repository also ships
-`deploy/docker/docker-compose.hostinger-https.yml`: it requires an explicit public DNS hostname,
-publishes only a dedicated Caddy edge on ports 80/443, keeps Web/Control Plane private, and retains
-Secure cookies. The Docker runbook owns the exact DNS/port prerequisites and profile choice.
+actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For Hostinger/VPS installs, the standard
+`deploy/docker/docker-compose.hostinger.yml` is HTTPS-first: it requires an explicit public DNS
+hostname, publishes only a dedicated Caddy edge on ports 80/443, keeps Web/Control Plane private,
+and retains Secure cookies. Operators that already own TLS elsewhere use the explicitly named
+`deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
+the exact DNS/port prerequisites and profile choice.
 
 ## Browser-first initial setup
 
