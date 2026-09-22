@@ -189,56 +189,58 @@ Do not disable Secure cookies to make public HTTP work.
 ## Hostinger Docker Manager
 
 Hostinger Docker Manager's **Compose from URL** flow expects the direct URL of a Docker Compose
-file. Use the maintained one-click button:
-
-[![Deploy on Hostinger](https://assets.hostinger.com/vps/deploy.svg)](https://www.hostinger.com/docker-hosting?compose_url=https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger.yml)
-
-The button supplies this Compose URL:
+file. Use this maintained Compose URL:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger.yml
 ```
 
-The GitHub repository page itself is the project source, but it is not the Compose-file URL for
-this Hostinger flow.
+Copy that URL into Hostinger's **Compose from URL** field. The GitHub repository page itself is the
+project source, not the Compose-file URL for this flow.
 
-### First deployment
+### HTTPS ownership on Hostinger
 
-The Hostinger Compose profile deliberately allows the project to be imported before
-`AI_MAP_PUBLIC_DOMAIN` exists. Until that variable is configured, the public Caddy edge runs in a
-fail-closed **setup pending** mode:
+The maintained Hostinger profile deliberately does **not** publish host ports 80 or 443. Hostinger
+documents a shared Traefik project as the single HTTPS edge for Docker Manager: Traefik owns
+80/443, joins a shared external Docker network named `traefik-proxy`, discovers application
+containers from labels, and obtains/renews Let's Encrypt certificates.
 
-- port 80 returns only an actionable setup message;
-- port 443 does not expose the application;
-- no request is proxied to `web:8080` or the Control Plane;
-- `AI_MAP_SECURE_COOKIE=true` remains unchanged.
+Before deploying this platform profile:
 
-This lets Hostinger create the Docker project first instead of rejecting the Compose file during
-variable interpolation.
+1. in Hostinger Docker Manager, deploy the Hostinger Traefik template/project if it is not already
+   running;
+2. verify that the shared external Docker network `traefik-proxy` exists;
+3. create a DNS `A` record for the hostname you want to use and point it at the VPS;
+4. paste the Compose URL above and deploy the platform project;
+5. set `AI_MAP_PUBLIC_DOMAIN` to the hostname only, for example `agents.example.com`, then
+   redeploy the platform project;
+6. verify `https://<your-domain>/api/v1/health` and open that same HTTPS origin in the browser.
 
-### Configure HTTPS
+The Web container joins both the private `platform` network and the shared Traefik network.
+Traefik routes HTTPS traffic to the Web container's internal port `8080`; the Control Plane
+remains reachable only through the private `platform` network on port `8000`.
 
-After the project exists:
+The default shared-network name is `traefik-proxy`. If the Hostinger Traefik project on a specific
+VPS uses a different external network name, set `AI_MAP_TRAEFIK_NETWORK` to that name before
+redeploying.
 
-1. create a DNS `A` record for the chosen hostname and point it at the VPS;
-2. ensure public TCP ports 80/443 are available and not already owned by another proxy;
-3. in the Docker project environment, set `AI_MAP_PUBLIC_DOMAIN` to the hostname only, for example
-   `agents.example.com`;
-4. save and redeploy the project;
-5. verify `https://<your-domain>/api/v1/health` and then open the same HTTPS origin in the browser.
+The profile remains importable before `AI_MAP_PUBLIC_DOMAIN` is configured. In that state the
+Traefik Host rule uses the reserved hostname `setup.invalid`, which has no public DNS destination.
+The profile never falls back to direct public HTTP or to publishing `:8080`, and
+`AI_MAP_SECURE_COOKIE=true` remains unchanged.
 
-The edge validates the configured value before Caddy consumes it. Schemes, paths, ports, wildcard
-values, IP addresses, whitespace and malformed DNS labels are rejected with an actionable log
-message.
+If deployment fails with an error that the external `traefik-proxy` network does not exist,
+deploy/configure Hostinger's Traefik project first. If deployment instead reports that host port 80
+or 443 is already in use, do not add another application-owned TLS edge; identify the existing
+edge and keep 80/443 under a single reverse proxy.
 
-The explicit `docker-compose.hostinger-external-edge.yml` alternative remains available only for
-operators who already have a separate TLS reverse proxy. The
-`docker-compose.hostinger-https.yml` file remains a compatibility alias for the default Hostinger
-topology.
+The `docker-compose.hostinger-https.yml` file remains a compatibility alias for the same
+Traefik-backed Hostinger topology. The explicit
+`docker-compose.hostinger-external-edge.yml` alternative remains available only for operators
+using a separately managed non-Traefik reverse proxy that forwards to the host-published Web port.
 
-Certificate and ACME state live in persistent `caddy-data` and `caddy-config` volumes. Canonical
-platform state remains in `platform-data`. Do not use `docker compose down -v` for ordinary
-redeployments.
+Canonical platform state remains in `platform-data`. Do not use `docker compose down -v` for
+ordinary redeployments.
 
 ## Configuration
 
@@ -247,8 +249,10 @@ small intentionally:
 
 - `AI_MAP_PUBLIC_DOMAIN` — hostname used by the default `docker-compose.hostinger.yml` (and its
   `docker-compose.hostinger-https.yml` compatibility alias). It may be absent during initial
-  Hostinger import; the edge then serves setup guidance only. Configure it before browser use so
-  Caddy can enable automatic HTTPS;
+  Hostinger import; the Traefik router then targets the reserved `setup.invalid` hostname. Set it
+  before browser use;
+- `AI_MAP_TRAEFIK_NETWORK` — shared external Traefik network for the Hostinger profile, default
+  `traefik-proxy`;
 - `AI_MAP_PUBLIC_PORT` — host-side Web port only for the explicit
   `docker-compose.hostinger-external-edge.yml` alternative, default `8080`;
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
