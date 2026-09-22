@@ -29,6 +29,8 @@ The canonical surface lives in `ai_multi_agent_platform.verification` and define
 
 The original Verification history is retained when a repair produces a new subject revision. A passed result for revision A is not considered evidence for revision B.
 
+Auxiliary evidence Artifacts are also historical evidence, not live lookups. For newly recorded results, canonical submission validates each auxiliary Artifact and persists the exact reviewed revision and digest alongside its Artifact ID. Later Artifact/File relinking therefore cannot change what a historical Verification reports as reviewed. Legacy persisted results that predate these immutable auxiliary bindings remain explicitly incomplete: consumers must not reconstruct missing historical provenance from current mutable linkage, and product history reports that exact provenance as unavailable.
+
 ## Verifier types
 
 The canonical model supports:
@@ -120,7 +122,7 @@ The existing Control Plane exposes these registrations through its normal `/api/
 
 Generic collection authorization is followed by object-scoped authorization against the canonical owning Task. Task owner type/ID and project ID are propagated to the existing #15 authorization provider. Human-review mutations also bind the authorization request to a digest of the submitted command payload. Unauthorized Task resources are filtered from list/queue results and fail closed on direct read or mutation.
 
-The authenticated Control Plane principal becomes the canonical human verifier identity. Optional review comments become structured findings, and submitted evidence Artifact IDs are preserved on the `VerificationResult`. Human reviewers remain read-only verification actors; recording an accepted result does not itself grant merge/deploy/admin authority.
+The authenticated Control Plane principal becomes the canonical human verifier identity. Optional review comments become structured findings, and submitted evidence Artifact IDs are preserved on the `VerificationResult`; canonical result submission additionally snapshots their exact reviewed revision/digest bindings before acceptance. Human reviewers remain read-only verification actors; recording an accepted result does not itself grant merge/deploy/admin authority.
 
 Human-review commands are retry-safe. The recorded result stores the Control Plane idempotency key, payload digest, actor and action in namespaced metadata. Repeating the same logical command returns the existing canonical result; attempting to replay a completed request with a different payload/outcome conflicts instead of silently rewriting review history.
 
