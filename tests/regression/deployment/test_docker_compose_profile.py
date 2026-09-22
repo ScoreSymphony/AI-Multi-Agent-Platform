@@ -16,6 +16,7 @@ DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
+HOSTINGER_CUSTOM_DOMAIN_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-custom-domain.yml"
 HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
@@ -267,7 +268,7 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert '      - "8080"' in web
 
     assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
-    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
+    assert 'AI_MAP_PUBLIC_DOMAIN: ""' in gateway
     assert (
         "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
     )
@@ -293,6 +294,9 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "HostSNIRegexp(`^.*$`)" not in gateway
     assert ".loadbalancer.server.port=80" in gateway
     assert ".loadbalancer.server.port=443" in gateway
+    assert "setup.invalid" not in gateway
+    assert "-custom-http.rule=Host(" not in gateway
+    assert "-custom-tls.rule=HostSNI(" not in gateway
 
     assert "      - hostinger-gateway-data:/data" in gateway
     assert "      - hostinger-gateway-config:/config" in gateway
@@ -308,6 +312,39 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "TRAEFIK_HOST" not in compose
     assert "AI_MAP_TRAEFIK_NETWORK" not in compose
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
+
+
+def test_hostinger_custom_domain_profile_requires_exact_domain() -> None:
+    compose = HOSTINGER_CUSTOM_DOMAIN_COMPOSE.read_text(encoding="utf-8")
+    control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
+    assert "ports:" not in control_plane
+    assert "ports:" not in web
+    assert "ports:" not in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
+    assert (
+        "AI_MAP_PUBLIC_DOMAIN: "
+        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}"
+        in gateway
+    )
+    assert "setup.invalid" not in gateway
+    assert "HostRegexp(" not in gateway
+    assert "HostSNIRegexp(" not in gateway
+    assert (
+        "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}`)"
+        in gateway
+    )
+    assert (
+        "rule=HostSNI(`${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}`)"
+        in gateway
+    )
+    assert ".tls.passthrough=true" in gateway
+    assert ".loadbalancer.server.port=80" in gateway
+    assert ".loadbalancer.server.port=443" in gateway
+    assert "traefik.docker.network" not in gateway
+    assert "      - platform" in gateway
 
 
 def test_hostinger_direct_profile_preserves_direct_caddy_edge() -> None:
@@ -378,6 +415,10 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
     )
+    custom_url = (
+        "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
+        "main/deploy/docker/docker-compose.hostinger-custom-domain.yml"
+    )
     direct_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger-direct.yml"
@@ -387,6 +428,7 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
         "main/deploy/docker/docker-compose.hostinger-shared-traefik.yml"
     )
     assert compose_url in runbook
+    assert custom_url in runbook
     assert direct_url in runbook
     assert shared_url in runbook
     assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
@@ -396,6 +438,8 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert "srvNNNNNN.hstgr.cloud" in runbook
     assert "${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud" in runbook
     assert "No `TRAEFIK_HOST`" in runbook
+    assert "setup.invalid" in runbook
+    assert "docker-compose.hostinger-custom-domain.yml" in runbook
     assert "Docker `host` networking" in runbook
     assert "does not require any external Docker network" in runbook
     assert "traefik-proxy" in runbook
