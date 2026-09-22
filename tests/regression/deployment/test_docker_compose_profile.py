@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 from ai_multi_agent_platform.deployment.config import (
@@ -267,11 +269,18 @@ def test_hostinger_default_url_profile_is_clean_import_safe() -> None:
     assert "traefik-proxy" not in web
     assert "traefik.enable=true" in gateway
     assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}" in gateway
-    assert "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)" in gateway
+    assert (
+        "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-"
+        "${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}."
+        "${TRAEFIK_HOST:-setup.invalid}}`)"
+        in gateway
+    )
     assert ".entrypoints=websecure" in gateway
     assert ".tls.certresolver=letsencrypt" in gateway
     assert ".loadbalancer.server.port=8080" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
+    assert "AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}" in gateway
+    assert "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
     assert "      - platform" in gateway
     assert "      - hostinger-edge" in gateway
     assert "hostinger-edge:" in compose
@@ -333,7 +342,8 @@ def test_hostinger_https_compatibility_profile_matches_clean_import_contract() -
     assert ".entrypoints=websecure" in gateway
     assert ".tls.certresolver=letsencrypt" in gateway
     assert ".loadbalancer.server.port=8080" in gateway
-    assert "${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}" in gateway
+    assert "${TRAEFIK_HOST:-setup.invalid}" in gateway
+    assert "${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
     assert '"80:80"' not in compose
     assert '"443:443"' not in compose
 
@@ -360,12 +370,89 @@ def test_hostinger_gateway_is_fail_closed_until_public_domain_is_valid() -> None
     assert "web:8080" not in pending
     assert "control-plane:8000" not in pending
 
-    assert 'domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
+    assert 'explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
+    assert 'traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"' in entrypoint
+    assert 'project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"' in entrypoint
+    assert 'domain="$project_name.$traefik_host"' in entrypoint
+    assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "setup_pending" in entrypoint
     assert "invalid_domain" in entrypoint
     assert "Do not include a scheme, path, port, wildcard, whitespace, or IP address." in entrypoint
     assert "Caddyfile.hostinger-setup-pending" in entrypoint
     assert "Caddyfile.hostinger-gateway" in entrypoint
+
+
+def _run_hostinger_gateway_entrypoint(
+    tmp_path: Path, env_overrides: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_caddy = fake_bin / "caddy"
+    fake_caddy.write_text(
+        '#!/bin/sh\nprintf "domain=%s\\n" "$AI_MAP_PUBLIC_DOMAIN"\nprintf "args=%s\\n" "$*"\n',
+        encoding="utf-8",
+    )
+    fake_caddy.chmod(0o755)
+
+    env = os.environ.copy()
+    for key in (
+        "AI_MAP_PUBLIC_DOMAIN",
+        "AI_MAP_HOSTINGER_TRAEFIK_HOST",
+        "AI_MAP_COMPOSE_PROJECT_NAME",
+    ):
+        env.pop(key, None)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env.update(env_overrides)
+
+    return subprocess.run(
+        ["sh", str(HOSTINGER_GATEWAY_ENTRYPOINT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_hostinger_gateway_derives_temporary_hostname_from_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123.hstgr.cloud",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv123.hstgr.cloud" in result.stdout
+    assert "Caddyfile.hostinger-gateway" in result.stdout
+    assert "source: Hostinger TRAEFIK_HOST" in result.stderr
+
+
+def test_hostinger_gateway_explicit_domain_overrides_temporary_hostname(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_PUBLIC_DOMAIN": "agents.example.com",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123.hstgr.cloud",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=agents.example.com" in result.stdout
+    assert "source: AI_MAP_PUBLIC_DOMAIN" in result.stderr
+
+
+def test_hostinger_gateway_without_any_hostname_stays_setup_pending(tmp_path: Path) -> None:
+    result = _run_hostinger_gateway_entrypoint(tmp_path, {})
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-setup-pending" in result.stdout
+    assert "fail-closed setup-pending mode" in result.stderr
 
 
 def test_generic_https_edge_remains_pinned_for_non_hostinger_root_profile() -> None:
