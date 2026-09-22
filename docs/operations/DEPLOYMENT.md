@@ -98,7 +98,9 @@ credentials.
 
 `AI_MAP_SECURE_COOKIE=false` is accepted only for a loopback-only deployment. External
 exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
-reverse proxy or equivalent trusted boundary.
+reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
+bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
+actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path.
 
 ## Browser-first initial setup
 
