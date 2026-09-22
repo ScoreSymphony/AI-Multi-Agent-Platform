@@ -82,38 +82,33 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    uts: host
     environment:
+      AI_MAP_HOSTINGER_EDGE_MODE: direct
       AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}
-      AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}
       AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}
-    expose:
-      - "8080"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST:-setup.invalid}}`)"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.entrypoints=websecure"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
-      - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.loadbalancer.server.port=8080"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - hostinger-gateway-data:/data
+      - hostinger-gateway-config:/config
     read_only: true
     tmpfs:
-      - /config
-      - /data
       - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     networks:
       - platform
-      - hostinger-edge
 
 volumes:
   platform-data:
+  hostinger-gateway-data:
+  hostinger-gateway-config:
 
 networks:
   platform:
-  hostinger-edge:
-    name: ${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}
-    external: ${AI_MAP_TRAEFIK_EXTERNAL:-false}
