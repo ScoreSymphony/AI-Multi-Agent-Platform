@@ -256,6 +256,24 @@ jobs:
             echo "zero-config Hostinger profile must not install a catch-all TLS router" >&2
             exit 1
           fi
+          grep -F 'custom-compat-http.rule=HostRegexp' \
+            deploy/docker/docker-compose.hostinger-zero-config.yml
+          grep -F 'custom-compat-tls.rule=HostSNIRegexp' \
+            deploy/docker/docker-compose.hostinger-zero-config.yml
+          grep -F '^\\Q${AI_MAP_PUBLIC_DOMAIN:-}\\E$' \
+            deploy/docker/docker-compose.hostinger-zero-config.yml
+          AI_MAP_PUBLIC_DOMAIN=agents.example.test AI_MAP_SOURCE_CONTEXT=../.. docker compose \
+            -f deploy/docker/docker-compose.hostinger-zero-config.yml \
+            config > /tmp/hostinger-zero-config-custom.yml
+          grep -F 'agents.example.test' /tmp/hostinger-zero-config-custom.yml
+          grep -F 'custom-compat-http' /tmp/hostinger-zero-config-custom.yml
+          grep -F 'custom-compat-tls' /tmp/hostinger-zero-config-custom.yml
+          if grep -F 'setup.invalid' /tmp/hostinger-zero-config-custom.yml \
+            || grep -F 'Host(`agents.example.test`)' /tmp/hostinger-zero-config-custom.yml \
+            || grep -F 'HostSNI(`agents.example.test`)' /tmp/hostinger-zero-config-custom.yml; then
+            echo "zero-config Hostinger custom-domain compatibility regressed to an exact host" >&2
+            exit 1
+          fi
           if AI_MAP_PUBLIC_DOMAIN= AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger-custom-domain.yml \
             config >/tmp/hostinger-custom-missing.yml 2>&1; then
