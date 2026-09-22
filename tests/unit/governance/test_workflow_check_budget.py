@@ -97,8 +97,11 @@ def test_repository_maintenance_stays_out_of_pr_gate_and_cleans_orphans() -> Non
     assert "cleanup-orphaned-actions-history" not in _text("repository-quality.yml")
     assert "cleanup-orphaned-actions-history" in maintenance
     assert "full_history_scan:" in maintenance
+    assert "repos.getContent" in maintenance
+    assert "workflowDirectoryPath = '.github/workflows'" in maintenance
+    assert "Array.isArray(workflowDirectory.data)" in maintenance
     assert "listRepoWorkflows" in maintenance
-    assert "workflow.state !== 'deleted'" in maintenance
+    assert "orphanRegisteredWorkflows" in maintenance
     assert "status: 'completed'" in maintenance
     assert "perPage = 100" in maintenance
     assert "routinePageBudget = 10" in maintenance
