@@ -83,7 +83,7 @@ services:
       web:
         condition: service_healthy
     environment:
-      AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}
+      AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}
     ports:
       - "80:80"
       - "443:443"

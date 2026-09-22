@@ -100,10 +100,13 @@ credentials.
 exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
 reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
 bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
-actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production default. The standard Hostinger workflow may start from `https://github.com/ScoreSymphony/AI-Multi-Agent-Platform`; the dedicated
-`deploy/docker/docker-compose.hostinger.yml` is the equivalent direct-file profile: it requires an explicit public DNS
-hostname, publishes only a dedicated Caddy edge on ports 80/443, keeps Web/Control Plane private,
-and retains Secure cookies. Operators that already own TLS elsewhere use the explicitly named
+actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
+default. Hostinger Docker Manager's Compose-from-URL flow uses the direct maintained Compose file
+`deploy/docker/docker-compose.hostinger.yml`, not the GitHub repository landing page. That
+Hostinger profile can be imported before the public hostname exists; its edge serves only
+setup-pending guidance until `AI_MAP_PUBLIC_DOMAIN` is configured and the project is redeployed.
+Once configured, it publishes only the dedicated Caddy edge on ports 80/443, keeps Web/Control
+Plane private, and retains Secure cookies. Operators that already own TLS elsewhere use the explicitly named
 `deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
 the exact DNS/port prerequisites and profile choice.
 
