@@ -1,0 +1,15 @@
+{
+    admin off
+    auto_https off
+}
+
+:80 {
+    header {
+        Content-Type "text/plain; charset=utf-8"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+
+    respond "AI Multi-Agent Platform setup pending. Set AI_MAP_PUBLIC_DOMAIN in the Docker project environment, point DNS at this VPS, and redeploy. The application is not exposed until HTTPS is configured." 503
+}
