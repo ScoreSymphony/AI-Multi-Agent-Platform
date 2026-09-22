@@ -84,10 +84,10 @@ namespace. Hostinger may expose that kernel hostname as either `srvNNNNNN` or
 Docker provider labels. Web and Control Plane remain private.
 
 No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required
-for this zero-config profile. A small bootstrap HTTP port defaults to `:18080` and performs only a
-redirect to the canonical HTTPS origin; it never proxies Web/API traffic. Set
-`AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to override the automatically derived
-Hostinger hostname with your own DNS name.
+for this zero-config profile. The platform publishes no host port of its own: public access is
+exclusively through Hostinger Traefik on ports 80/443, so no additional firewall rule for an
+arbitrary high port is required. Set `AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to
+override the automatically derived Hostinger hostname with your own DNS name.
 
 Existing installations already tracking
 `deploy/docker/docker-compose.hostinger.yml` or
