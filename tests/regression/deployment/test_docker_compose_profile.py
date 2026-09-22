@@ -216,7 +216,8 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
 
     assert "AI_MAP_SECURE_COOKIE=true" in runbook
-    assert "requires HTTPS" in runbook
+    assert "HTTPS-first" in runbook
+    assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "docker compose down -v" in runbook
     normalized = " ".join(runbook.split())
     _, grace_seconds = _shutdown_contract(COMPOSE.read_text(encoding="utf-8"))
@@ -266,9 +267,10 @@ def test_hostinger_runbook_points_to_standalone_compose_file() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
 
+    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
-    assert "repository root" in runbook
-    assert "public Git repository itself as the Docker build context" in normalized
+    assert "repository root" in normalized
+    assert "docker-compose.yml" in runbook
 
 
 def test_hostinger_https_compatibility_profile_publishes_only_the_tls_edge() -> None:
@@ -325,8 +327,9 @@ def test_hostinger_runbook_documents_both_tls_ownership_modes() -> None:
     normalized = " ".join(runbook.split())
 
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
-    assert "main/deploy/docker/docker-compose.hostinger-external-edge.yml" in runbook
+    assert "docker-compose.hostinger-external-edge.yml" in runbook
     assert "docker-compose.hostinger-https.yml" in runbook
+    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "ports 80 and 443" in normalized
     assert "DNS" in runbook
