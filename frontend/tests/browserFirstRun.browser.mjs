@@ -501,6 +501,22 @@ try {
   await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
 
+  // #1455: setup readiness is advisory for authenticated navigation. Before any setup work is
+  // complete, an administrator must be able to reach installation/configuration surfaces and stay
+  // there instead of being redirected back into onboarding.
+  const marketplaceLink = page.getByRole("link", { name: "Marketplace", exact: true });
+  await marketplaceLink.click();
+  await page.waitForURL("**/marketplace");
+  await page.locator('main[data-route="/marketplace"]').waitFor();
+  await page.getByRole("link", { name: "Continue first-run onboarding", exact: true }).waitFor();
+  if (new URL(page.url()).pathname !== "/marketplace") {
+    throw new Error(`Incomplete setup unexpectedly redirected Marketplace back to ${page.url()}`);
+  }
+  await page.getByRole("link", { name: "Continue first-run onboarding", exact: true }).click();
+  await page.waitForURL("**/onboarding");
+  await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
+
   // #1391: a clean default install must expose the shipped optional-component catalog without
   // operator-side Registry configuration. Hermes is deliberately presented as an adapter package,
   // not as an already managed Hermes runtime.
@@ -900,8 +916,9 @@ try {
   await (await waitForButton(page, "Validate readiness")).click();
   await page.getByRole("link", { name: "Open dashboard", exact: true }).waitFor();
 
-  // Incomplete installations intentionally redirect non-onboarding routes back here.
-  // Exercise terminal Result keyboard navigation only after the canonical setup gate is ready.
+  // Setup readiness no longer locks product navigation. Exercise terminal Result keyboard
+  // navigation after readiness here because this later acceptance slice depends on the completed
+  // first-run Result, not because the shell requires readiness for navigation.
   const readyResultCard = page.getByRole("heading", {
     name: "Official multi-agent first-run result",
     exact: true,

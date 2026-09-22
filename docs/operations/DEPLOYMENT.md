@@ -155,9 +155,12 @@ HttpOnly browser session and continues into the persistent setup wizard.
 
 The wizard discovers the environment, lets the administrator choose the desired setup mode and
 components, previews compatibility and dependency actions before mutation, configures only the
-required backend-owned fields, validates live backend state and enables the dashboard only after
-readiness succeeds. Setup progress and redacted provisioning outcomes are persisted server-side,
-so reloads and process restarts resume incomplete setup instead of repeating completed operations.
+required backend-owned fields and validates live backend state. Readiness is not a global Web
+navigation gate: authenticated installation/configuration surfaces remain reachable while setup is
+incomplete, and the shell shows an advisory link back to onboarding. Operations whose own
+prerequisites are not ready still fail closed at their canonical boundary. Setup progress and
+redacted provisioning outcomes are persisted server-side, so reloads and process restarts resume
+incomplete setup instead of repeating completed operations.
 
 For a production deployment, serve the built frontend through the same-origin composition
 described below instead of running the Vite development server. The first-run semantics are the
@@ -208,8 +211,9 @@ platform-server serve
 The default listener is `127.0.0.1:8000`. This is deliberate minimal exposure. Binding an
 externally reachable address is an operator decision and should be paired with TLS/reverse
 proxy policy appropriate to that environment. Existing installations retain their account and
-setup state; logged-out browser users sign in normally, incomplete setup resumes, and completed
-setup routes to the dashboard.
+setup state; logged-out browser users sign in normally, incomplete setup can resume from
+`/onboarding`, and authenticated users may also navigate to the rest of the product while setup
+remains incomplete.
 
 ## Health and readiness
 

@@ -72,12 +72,8 @@ export function Shell() {
 
   useEffect(() => {
     if (bootstrapStatus?.state !== "initialized") return;
-    void loadAuthenticatedState().then((setup) => {
-      if (setup !== null && !setup.readiness.ready && path !== "/onboarding") {
-        navigate("/onboarding");
-      }
-    });
-  }, [bootstrapStatus, loadAuthenticatedState, navigate, path]);
+    void loadAuthenticatedState();
+  }, [bootstrapStatus, loadAuthenticatedState]);
 
   const loadManifest = useCallback(async () => {
     if (!authenticated) return;

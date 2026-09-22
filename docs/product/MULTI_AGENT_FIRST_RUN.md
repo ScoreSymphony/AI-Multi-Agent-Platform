@@ -94,7 +94,9 @@ After authentication, `/onboarding` guides only the prerequisites that the offic
 No General Assistant or standard Agent catalog bootstrap is required by the multi-agent command
 itself. The product command creates or reuses three scoped canonical Agent revisions for
 `researcher`, `developer`, and `reviewer`. The browser-first setup wizard may establish additional
-standard product readiness state before enabling the dashboard; that state does not change the
+standard product readiness state. That readiness does not block authenticated navigation to the
+dashboard or installation/configuration surfaces; it only affects operations that actually depend
+on unfinished prerequisites. That state does not change the
 runtime requirements of this command.
 
 For an OpenAI-compatible local endpoint, the existing onboarding model setup can be used. The
