@@ -103,12 +103,15 @@ bootstrap and sign-in on non-loopback HTTP origins before credentials are submit
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
 default. Hostinger Docker Manager's Compose-from-URL flow uses the direct maintained Compose file
 `deploy/docker/docker-compose.hostinger.yml`, not the GitHub repository landing page. That
-Hostinger profile can be imported before the public hostname exists; its edge serves only
-setup-pending guidance until `AI_MAP_PUBLIC_DOMAIN` is configured and the project is redeployed.
-Once configured, it publishes only the dedicated Caddy edge on ports 80/443, keeps Web/Control
-Plane private, and retains Secure cookies. Operators that already own TLS elsewhere use the explicitly named
+Hostinger profile does not bind host ports 80/443. It joins Hostinger's shared external
+`traefik-proxy` network and advertises the Web service through Traefik labels; Hostinger's
+Traefik project is the single TLS owner and routes `websecure` traffic to the Web container's
+internal port 8080. The Control Plane remains private on the platform network and Secure cookies
+remain enabled. Until `AI_MAP_PUBLIC_DOMAIN` is configured, the router uses the reserved
+`setup.invalid` hostname rather than exposing a server-IP HTTP path. Operators using a separately
+managed non-Traefik reverse proxy may instead use the explicitly named
 `deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
-the exact DNS/port prerequisites and profile choice.
+the exact Traefik-network, DNS and profile prerequisites.
 
 ## Browser-first initial setup
 
