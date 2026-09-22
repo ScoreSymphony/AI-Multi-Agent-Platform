@@ -26,7 +26,7 @@ kind expansion. This branch therefore consumes those implementations instead of 
 | Domain | Route | Loading | Empty | Validation | Backend Error | Permission | Offline | Refresh | Deep Link | Back |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Authentication / sessions | sign-in boundary, `/settings` | shared | domain session list | domain forms | shared | domain auth boundary | shared Control Plane availability | canonical browser session | `/settings` | browser history |
-| First run / onboarding | `/onboarding` | shared/domain | N/A | domain model/project/workspace forms | shared | canonical session/policy | domain provider-unavailable state; #1164 evidence | **#1164 proven** | maintained route | setup gate + browser history |
+| First run / onboarding | `/onboarding` | shared/domain | N/A | domain model/project/workspace forms | shared | canonical session/policy | domain provider-unavailable state; #1164 evidence | **#1164 proven** | maintained route | advisory/resumable onboarding + browser history; no global navigation gate |
 | Dashboard / status | `/` | shared | domain recent Task/Run tables | N/A | domain partial degradation + shared failures | canonical filtered reads | shared | canonical reload | `/` | browser history |
 | Chat | `/chat` | shared/domain | domain | domain composer/actions | shared | canonical | manifest / provider errors | canonical reload | maintained route | browser history |
 | Projects | `/projects`, `/projects/:id` | shared/domain | domain | domain create/edit | shared | canonical | shared | ID reload | yes | prefix parent `/projects` |
