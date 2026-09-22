@@ -268,7 +268,7 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert '      - "8080"' in web
 
     assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
-    assert 'AI_MAP_PUBLIC_DOMAIN: ""' in gateway
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
     assert (
         "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
     )
@@ -297,6 +297,9 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "setup.invalid" not in gateway
     assert "-custom-http.rule=Host(" not in gateway
     assert "-custom-tls.rule=HostSNI(" not in gateway
+    literal_compat_pattern = r"^\\Q${AI_MAP_PUBLIC_DOMAIN:-}\\E$"
+    assert f"custom-compat-http.rule=HostRegexp(`{literal_compat_pattern}`)" in gateway
+    assert f"custom-compat-tls.rule=HostSNIRegexp(`{literal_compat_pattern}`)" in gateway
 
     assert "      - hostinger-gateway-data:/data" in gateway
     assert "      - hostinger-gateway-config:/config" in gateway
@@ -440,6 +443,9 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert "No `TRAEFIK_HOST`" in runbook
     assert "setup.invalid" in runbook
     assert "docker-compose.hostinger-custom-domain.yml" in runbook
+    assert "migration compatibility" in runbook
+    assert "\\Q...\\E" in runbook
+    assert "may keep doing so without migration" in runbook
     assert "Docker `host` networking" in runbook
     assert "does not require any external Docker network" in runbook
     assert "traefik-proxy" in runbook
