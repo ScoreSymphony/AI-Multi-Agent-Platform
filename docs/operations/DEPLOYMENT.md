@@ -120,13 +120,18 @@ normalizes the short form to `srvNNNNNN.hstgr.cloud`, and derives
 HostRegexp/HostSNIRegexp routes for that project hostname; HTTP reaches Caddy for ACME/redirect
 handling and HTTPS is passed through to Caddy for termination. The zero-config profile publishes no
 application host port: Hostinger Traefik is the only public ingress on ports 80/443, so no extra
-high-port firewall opening is part of the default deployment. An explicit `AI_MAP_PUBLIC_DOMAIN`
-overrides automatic hostname selection. If neither an explicit domain nor a recognized
-Hostinger-managed hostname is available, the gateway remains fail-closed.
+high-port firewall opening is part of the default deployment. The zero-config Traefik labels do
+not advertise an exact placeholder hostname; hPanel can therefore use its managed Hostinger route
+instead of selecting `setup.invalid`. Custom domains use the separate
+`docker-compose.hostinger-custom-domain.yml` profile, which requires `AI_MAP_PUBLIC_DOMAIN`.
+If a recognized Hostinger-managed hostname is unavailable, the zero-config gateway remains
+fail-closed.
 
 The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` entry
 points remain migration-safe. For VPSes that do not run Hostinger Traefik and have free ports
-80/443, use `deploy/docker/docker-compose.hostinger-direct.yml`. The explicit
+80/443, use `deploy/docker/docker-compose.hostinger-direct.yml`. For an explicit custom domain
+on the observed host-network Traefik topology, use
+`deploy/docker/docker-compose.hostinger-custom-domain.yml`. The explicit
 `docker-compose.hostinger-shared-traefik.yml` profile remains available for operators who prefer
 the older environment-driven `TRAEFIK_HOST` contract, and
 `docker-compose.hostinger-external-edge.yml` remains available for separately managed
