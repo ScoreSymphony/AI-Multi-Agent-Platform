@@ -48,10 +48,8 @@ def test_compose_keeps_control_plane_private_and_state_durable() -> None:
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
     assert "platform-data:/var/lib/ai-multi-agent-platform" in compose
     assert '      - "8000"' in compose
-    assert (
-        "AI_MAP_PUBLIC_DOMAIN: "
-        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in compose
-    )
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in compose
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?" not in compose
 
     control_plane = _control_plane_block(compose)
     web = compose.split("\n  web:", 1)[1].split("\n  https-edge:", 1)[0]
@@ -246,10 +244,8 @@ def test_hostinger_default_url_profile_is_https_first_and_self_contained() -> No
     assert "dockerfile: deploy/docker/https-edge.Dockerfile" in compose
     assert "platform-data:/var/lib/ai-multi-agent-platform" in compose
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
-    assert (
-        "AI_MAP_PUBLIC_DOMAIN: "
-        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in compose
-    )
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in compose
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?" not in compose
 
     control_plane = _control_plane_block(compose)
     web = compose.split("\n  web:", 1)[1].split("\n  https-edge:", 1)[0]
@@ -263,14 +259,18 @@ def test_hostinger_default_url_profile_is_https_first_and_self_contained() -> No
     assert "caddy-config:/config" in edge
 
 
-def test_hostinger_runbook_points_to_standalone_compose_file() -> None:
+def test_hostinger_runbook_points_to_direct_compose_file_and_deploy_button() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
-    normalized = " ".join(runbook.split())
 
-    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
-    assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
-    assert "repository root" in normalized
-    assert "docker-compose.yml" in runbook
+    compose_url = (
+        "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
+        "main/deploy/docker/docker-compose.hostinger.yml"
+    )
+    assert compose_url in runbook
+    assert "https://www.hostinger.com/docker-hosting?compose_url=" + compose_url in runbook
+    assert "https://assets.hostinger.com/vps/deploy.svg" in runbook
+    assert "not the Compose-file URL" in runbook
+    assert "setup pending" in runbook
 
 
 def test_hostinger_https_compatibility_profile_publishes_only_the_tls_edge() -> None:
@@ -308,18 +308,39 @@ def test_hostinger_https_compatibility_profile_publishes_only_the_tls_edge() -> 
     assert "cap_add:\n      - NET_BIND_SERVICE" in edge
 
 
-def test_hostinger_https_edge_is_pinned_and_proxies_only_to_web() -> None:
+def test_hostinger_https_edge_is_pinned_and_proxies_only_to_web_after_setup() -> None:
     dockerfile = (DOCKER_DIR / "https-edge.Dockerfile").read_text(encoding="utf-8")
     caddy = (DOCKER_DIR / "Caddyfile.public-https").read_text(encoding="utf-8")
+    entrypoint = (DOCKER_DIR / "https-edge-entrypoint.sh").read_text(encoding="utf-8")
 
     assert "FROM caddy:2.11.4-alpine" in dockerfile
     assert "COPY deploy/docker/Caddyfile.public-https /etc/caddy/Caddyfile" in dockerfile
+    assert "COPY deploy/docker/Caddyfile.setup-pending /etc/caddy/Caddyfile.setup-pending" in dockerfile
+    assert "COPY deploy/docker/https-edge-entrypoint.sh" in dockerfile
+    assert 'ENTRYPOINT ["/usr/local/bin/ai-map-https-edge-entrypoint"]' in dockerfile
     assert "EXPOSE 80 443" in dockerfile
     assert "{$AI_MAP_PUBLIC_DOMAIN}" in caddy
     assert "reverse_proxy web:8080" in caddy
     assert "control-plane:8000" not in caddy
     assert "auto_https off" not in caddy
     assert "admin off" in caddy
+    assert 'domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
+    assert "setup_pending" in entrypoint
+    assert "invalid_domain" in entrypoint
+    assert "Do not include a scheme, path, port, wildcard, whitespace, or IP address." in entrypoint
+
+
+def test_hostinger_https_edge_is_fail_closed_while_domain_setup_is_pending() -> None:
+    pending = (DOCKER_DIR / "Caddyfile.setup-pending").read_text(encoding="utf-8")
+
+    assert "auto_https off" in pending
+    assert ":80 {" in pending
+    assert "setup pending" in pending
+    assert "AI_MAP_PUBLIC_DOMAIN" in pending
+    assert "503" in pending
+    assert "reverse_proxy" not in pending
+    assert "web:8080" not in pending
+    assert "control-plane:8000" not in pending
 
 
 def test_hostinger_runbook_documents_both_tls_ownership_modes() -> None:
@@ -329,8 +350,9 @@ def test_hostinger_runbook_documents_both_tls_ownership_modes() -> None:
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
     assert "docker-compose.hostinger-external-edge.yml" in runbook
     assert "docker-compose.hostinger-https.yml" in runbook
-    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
+    assert "https://assets.hostinger.com/vps/deploy.svg" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
+    assert "setup-pending" in runbook
     assert "ports 80 and 443" in normalized
     assert "DNS" in runbook
     assert "Caddy" in runbook
@@ -362,3 +384,15 @@ def test_hostinger_default_and_https_compatibility_profiles_match() -> None:
     compatibility_compose = HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8")
 
     assert default_compose == compatibility_compose
+
+
+def test_readme_exposes_official_hostinger_deploy_button() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+    compose_url = (
+        "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
+        "main/deploy/docker/docker-compose.hostinger.yml"
+    )
+
+    assert "https://assets.hostinger.com/vps/deploy.svg" in readme
+    assert "https://www.hostinger.com/docker-hosting?compose_url=" + compose_url in readme
+    assert "repository landing page itself is not the Compose URL" in readme
