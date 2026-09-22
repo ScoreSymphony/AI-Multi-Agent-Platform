@@ -39,47 +39,55 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const repoWorkflowPrefix = '.github/workflows/';
+            const workflowDirectoryPath = '.github/workflows';
+            const repoWorkflowPrefix = `${workflowDirectoryPath}/`;
             const fullHistoryScan =
               context.eventName === 'workflow_dispatch' &&
-              Boolean(context.payload.inputs?.full_history_scan === true ||
-                context.payload.inputs?.full_history_scan === 'true');
+              Boolean(
+                context.payload.inputs?.full_history_scan === true ||
+                  context.payload.inputs?.full_history_scan === 'true',
+              );
             const maxDelete = 4000;
             const perPage = 100;
             const routinePageBudget = 10;
-            const recentDeletedCutoffMs = 35 * 24 * 60 * 60 * 1000;
-            const recentDeletedCutoff = Date.now() - recentDeletedCutoffMs;
 
-            const workflows = await github.paginate(
+            const workflowDirectory = await github.rest.repos.getContent({
+              owner,
+              repo,
+              path: workflowDirectoryPath,
+              ref: context.sha,
+            });
+            if (!Array.isArray(workflowDirectory.data)) {
+              core.setFailed(
+                `${workflowDirectoryPath} did not resolve to a directory at ${context.sha}`,
+              );
+              return;
+            }
+            const currentPaths = new Set(
+              workflowDirectory.data
+                .filter(
+                  (entry) =>
+                    entry.type === 'file' &&
+                    typeof entry.path === 'string' &&
+                    /\.ya?ml$/i.test(entry.path),
+                )
+                .map((entry) => entry.path),
+            );
+
+            const registeredWorkflows = await github.paginate(
               github.rest.actions.listRepoWorkflows,
               {
                 owner,
                 repo,
-                per_page: 100,
+                per_page: perPage,
               },
             );
-            const currentPaths = new Set(
-              workflows
-                .filter((workflow) => workflow.state !== 'deleted')
-                .map((workflow) => workflow.path)
-                .filter(
-                  (path) =>
-                    typeof path === 'string' &&
-                    path.startsWith(repoWorkflowPrefix),
-                ),
+            const orphanRegisteredWorkflows = registeredWorkflows.filter(
+              (workflow) =>
+                typeof workflow.path === 'string' &&
+                workflow.path.startsWith(repoWorkflowPrefix) &&
+                !currentPaths.has(workflow.path),
             );
-            const recentlyDeletedWorkflows = workflows.filter((workflow) => {
-              if (
-                workflow.state !== 'deleted' ||
-                typeof workflow.path !== 'string' ||
-                !workflow.path.startsWith(repoWorkflowPrefix) ||
-                currentPaths.has(workflow.path)
-              ) {
-                return false;
-              }
-              const updatedAt = Date.parse(workflow.updated_at || '');
-              return Number.isFinite(updatedAt) && updatedAt >= recentDeletedCutoff;
-            });
 
             const candidates = new Map();
             const orphanWorkflowIds = new Map();
@@ -130,7 +138,7 @@ jobs:
               }
             };
 
-            for (const workflow of recentlyDeletedWorkflows) {
+            for (const workflow of orphanRegisteredWorkflows) {
               await collectWorkflowRuns(workflow.id, workflow.path);
             }
 
@@ -165,7 +173,7 @@ jobs:
                 {
                   owner,
                   repo,
-                  per_page: 100,
+                  per_page: perPage,
                 },
               );
               for (const run of historicalRuns) {
@@ -181,8 +189,9 @@ jobs:
             }
 
             core.info(`current_workflow_paths=${currentPaths.size}`);
+            core.info(`registered_workflows=${registeredWorkflows.length}`);
             core.info(
-              `recent_deleted_workflow_registrations=${recentlyDeletedWorkflows.length}`,
+              `orphan_registered_workflows=${orphanRegisteredWorkflows.length}`,
             );
             core.info(`bounded_recent_runs=${recentCompletedRuns.length}`);
             core.info(`orphaned_completed_runs=${candidates.size}`);
