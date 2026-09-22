@@ -36,6 +36,7 @@ from ai_multi_agent_platform.distribution import (
     PlatformRegistryValidationContextResolver,
     PluginRegistryArtifactInstaller,
     RegistryItemType,
+    RegistryProvider,
     load_hmac_signature_keys,
     reconcile_registry_plugins,
     register_distribution_control_plane,
@@ -341,6 +342,7 @@ def _configure_registry(
     if not config.registry_enabled:
         return None, None
 
+    provider: RegistryProvider
     if config.registry_catalog is None:
         provider = build_starter_registry_provider()
     else:
