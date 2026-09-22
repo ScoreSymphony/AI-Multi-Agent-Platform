@@ -69,9 +69,11 @@ or async promotion orchestration.
 ## CI signal
 
 Python CI preserves the same required coverage while executing stable suite responsibilities as
-isolated matrix lanes: unit; contract/architecture/release; integration; and
-E2E/performance/regression. Static/package validation runs as a sibling matrix lane. The required
-`test` check is an aggregate gate over the complete matrix, so no tier becomes optional.
+isolated matrix lanes: unit; contract/architecture/release; integration core; integration
+recovery/deployment; and E2E/performance/regression. Static/package validation runs as a sibling
+matrix lane. The required `test` check is an aggregate gate over the complete matrix, so no tier
+becomes optional. The integration split is process-level CI scheduling only; tests remain serial
+inside each lane and exact non-unit coverage is still proven against the canonical collection.
 
 The serial local fallback remains `pytest`. CI additionally runs
 `scripts/ci/verify_pytest_shards.py`, which proves that the union of the non-unit lanes is exactly
