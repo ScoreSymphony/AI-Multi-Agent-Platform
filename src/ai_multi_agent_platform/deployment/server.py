@@ -56,7 +56,7 @@ def _report_configuration_error(exc: ConfigurationError) -> int:
     print(f"single-node configuration error: {exc}", file=sys.stderr)
     print(
         "Review config/single-node.env.example and the configured AI_MAP_* values/files, "
-        "correct the reported setting, then retry platform-server.",
+        "correct the reported setting, then retry the same platform server command.",
         file=sys.stderr,
     )
     return 2
