@@ -118,10 +118,11 @@ fully-qualified `srvNNNNNN.hstgr.cloud` form, the gateway validates the numeric 
 normalizes the short form to `srvNNNNNN.hstgr.cloud`, and derives
 `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. Traefik uses narrowly scoped
 HostRegexp/HostSNIRegexp routes for that project hostname; HTTP reaches Caddy for ACME/redirect
-handling and HTTPS is passed through to Caddy for termination. A bootstrap HTTP mapping defaults to
-host port 18080 and redirects only to the canonical HTTPS origin. An explicit
-`AI_MAP_PUBLIC_DOMAIN` overrides automatic hostname selection. If neither an explicit domain nor
-a recognized Hostinger-managed hostname is available, the gateway remains fail-closed.
+handling and HTTPS is passed through to Caddy for termination. The zero-config profile publishes no
+application host port: Hostinger Traefik is the only public ingress on ports 80/443, so no extra
+high-port firewall opening is part of the default deployment. An explicit `AI_MAP_PUBLIC_DOMAIN`
+overrides automatic hostname selection. If neither an explicit domain nor a recognized
+Hostinger-managed hostname is available, the gateway remains fail-closed.
 
 The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` entry
 points remain migration-safe. For VPSes that do not run Hostinger Traefik and have free ports

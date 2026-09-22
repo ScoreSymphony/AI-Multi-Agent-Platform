@@ -90,8 +90,6 @@ services:
     expose:
       - "80"
       - "443"
-    ports:
-      - "${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=HostRegexp(`^${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}\\.srv[0-9]+\\.hstgr\\.cloud$`)"
