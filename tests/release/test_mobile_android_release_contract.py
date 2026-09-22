@@ -116,9 +116,7 @@ def test_pull_requests_skip_native_apk_assembly_and_signing() -> None:
         assert re.search(pattern, workflow)
 
     assert (
-        "  test-signing:\n"
-        "    if: github.event_name == 'workflow_dispatch'\n"
-        "    needs: build"
+        "  test-signing:\n    if: github.event_name == 'workflow_dispatch'\n    needs: build"
     ) in workflow
 
 
