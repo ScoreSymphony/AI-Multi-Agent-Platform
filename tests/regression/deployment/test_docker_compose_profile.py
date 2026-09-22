@@ -15,10 +15,13 @@ LOCAL_COMPOSE = Path("docker-compose.local.yml")
 DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
+HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
 HOSTINGER_GATEWAY_DOCKERFILE = DOCKER_DIR / "hostinger-gateway.Dockerfile"
 HOSTINGER_GATEWAY_CADDY = DOCKER_DIR / "Caddyfile.hostinger-gateway"
 HOSTINGER_GATEWAY_PENDING_CADDY = DOCKER_DIR / "Caddyfile.hostinger-setup-pending"
+HOSTINGER_DIRECT_CADDY = DOCKER_DIR / "Caddyfile.hostinger-direct"
+HOSTINGER_DIRECT_PENDING_CADDY = DOCKER_DIR / "Caddyfile.hostinger-direct-setup-pending"
 HOSTINGER_GATEWAY_ENTRYPOINT = DOCKER_DIR / "hostinger-gateway-entrypoint.sh"
 RECOVERY_COMPOSE = DOCKER_DIR / "docker-compose.recovery.yml"
 
