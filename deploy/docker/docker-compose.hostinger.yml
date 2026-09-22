@@ -48,8 +48,8 @@ services:
     depends_on:
       control-plane:
         condition: service_healthy
-    ports:
-      - "${AI_MAP_PUBLIC_PORT:-8080}:8080"
+    expose:
+      - "8080"
     healthcheck:
       test:
         - CMD
@@ -74,8 +74,38 @@ services:
     networks:
       - platform
 
+  https-edge:
+    build:
+      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#main}
+      dockerfile: deploy/docker/https-edge.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    networks:
+      - platform
+
 volumes:
   platform-data:
+  caddy-data:
+  caddy-config:
 
 networks:
   platform:
