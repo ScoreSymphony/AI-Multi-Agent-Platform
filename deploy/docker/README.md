@@ -220,8 +220,11 @@ short form is normalized to `srvNNNNNN.hstgr.cloud` before the application hostn
 ${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
 ```
 
-No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required.
-The Compose labels use project-scoped `HostRegexp` and `HostSNIRegexp` rules:
+No `TRAEFIK_HOST`, `AI_MAP_PUBLIC_DOMAIN`, `AI_MAP_TRAEFIK_NETWORK`, or
+`AI_MAP_TRAEFIK_EXTERNAL` value is required. The zero-config profile intentionally contains no
+exact fake `Host(...)` / `HostSNI(...)` fallback such as `setup.invalid`; that would cause
+Hostinger hPanel to choose the wrong URL for **Open**. The Compose labels use only project-scoped
+`HostRegexp` and `HostSNIRegexp` rules:
 
 - HTTP on Traefik's `web` entrypoint is forwarded to Caddy port 80 so ACME HTTP-01 and redirects
   work;
@@ -241,9 +244,8 @@ The normal flow is therefore:
 2. paste the zero-config Compose URL above;
 3. click **Deploy**;
 4. wait for the three platform containers to become healthy/running;
-5. open the canonical HTTPS Hostinger hostname
-   `https://<project>.srvNNNNNN.hstgr.cloud` (or Hostinger's **Open** action when hPanel exposes
-   the Traefik route).
+5. click Hostinger's **Open** action; hPanel should use the managed
+   `https://<project>.srvNNNNNN.hstgr.cloud` route directly.
 
 No additional firewall rule for a platform-specific high port is required.
 
@@ -252,13 +254,23 @@ privileged mode, or an external IP/hostname discovery service. It runs read-only
 capabilities and receives only `NET_BIND_SERVICE` so Caddy can listen on internal ports 80/443.
 TLS state is stored in dedicated named volumes.
 
-If `AI_MAP_PUBLIC_DOMAIN=agents.example.com` is set, that explicit hostname overrides the
-automatic Hostinger hostname. Point DNS at the VPS before redeploying so Caddy can complete public
-certificate validation.
-
 If the host hostname is neither an exact `srvNNNNNN` short hostname nor an exact
 `srvNNNNNN.hstgr.cloud` hostname and no explicit public domain is configured, the gateway remains
 fail-closed and serves only setup guidance.
+
+### Explicit custom domain on host-network Traefik
+
+The zero-config profile is deliberately limited to Hostinger's managed temporary hostname so its
+hPanel **Open** metadata cannot fall back to a reserved placeholder. To use your own DNS hostname
+with the same host-network Traefik topology, use:
+
+```text
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-custom-domain.yml
+```
+
+Set `AI_MAP_PUBLIC_DOMAIN=agents.example.com` before deploying that profile and point the DNS
+record at the VPS. The profile requires the variable at Compose interpolation time and uses exact
+`Host(...)` / `HostSNI(...)` rules; it has no `setup.invalid` fallback.
 
 ### Direct Hostinger edge without Traefik
 
@@ -302,11 +314,12 @@ retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
 The checked-in zero-configuration Hostinger profile contains no credentials. Supported deployment
 overrides are intentionally small:
 
-- `AI_MAP_PUBLIC_DOMAIN` — optional explicit public hostname. When absent, the zero-config
-  Hostinger profile derives the application hostname from the validated VPS hostname;
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
+
+`AI_MAP_PUBLIC_DOMAIN` is required by the explicit
+`docker-compose.hostinger-custom-domain.yml` profile and is not part of the zero-config path.
 
 The following variables are only for the explicit
 `docker-compose.hostinger-shared-traefik.yml` profile:
