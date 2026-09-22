@@ -52,14 +52,29 @@ No GPU, paid AI/API service, Hermes, LiteLLM, MCP server or remote Worker is req
 
 ### Optional Docker Compose deployment
 
-For an optional container deployment, Docker Engine plus Docker Compose can replace the host Python/Node prerequisites. The repository root contains the maintained `docker-compose.yml` profile:
+For production/self-hosting, the repository-root `docker-compose.yml` is HTTPS-first. Point a DNS
+hostname at the server and supply it before deployment:
 
 ```bash
+export AI_MAP_PUBLIC_DOMAIN=agents.example.com
 docker compose -f docker-compose.yml build
 docker compose -f docker-compose.yml up -d
 ```
 
-It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication keeps Secure cookies enabled. The standard Hostinger/VPS Compose URL (`deploy/docker/docker-compose.hostinger.yml`) is HTTPS-first: after `AI_MAP_PUBLIC_DOMAIN` is supplied and DNS points to the VPS, it adds the repository-owned Caddy edge with automatic certificates and does not publish the browser UI directly on port 8080. An explicitly named external-edge profile remains available for operators who already own TLS elsewhere. The Docker profile remains optional. Its canonical quiesced backup/replacement-volume restore workflow, TLS deployment choices, full supported shutdown-drain range, and Docker-manager operational caveats are documented in [`deploy/docker/README.md`](deploy/docker/README.md).
+The root profile publishes only ports 80/443 through the repository-owned Caddy edge, keeps Web and
+Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
+Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
+
+For Hostinger, the normal starting point is the repository URL itself:
+
+```text
+https://github.com/ScoreSymphony/AI-Multi-Agent-Platform
+```
+
+The repository-root Compose file therefore carries the same secure production default. An explicit
+`docker-compose.local.yml` preserves the old loopback `:8080` workflow for local development and
+CI only. Detailed backup/restore, TLS, Hostinger and alternate external-edge guidance lives in
+[`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 

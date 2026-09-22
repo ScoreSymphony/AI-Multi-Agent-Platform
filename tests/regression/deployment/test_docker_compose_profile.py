@@ -9,6 +9,7 @@ from ai_multi_agent_platform.deployment.config import (
 )
 
 COMPOSE = Path("docker-compose.yml")
+LOCAL_COMPOSE = Path("docker-compose.local.yml")
 DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
@@ -42,26 +43,56 @@ def test_compose_keeps_control_plane_private_and_state_durable() -> None:
 
     assert "dockerfile: deploy/docker/control-plane.Dockerfile" in compose
     assert "dockerfile: deploy/docker/web.Dockerfile" in compose
+    assert "dockerfile: deploy/docker/https-edge.Dockerfile" in compose
     assert "AI_MAP_HOST: 0.0.0.0" in compose
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
     assert "platform-data:/var/lib/ai-multi-agent-platform" in compose
     assert '      - "8000"' in compose
-    assert '"${AI_MAP_PUBLIC_PORT:-8080}:8080"' in compose
+    assert (
+        "AI_MAP_PUBLIC_DOMAIN: "
+        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in compose
+    )
 
     control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  https-edge:", 1)[0]
+    edge = compose.split("\n  https-edge:", 1)[1].split("\nvolumes:", 1)[0]
+
     assert "ports:" not in control_plane
+    assert "ports:" not in web
     assert "expose:" in control_plane
     assert "no-new-privileges:true" in control_plane
     assert "cap_drop:" in control_plane
+    assert '      - "80:80"' in edge
+    assert '      - "443:443"' in edge
+    assert "caddy-data:/data" in edge
+    assert "caddy-config:/config" in edge
+
+
+def test_local_compose_preserves_loopback_http_workflow_without_public_tls_edge() -> None:
+    compose = LOCAL_COMPOSE.read_text(encoding="utf-8")
+
+    assert "dockerfile: deploy/docker/control-plane.Dockerfile" in compose
+    assert "dockerfile: deploy/docker/web.Dockerfile" in compose
+    assert "dockerfile: deploy/docker/https-edge.Dockerfile" not in compose
+    assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
+    assert '"${AI_MAP_PUBLIC_PORT:-8080}:8080"' in compose
+    assert "AI_MAP_PUBLIC_DOMAIN" not in compose
+    assert "  backup:" in compose
+    assert "platform-data:/var/lib/ai-multi-agent-platform" in compose
+
+    control_plane = _control_plane_block(compose)
+    assert "ports:" not in control_plane
 
 
 def test_compose_stop_grace_exceeds_every_supported_shutdown_budget() -> None:
     root_compose = COMPOSE.read_text(encoding="utf-8")
+    local_compose = LOCAL_COMPOSE.read_text(encoding="utf-8")
     hostinger_compose = HOSTINGER_COMPOSE.read_text(encoding="utf-8")
     hostinger_https_compose = HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8")
     hostinger_external_compose = HOSTINGER_EXTERNAL_EDGE_COMPOSE.read_text(encoding="utf-8")
 
     root_default, root_grace = _shutdown_contract(root_compose)
+    local_default, local_grace = _shutdown_contract(local_compose)
     hostinger_default, hostinger_grace = _shutdown_contract(hostinger_compose)
     hostinger_https_default, hostinger_https_grace = _shutdown_contract(hostinger_https_compose)
     hostinger_external_default, hostinger_external_grace = _shutdown_contract(
@@ -69,18 +100,27 @@ def test_compose_stop_grace_exceeds_every_supported_shutdown_budget() -> None:
     )
 
     assert root_default == DEFAULT_SHUTDOWN_TIMEOUT_SECONDS
+    assert local_default == DEFAULT_SHUTDOWN_TIMEOUT_SECONDS
     assert hostinger_default == DEFAULT_SHUTDOWN_TIMEOUT_SECONDS
     assert hostinger_https_default == DEFAULT_SHUTDOWN_TIMEOUT_SECONDS
     assert hostinger_external_default == DEFAULT_SHUTDOWN_TIMEOUT_SECONDS
     assert root_grace > root_default
+    assert local_grace > local_default
     assert hostinger_grace > hostinger_default
     assert hostinger_https_grace > hostinger_https_default
     assert hostinger_external_grace > hostinger_external_default
     assert root_grace > MAX_SHUTDOWN_TIMEOUT_SECONDS
+    assert local_grace > MAX_SHUTDOWN_TIMEOUT_SECONDS
     assert hostinger_grace > MAX_SHUTDOWN_TIMEOUT_SECONDS
     assert hostinger_https_grace > MAX_SHUTDOWN_TIMEOUT_SECONDS
     assert hostinger_external_grace > MAX_SHUTDOWN_TIMEOUT_SECONDS
-    assert root_grace == hostinger_grace == hostinger_https_grace == hostinger_external_grace
+    assert (
+        root_grace
+        == local_grace
+        == hostinger_grace
+        == hostinger_https_grace
+        == hostinger_external_grace
+    )
 
 
 def test_compose_backup_service_exports_quiesced_backup_outside_data_volume() -> None:
@@ -176,7 +216,8 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
 
     assert "AI_MAP_SECURE_COOKIE=true" in runbook
-    assert "requires HTTPS" in runbook
+    assert "HTTPS-first" in runbook
+    assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "docker compose down -v" in runbook
     normalized = " ".join(runbook.split())
     _, grace_seconds = _shutdown_contract(COMPOSE.read_text(encoding="utf-8"))
@@ -226,9 +267,10 @@ def test_hostinger_runbook_points_to_standalone_compose_file() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
 
+    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
-    assert "repository root" in runbook
-    assert "public Git repository itself as the Docker build context" in normalized
+    assert "repository root" in normalized
+    assert "docker-compose.yml" in runbook
 
 
 def test_hostinger_https_compatibility_profile_publishes_only_the_tls_edge() -> None:
@@ -285,8 +327,9 @@ def test_hostinger_runbook_documents_both_tls_ownership_modes() -> None:
     normalized = " ".join(runbook.split())
 
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
-    assert "main/deploy/docker/docker-compose.hostinger-external-edge.yml" in runbook
+    assert "docker-compose.hostinger-external-edge.yml" in runbook
     assert "docker-compose.hostinger-https.yml" in runbook
+    assert "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "ports 80 and 443" in normalized
     assert "DNS" in runbook
