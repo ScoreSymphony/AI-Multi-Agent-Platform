@@ -78,12 +78,10 @@ def test_compose_backup_service_exports_quiesced_backup_outside_data_volume() ->
     assert "source: platform-data" in compose
     assert "target: /var/lib/ai-multi-agent-platform" in compose
 
-    backup_service = (
-        compose.split("\n\n  backup:", 1)[1].split("\n  web:", 1)[0]
-    )
-    data_mount = backup_service.split("      - type: volume", 1)[1].split(
-        "      - type: bind", 1
-    )[0]
+    backup_service = compose.split("\n\n  backup:", 1)[1].split("\n  web:", 1)[0]
+    data_mount = backup_service.split("      - type: volume", 1)[1].split("      - type: bind", 1)[
+        0
+    ]
     assert "read_only:" not in data_mount
     assert "read_only: true" in backup_service
     assert "source: ${AI_MAP_BACKUP_DIR:-./backups}" in compose
@@ -106,17 +104,13 @@ def test_recovery_override_restores_into_clean_volume_subpath() -> None:
     assert "  recover-restore:" in recovery
     assert "platform-server\n      - recover-restore" in recovery
 
-    backup_service = (
-        recovery.split("\n\n  backup:", 1)[1].split("\n\n  restore:", 1)[0]
-    )
-    data_mount = backup_service.split("      - type: volume", 1)[1].split(
-        "      - type: bind", 1
-    )[0]
+    backup_service = recovery.split("\n\n  backup:", 1)[1].split("\n\n  restore:", 1)[0]
+    data_mount = backup_service.split("      - type: volume", 1)[1].split("      - type: bind", 1)[
+        0
+    ]
     assert "read_only:" not in data_mount
 
-    restore_service = recovery.split("\n\n  restore:", 1)[1].split(
-        "\n\n  recover-restore:", 1
-    )[0]
+    restore_service = recovery.split("\n\n  restore:", 1)[1].split("\n\n  recover-restore:", 1)[0]
     assert "read_only: true" in restore_service
     assert "network_mode: none" in restore_service
 
