@@ -1,0 +1,17 @@
+{
+    admin off
+}
+
+http:// {
+    redir https://{$AI_MAP_PUBLIC_DOMAIN}{uri} 308
+}
+
+{$AI_MAP_PUBLIC_DOMAIN} {
+    reverse_proxy web:8080
+
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+}
