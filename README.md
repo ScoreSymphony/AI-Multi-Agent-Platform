@@ -87,8 +87,14 @@ No `TRAEFIK_HOST`, `AI_MAP_PUBLIC_DOMAIN`, `AI_MAP_TRAEFIK_NETWORK`, or
 `AI_MAP_TRAEFIK_EXTERNAL` value is required for this zero-config profile. The platform publishes
 no host port of its own: public access is exclusively through Hostinger Traefik on ports 80/443,
 so no additional firewall rule for an arbitrary high port is required. The zero-config profile
-advertises no fake fallback hostname; Hostinger's normal **Open** action is expected to use the
-managed `<project>.srvNNNNNN.hstgr.cloud` route directly.
+advertises no fake exact fallback hostname; Hostinger's normal **Open** action is expected to use
+the managed `<project>.srvNNNNNN.hstgr.cloud` route directly.
+
+For backward compatibility, an existing zero-config deployment may continue to set
+`AI_MAP_PUBLIC_DOMAIN=<your-hostname>`. That optional override is routed through literal
+HostRegexp/HostSNIRegexp compatibility rules and does not reintroduce a concrete
+`setup.invalid` host. For new custom-domain deployments, the explicit
+`docker-compose.hostinger-custom-domain.yml` profile remains the clearer strict configuration.
 
 Existing installations already tracking
 `deploy/docker/docker-compose.hostinger.yml` or
