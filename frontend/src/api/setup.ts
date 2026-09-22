@@ -15,6 +15,7 @@ export type SetupActionKind = "reuse" | "install" | "configure" | "activate" | "
 export type SetupActionState = "pending" | "completed" | "failed" | "blocked" | "manual_required";
 export type SetupInstallStatus =
   | "installed"
+  | "adapter_installed"
   | "installable"
   | "manual_required"
   | "blocked";

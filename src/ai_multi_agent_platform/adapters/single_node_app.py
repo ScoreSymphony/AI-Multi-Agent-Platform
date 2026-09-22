@@ -87,6 +87,7 @@ from .marketplace_owner_handlers import (
 )
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 from .setup_registry import DistributionSetupRegistryPort
+from .starter_registry import build_starter_registry_provider
 
 
 def _repository_actor_ref(context: OperationContext) -> str:
@@ -335,12 +336,16 @@ def _configure_registry(
     deployment: SingleNodeDeployment,
     applications: ApplicationRuntimeComposition,
 ) -> tuple[DistributionService | None, RegistryCommandHandlers | None]:
-    """Attach the optional Registry only when an operator configures a local catalog."""
+    """Attach the shipped starter Registry or an explicit operator-provided catalog."""
 
-    if config.registry_catalog is None:
+    if not config.registry_enabled:
         return None, None
 
-    provider = FilesystemRegistryProvider(config.registry_catalog)
+    provider = (
+        build_starter_registry_provider()
+        if config.registry_catalog is None
+        else FilesystemRegistryProvider(config.registry_catalog)
+    )
     installations = JsonRegistryInstallationStore(
         deployment.config.database_dir / "registry-installations.json"
     )

@@ -85,9 +85,8 @@ def test_enabling_supported_optional_claim_makes_it_required_and_executable() ->
     assert "test_executor_rolls_back_real_team_and_agent_in_reverse_order" in " ".join(
         scenarios["R"].command or ()
     )
-    assert (
-        "test_default_single_node_keeps_registry_and_plugin_runtime_absent_when_unconfigured"
-        in " ".join(scenarios["S"].command or ())
+    assert "test_default_single_node_exposes_curated_starter_registry" in " ".join(
+        scenarios["S"].command or ()
     )
     assert "test_signed_artifact_requires_and_accepts_authoritative_verification" in " ".join(
         scenarios["S"].command or ()

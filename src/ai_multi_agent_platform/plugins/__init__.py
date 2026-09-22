@@ -14,7 +14,11 @@ from .discovery import (
     PluginSource,
     StaticPluginSource,
 )
-from .manifest import PLUGIN_MANIFEST_SCHEMA, validate_manifest_document
+from .manifest import (
+    PLUGIN_MANIFEST_SCHEMA,
+    plugin_manifest_to_document,
+    validate_manifest_document,
+)
 from .models import (
     CompatibilityState,
     ExtensionType,
@@ -77,6 +81,7 @@ __all__ = [
     "ReferenceCapabilityPlugin",
     "StaticPluginSource",
     "VersionRange",
+    "plugin_manifest_to_document",
     "reference_manifest",
     "validate_manifest_document",
 ]

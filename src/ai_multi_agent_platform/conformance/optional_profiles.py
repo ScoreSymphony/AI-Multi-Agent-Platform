@@ -102,7 +102,7 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
     ),
     "S": _pytest(
         "tests/integration/deployment/test_production_composition.py::"
-        "test_default_single_node_keeps_registry_and_plugin_runtime_absent_when_unconfigured",
+        "test_default_single_node_exposes_curated_starter_registry",
         "tests/integration/deployment/test_production_composition.py::"
         "test_configured_single_node_shares_registry_plugins_with_canonical_plugin_lifecycle",
         "tests/integration/plugins/test_registry_control_plane.py::"

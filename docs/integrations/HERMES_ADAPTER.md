@@ -32,6 +32,21 @@ The previous v0.21.1 validation evidence remains retained as the exact rollback 
 
 No Hermes Python package or source tree is required by platform core or reference tests.
 
+## Browser-first installation
+
+The default single-node product exposes the reviewed **Hermes adapter** in the shipped starter
+Registry, so a fresh browser-first setup can select and install the adapter package without an
+operator first configuring `AI_MAP_REGISTRY_CATALOG`.
+
+That install is deliberately not presented as a Hermes service installation. The Registry item
+installs the platform-owned orchestrator adapter only. A separately running self-hosted Hermes API
+server is still required before the adapter can be configured and enabled. The setup card labels the
+delivery as external and states this prerequisite explicitly; the platform-native orchestrator
+remains the zero-dependency baseline.
+
+An operator-provided `registry_catalog` continues to replace the starter catalog for deployments
+that intentionally govern their own distribution source.
+
 ## Configuration
 
 `HermesAdapterConfig` is disabled by default. `config/hermes.example.json` shows the configuration shape, and `HERMES_CONFIGURATION_SCHEMA` validates that shape through the platform-owned configuration resolver.

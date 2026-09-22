@@ -24,6 +24,7 @@ from ai_multi_agent_platform.onboarding.setup_lifecycle import (
 from ai_multi_agent_platform.onboarding.setup_registry_contracts import (
     SetupRegistryDependency,
     SetupRegistryItem,
+    SetupRegistryTechnicalMetadata,
 )
 from ai_multi_agent_platform.onboarding.setup_registry_planning import (
     DependencyAwareBrowserFirstSetupService,
@@ -111,6 +112,7 @@ def _item(
     version: str,
     *,
     dependencies: tuple[SetupRegistryDependency, ...] = (),
+    external_runtime_required: bool = False,
 ) -> SetupRegistryItem:
     return SetupRegistryItem(
         item_id=item_id,
@@ -124,6 +126,15 @@ def _item(
         dependencies=dependencies,
         license="MIT",
         source_repository="https://example.invalid/repository",
+        technical=(
+            SetupRegistryTechnicalMetadata(
+                deployment_modes=("service",),
+                network_status="required",
+                external_runtime_required=True,
+            )
+            if external_runtime_required
+            else None
+        ),
     )
 
 
@@ -277,6 +288,37 @@ def test_exact_version_reuse_and_mismatch_requires_mutation(tmp_path) -> None:
     assert different_action.state is ProvisioningActionState.PENDING
     assert exact_card["install_status"] == "installed"
     assert different_card["install_status"] == "installable"
+
+
+def test_external_runtime_adapter_never_reports_full_install_or_ready(tmp_path) -> None:
+    adapter = _item("external-adapter", "1.0", external_runtime_required=True)
+    registry = _Registry((adapter,), installed_versions={"external-adapter": "1.0"})
+    service = DependencyAwareBrowserFirstSetupService(
+        cast(OnboardingComponentSetupService, _ReadyComponents()),
+        cast(OnboardingService, _ReadyOnboarding()),
+        JsonSetupSessionStore(tmp_path / "setup-sessions.json"),
+        registry=registry,
+    )
+    service._sessions["user-1"] = _session(
+        RegistrySelection(item_id="external-adapter", version="1.0")
+    )
+
+    status = service.status(_context("external-runtime-readiness"))
+    card = next(item for item in status["catalog"] if item["technical_id"] == "external-adapter")
+    action = next(
+        item
+        for item in status["plan"]["actions"]
+        if item["component_ref"] == "external-adapter@1.0"
+    )
+
+    assert card["install_status"] == "adapter_installed"
+    assert any("does not install or start" in blocker for blocker in card["blockers"])
+    assert action["kind"] == "manual"
+    assert action["state"] == "manual_required"
+    assert "external runtime/service" in action["blockers"][0]
+    assert status["readiness"]["ready"] is False
+    assert status["readiness"]["dashboard_allowed"] is False
+    assert "registry:external-adapter@1.0" in status["readiness"]["blocking_actions"]
 
 
 def test_live_registry_state_overrides_stale_setup_outcomes(tmp_path) -> None:

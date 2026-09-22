@@ -21,11 +21,26 @@ from ai_multi_agent_platform.distribution import (
 )
 
 
-def test_default_single_node_keeps_registry_and_plugin_runtime_absent_when_unconfigured(
-    tmp_path,
-) -> None:
+def test_default_single_node_exposes_curated_starter_registry(tmp_path) -> None:
     deployment = build_default_single_node_deployment(
-        SingleNodeConfig(data_dir=tmp_path / "without-registry", secure_cookie=False)
+        SingleNodeConfig(data_dir=tmp_path / "starter-registry", secure_cookie=False)
+    )
+
+    assert REGISTRY_COLLECTION in deployment.control_plane.registered_collections
+    assert MARKETPLACE_KIND_COLLECTION in deployment.control_plane.registered_collections
+    assert deployment.control_plane.plugin_registry is not None
+    assert deployment.control_plane.plugin_catalog is not None
+    candidates = deployment.control_plane.plugin_catalog.refresh()
+    assert tuple(candidate.manifest for candidate in candidates) == (hermes_plugin_manifest(),)
+
+
+def test_single_node_can_explicitly_disable_registry_and_plugin_runtime(tmp_path) -> None:
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(
+            data_dir=tmp_path / "without-registry",
+            secure_cookie=False,
+            registry_enabled=False,
+        )
     )
 
     assert REGISTRY_COLLECTION not in deployment.control_plane.registered_collections

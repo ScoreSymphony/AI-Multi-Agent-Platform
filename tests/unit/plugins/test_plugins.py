@@ -23,6 +23,7 @@ from ai_multi_agent_platform.plugins import (
     PluginState,
     ReferenceCapabilityPlugin,
     VersionRange,
+    plugin_manifest_to_document,
     reference_manifest,
     validate_manifest_document,
 )
@@ -126,6 +127,17 @@ def test_reference_plugin_registers_disables_and_removes_cleanly() -> None:
     assert capability_registry.list_capabilities() == ()
     registry.remove(reference_manifest().plugin_id)
     assert registry.list_plugins() == ()
+
+
+def test_plugin_manifest_serialization_round_trips_through_schema() -> None:
+    manifest = reference_manifest()
+
+    document = plugin_manifest_to_document(manifest)
+
+    validate_manifest_document(document)
+    assert document["plugin_id"] == manifest.plugin_id
+    assert document["plugin_version"] == manifest.plugin_version
+    assert document["provenance"]["license"] == manifest.provenance.license  # type: ignore[index]
 
 
 def test_invalid_manifest_document_is_rejected() -> None:

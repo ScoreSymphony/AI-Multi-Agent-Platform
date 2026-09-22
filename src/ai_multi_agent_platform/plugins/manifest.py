@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from copy import deepcopy
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .models import PLUGIN_MANIFEST_VERSION, ExtensionType, PluginPermission
+from .models import PLUGIN_MANIFEST_VERSION, ExtensionType, PluginManifest, PluginPermission
 
 _VERSION_SCHEMA: dict[str, Any] = {
     "type": "string",
@@ -145,3 +147,72 @@ def validate_manifest_document(document: object) -> None:
             ErrorCode.INVALID_CONFIGURATION,
             f"invalid plugin manifest{detail}",
         ) from exc
+
+
+def plugin_manifest_to_document(manifest: PluginManifest) -> dict[str, JsonValue]:
+    """Serialize a canonical PluginManifest into its versioned JSON document."""
+
+    provenance: dict[str, JsonValue] = {
+        "source": manifest.provenance.source,
+        "license": manifest.provenance.license,
+        "source_repository": manifest.provenance.source_repository,
+        "revision": manifest.provenance.revision,
+        "checksum": manifest.provenance.checksum,
+        "trust_source": manifest.provenance.trust_source,
+        "local_modifications": manifest.provenance.local_modifications,
+    }
+    extensions: list[JsonValue] = [
+        {
+            "extension_id": extension.extension_id,
+            "extension_type": extension.extension_type.value,
+            "interface_version": extension.interface_version,
+            "entrypoint": extension.entrypoint,
+            "metadata": deepcopy(extension.metadata),
+        }
+        for extension in manifest.extensions
+    ]
+    dependencies: list[JsonValue] = [
+        {
+            "plugin_id": dependency.plugin_id,
+            "version_range": {
+                "minimum": dependency.version_range.minimum,
+                "maximum": dependency.version_range.maximum,
+            },
+            "optional": dependency.optional,
+        }
+        for dependency in manifest.dependencies
+    ]
+    migrations: list[JsonValue] = [
+        {
+            "migration_id": migration.migration_id,
+            "from_version": migration.from_version,
+            "to_version": migration.to_version,
+        }
+        for migration in manifest.state_migrations
+    ]
+    return {
+        "plugin_id": manifest.plugin_id,
+        "name": manifest.name,
+        "description": manifest.description,
+        "plugin_version": manifest.plugin_version,
+        "manifest_version": manifest.manifest_version,
+        "author": manifest.author,
+        "provenance": provenance,
+        "supported_platform": {
+            "minimum": manifest.supported_platform.minimum,
+            "maximum": manifest.supported_platform.maximum,
+        },
+        "extensions": extensions,
+        "capabilities": list(manifest.capabilities),
+        "requested_permissions": cast(
+            JsonValue,
+            sorted(permission.value for permission in manifest.requested_permissions),
+        ),
+        "configuration_version": manifest.configuration_version,
+        "configuration_schema": deepcopy(manifest.configuration_schema),
+        "dependencies": dependencies,
+        "optional_external_services": list(manifest.optional_external_services),
+        "state_version": manifest.state_version,
+        "state_migrations": migrations,
+        "ui_metadata": deepcopy(manifest.ui_metadata),
+    }

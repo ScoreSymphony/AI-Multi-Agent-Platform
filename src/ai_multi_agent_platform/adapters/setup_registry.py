@@ -101,6 +101,7 @@ class DistributionSetupRegistryPort:
                     deployment_modes=technical.deployment_modes,
                     network_status=technical.network_status,
                     lifecycle_status=technical.lifecycle_status,
+                    external_runtime_required=("setup:external-runtime-required" in item.tags),
                 )
             ),
         )

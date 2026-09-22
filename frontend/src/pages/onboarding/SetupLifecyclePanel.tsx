@@ -452,7 +452,7 @@ function ProductCard({
 }) {
   const selectable = card.kind === "registry_item"
     && card.version !== null
-    && card.install_status === "installable";
+    && (card.install_status === "installable" || selected);
   return (
     <article className="state">
       <div className="detail-header">
