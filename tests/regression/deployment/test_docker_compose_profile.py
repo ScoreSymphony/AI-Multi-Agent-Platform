@@ -279,6 +279,7 @@ def test_hostinger_default_url_profile_uses_shared_traefik_edge() -> None:
     assert '"80:80"' not in compose
     assert '"443:443"' not in compose
 
+
 def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisite() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
@@ -350,6 +351,7 @@ def test_hostinger_gateway_is_fail_closed_until_public_domain_is_valid() -> None
     assert "Do not include a scheme, path, port, wildcard, whitespace, or IP address." in entrypoint
     assert "Caddyfile.hostinger-setup-pending" in entrypoint
     assert "Caddyfile.hostinger-gateway" in entrypoint
+
 
 def test_generic_https_edge_remains_pinned_for_non_hostinger_root_profile() -> None:
     dockerfile = (DOCKER_DIR / "https-edge.Dockerfile").read_text(encoding="utf-8")
