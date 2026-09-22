@@ -100,6 +100,8 @@ def test_repository_maintenance_stays_out_of_pr_gate_and_cleans_orphans() -> Non
     assert "listRepoWorkflows" in maintenance
     assert "workflow.state !== 'deleted'" in maintenance
     assert "status: 'completed'" in maintenance
+    assert "perPage = 100" in maintenance
+    assert "routinePageBudget = 10" in maintenance
     assert "listWorkflowRuns" in maintenance
     assert "listWorkflowRunsForRepo" in maintenance
     assert "currentPaths.has(run.path)" in maintenance
