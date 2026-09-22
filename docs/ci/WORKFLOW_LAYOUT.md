@@ -126,7 +126,7 @@ Workflow consolidation must preserve the identities of checks that are still int
 
 Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-maintenance.yml` therefore compares completed workflow runs with the workflow definitions that still exist in the repository. A run is eligible for cleanup only when its recorded path starts with `.github/workflows/` and that exact path is absent from the current active workflow inventory.
 
-Routine cleanup is deliberately bounded. Weekly runs and workflow-definition changes inspect the recent completed-run surface plus recently deleted workflow registrations, and then expand only to the histories of orphaned workflow IDs discovered there. This avoids paginating the repository's complete Actions history on every maintenance execution while still cleaning newly retired one-off workflows promptly.
+Routine cleanup is deliberately bounded. Weekly runs and workflow-definition changes inspect at most 10 pages of 100 recent completed runs, plus recently deleted workflow registrations. Histories of orphaned workflow IDs discovered there are also read with the same 10-page budget. Repeated maintenance runs therefore make steady progress without paginating the repository's complete Actions history on every execution.
 
 A manual dispatch can set `full_history_scan=true` when older legacy workflow history needs a one-time deep cleanup. That mode may paginate the complete Actions history, but deletion remains capped at 4,000 runs per execution. Active workflow paths and non-repository GitHub-managed workflow surfaces are never selected.
 
