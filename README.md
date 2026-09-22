@@ -59,7 +59,7 @@ docker compose -f docker-compose.yml build
 docker compose -f docker-compose.yml up -d
 ```
 
-It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication keeps Secure cookies enabled. Hostinger/VPS deployments may either use an existing external HTTPS reverse proxy or the maintained `deploy/docker/docker-compose.hostinger-https.yml` profile, which adds a repository-owned Caddy edge with automatic certificates after `AI_MAP_PUBLIC_DOMAIN` is supplied and DNS points to the VPS. The Docker profile remains optional. Its canonical quiesced backup/replacement-volume restore workflow, TLS deployment choices, full supported shutdown-drain range, and Docker-manager operational caveats are documented in [`deploy/docker/README.md`](deploy/docker/README.md).
+It builds the Control Plane and Web UI from source, publishes only the same-origin Web edge, and keeps canonical local state in a named volume. Browser authentication keeps Secure cookies enabled. The standard Hostinger/VPS Compose URL (`deploy/docker/docker-compose.hostinger.yml`) is HTTPS-first: after `AI_MAP_PUBLIC_DOMAIN` is supplied and DNS points to the VPS, it adds the repository-owned Caddy edge with automatic certificates and does not publish the browser UI directly on port 8080. An explicitly named external-edge profile remains available for operators who already own TLS elsewhere. The Docker profile remains optional. Its canonical quiesced backup/replacement-volume restore workflow, TLS deployment choices, full supported shutdown-drain range, and Docker-manager operational caveats are documented in [`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
