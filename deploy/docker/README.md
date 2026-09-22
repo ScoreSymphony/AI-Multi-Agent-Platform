@@ -167,7 +167,19 @@ therefore requires HTTPS at the external edge. A VPS control panel, Traefik, Cad
 another trusted reverse proxy may terminate TLS and forward to the published Web port.
 
 Direct `http://<server-ip>:8080` access is suitable for health diagnostics, but browser
-authentication should use an HTTPS origin so Secure session cookies are transmitted.
+authentication requires an HTTPS origin so Secure session cookies are transmitted. The Web UI
+fails fast on non-loopback HTTP origins: first-user creation and sign-in forms are replaced with an
+actionable **HTTPS required** message before credentials are submitted.
+
+For a Hostinger/VPS deployment, complete the external edge before browser onboarding:
+
+1. point a DNS name at the VPS;
+2. configure the Hostinger proxy, Caddy, Nginx, Traefik or another trusted TLS edge to forward that
+   HTTPS origin to the published Web port (default `8080`);
+3. verify `https://<your-domain>/api/v1/health`;
+4. open the same HTTPS origin for administrator bootstrap/sign-in.
+
+Do not disable Secure cookies to make a public HTTP origin work.
 
 The internal Caddy process serves plain HTTP on port 8080 because TLS ownership belongs to the
 operator's external edge in this profile. It preserves `/api` when proxying; the canonical
