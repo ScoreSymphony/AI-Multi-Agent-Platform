@@ -72,11 +72,14 @@ https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/dep
 ```
 
 Copy that URL into Hostinger's **Compose from URL** field. The repository landing page itself is not
-the Compose URL. The Hostinger profile is importable before a domain is configured and stays
-fail-closed in setup-pending mode until `AI_MAP_PUBLIC_DOMAIN` is set and the project is
-redeployed. An explicit `docker-compose.local.yml` preserves the old loopback `:8080` workflow
-for local development and CI only. Detailed backup/restore, TLS, Hostinger and alternate
-external-edge guidance lives in [`deploy/docker/README.md`](deploy/docker/README.md).
+the Compose URL. The maintained Hostinger profile does not bind VPS ports 80/443 itself; it joins
+Hostinger's shared `traefik-proxy` network and lets the Hostinger Traefik project own HTTPS.
+Deploy Hostinger's Traefik template first, then set `AI_MAP_PUBLIC_DOMAIN` and point that DNS name
+at the VPS. Until a domain is configured the router uses the reserved `setup.invalid` hostname,
+so the application is not publicly discoverable through the VPS IP. An explicit
+`docker-compose.local.yml` preserves the loopback `:8080` workflow for local development and CI
+only. Detailed backup/restore, TLS, Hostinger and alternate external-edge guidance lives in
+[`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
