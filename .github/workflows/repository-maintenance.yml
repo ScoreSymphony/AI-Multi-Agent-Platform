@@ -45,6 +45,8 @@ jobs:
               Boolean(context.payload.inputs?.full_history_scan === true ||
                 context.payload.inputs?.full_history_scan === 'true');
             const maxDelete = 4000;
+            const perPage = 100;
+            const routinePageBudget = 10;
             const recentDeletedCutoffMs = 35 * 24 * 60 * 60 * 1000;
             const recentDeletedCutoff = Date.now() - recentDeletedCutoffMs;
 
@@ -102,17 +104,20 @@ jobs:
                 return;
               }
               try {
-                const runs = await github.paginate(
-                  github.rest.actions.listWorkflowRuns,
-                  {
+                for (let page = 1; page <= routinePageBudget; page += 1) {
+                  const response = await github.rest.actions.listWorkflowRuns({
                     owner,
                     repo,
                     workflow_id: workflowId,
-                    per_page: 100,
-                  },
-                );
-                for (const run of runs) {
-                  retainCandidate(run);
+                    per_page: perPage,
+                    page,
+                  });
+                  for (const run of response.data.workflow_runs) {
+                    retainCandidate(run);
+                  }
+                  if (response.data.workflow_runs.length < perPage) {
+                    break;
+                  }
                 }
               } catch (error) {
                 if (error.status === 404) {
@@ -129,17 +134,22 @@ jobs:
               await collectWorkflowRuns(workflow.id, workflow.path);
             }
 
-            const recentCompletedRuns = await github.paginate(
-              github.rest.actions.listWorkflowRunsForRepo,
-              {
+            const recentCompletedRuns = [];
+            for (let page = 1; page <= routinePageBudget; page += 1) {
+              const response = await github.rest.actions.listWorkflowRunsForRepo({
                 owner,
                 repo,
                 status: 'completed',
-                per_page: 100,
-              },
-            );
-            for (const run of recentCompletedRuns) {
-              retainCandidate(run);
+                per_page: perPage,
+                page,
+              });
+              recentCompletedRuns.push(...response.data.workflow_runs);
+              for (const run of response.data.workflow_runs) {
+                retainCandidate(run);
+              }
+              if (response.data.workflow_runs.length < perPage) {
+                break;
+              }
             }
 
             for (const [workflowId, path] of [...orphanWorkflowIds.entries()]) {
