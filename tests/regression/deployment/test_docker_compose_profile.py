@@ -78,7 +78,9 @@ def test_compose_backup_service_exports_quiesced_backup_outside_data_volume() ->
     assert "source: platform-data" in compose
     assert "target: /var/lib/ai-multi-agent-platform" in compose
 
-    backup_service = compose.split("\n\n  backup:", 1)[1].split("\n  web:", 1)[0]
+    backup_service = (
+        compose.split("\n\n  backup:", 1)[1].split("\n  web:", 1)[0]
+    )
     data_mount = backup_service.split("      - type: volume", 1)[1].split(
         "      - type: bind", 1
     )[0]
@@ -104,9 +106,9 @@ def test_recovery_override_restores_into_clean_volume_subpath() -> None:
     assert "  recover-restore:" in recovery
     assert "platform-server\n      - recover-restore" in recovery
 
-    backup_service = recovery.split("\n\n  backup:", 1)[1].split(
-        "\n\n  restore:", 1
-    )[0]
+    backup_service = (
+        recovery.split("\n\n  backup:", 1)[1].split("\n\n  restore:", 1)[0]
+    )
     data_mount = backup_service.split("      - type: volume", 1)[1].split(
         "      - type: bind", 1
     )[0]
