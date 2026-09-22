@@ -237,7 +237,7 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     )
 
 
-def test_hostinger_default_url_profile_uses_shared_traefik_edge() -> None:
+def test_hostinger_default_url_profile_is_clean_import_safe() -> None:
     compose = HOSTINGER_COMPOSE.read_text(encoding="utf-8")
 
     remote_context = (
@@ -266,18 +266,29 @@ def test_hostinger_default_url_profile_uses_shared_traefik_edge() -> None:
     assert "traefik.enable=true" not in web
     assert "traefik-proxy" not in web
     assert "traefik.enable=true" in gateway
-    assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}" in gateway
+    assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}" in gateway
     assert "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)" in gateway
     assert ".entrypoints=websecure" in gateway
     assert ".tls.certresolver=letsencrypt" in gateway
     assert ".loadbalancer.server.port=8080" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
     assert "      - platform" in gateway
-    assert "      - traefik-proxy" in gateway
-    assert "traefik-proxy:\n    external: true" in compose
-    assert "name: ${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}" in compose
+    assert "      - hostinger-edge" in gateway
+    assert "hostinger-edge:" in compose
+    assert "name: ${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}" in compose
+    assert "external: ${AI_MAP_TRAEFIK_EXTERNAL:-false}" in compose
+    assert "external: true" not in compose
     assert '"80:80"' not in compose
     assert '"443:443"' not in compose
+
+
+def test_hostinger_profile_can_switch_to_shared_external_traefik_without_yaml_edits() -> None:
+    compose = HOSTINGER_COMPOSE.read_text(encoding="utf-8")
+
+    assert "${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}" in compose
+    assert "${AI_MAP_TRAEFIK_EXTERNAL:-false}" in compose
+    assert "AI_MAP_TRAEFIK_NETWORK=traefik-proxy" not in compose
+    assert "AI_MAP_TRAEFIK_EXTERNAL=true" not in compose
 
 
 def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisite() -> None:
@@ -294,6 +305,8 @@ def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisit
     assert "Traefik" in runbook
     assert "traefik-proxy" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
+    assert "AI_MAP_TRAEFIK_EXTERNAL" in runbook
+    assert "ai-map-hostinger-edge" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "setup.invalid" in runbook
     assert "hostinger-gateway" in runbook
@@ -303,7 +316,7 @@ def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisit
     assert "does **not** publish host ports 80 or 443" in runbook
 
 
-def test_hostinger_https_compatibility_profile_uses_shared_traefik_edge() -> None:
+def test_hostinger_https_compatibility_profile_matches_clean_import_contract() -> None:
     compose = HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8")
 
     web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
@@ -314,7 +327,9 @@ def test_hostinger_https_compatibility_profile_uses_shared_traefik_edge() -> Non
     assert "dockerfile: deploy/docker/hostinger-gateway.Dockerfile" in gateway
     assert "traefik.enable=true" not in web
     assert "traefik.enable=true" in gateway
-    assert "traefik-proxy:\n    external: true" in compose
+    assert "hostinger-edge:" in compose
+    assert "name: ${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}" in compose
+    assert "external: ${AI_MAP_TRAEFIK_EXTERNAL:-false}" in compose
     assert ".entrypoints=websecure" in gateway
     assert ".tls.certresolver=letsencrypt" in gateway
     assert ".loadbalancer.server.port=8080" in gateway
@@ -382,6 +397,8 @@ def test_hostinger_runbook_documents_traefik_and_alternate_external_edge() -> No
     assert "docker-compose.hostinger-https.yml" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
+    assert "AI_MAP_TRAEFIK_EXTERNAL" in runbook
+    assert "ai-map-hostinger-edge" in runbook
     assert "traefik-proxy" in runbook
     assert "setup.invalid" in runbook
     assert "hostinger-gateway" in runbook
