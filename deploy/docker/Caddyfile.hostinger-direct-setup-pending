@@ -3,7 +3,7 @@
     auto_https off
 }
 
-:80 {
+(setup_pending_response) {
     header {
         Content-Type "text/plain; charset=utf-8"
         X-Content-Type-Options nosniff
@@ -12,4 +12,12 @@
     }
 
     respond "AI Multi-Agent Platform setup pending. The default Hostinger hostname could not be derived safely. Set AI_MAP_PUBLIC_DOMAIN to a DNS hostname that points to this VPS and redeploy. Application traffic remains blocked." 503
+}
+
+:80 {
+    import setup_pending_response
+}
+
+:8080 {
+    import setup_pending_response
 }
