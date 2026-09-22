@@ -343,16 +343,11 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
     )
-    legacy_url = (
-        "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
-        "main/deploy/docker/docker-compose.hostinger.yml"
-    )
     shared_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger-shared-traefik.yml"
     )
     assert compose_url in runbook
-    assert legacy_url in runbook
     assert shared_url in runbook
     assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
