@@ -1,25 +1,33 @@
 #!/bin/sh
 set -eu
 
-domain="${AI_MAP_PUBLIC_DOMAIN:-}"
+explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"
+traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
+project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 
 setup_pending() {
   cat >&2 <<'EOF'
 AI Multi-Agent Platform Hostinger ingress is in fail-closed setup-pending mode.
-Set AI_MAP_PUBLIC_DOMAIN to a public DNS hostname in the Docker project environment,
-point that hostname at this VPS, then redeploy the project.
-Until then, the gateway returns setup guidance only and never proxies Web/API traffic.
+Deploy/enable Hostinger Traefik so TRAEFIK_HOST is available, or set AI_MAP_PUBLIC_DOMAIN
+to a public DNS hostname. Until then, the gateway returns setup guidance only and never
+proxies Web/API traffic.
 EOF
   exec caddy run --config /etc/caddy/Caddyfile.hostinger-setup-pending --adapter caddyfile
 }
 
 invalid_domain() {
-  echo "Invalid AI_MAP_PUBLIC_DOMAIN: expected a DNS hostname only (for example agents.example.com)." >&2
+  echo "Invalid Hostinger public hostname: expected a DNS hostname only (for example agents.example.com)." >&2
   echo "Do not include a scheme, path, port, wildcard, whitespace, or IP address." >&2
   exit 64
 }
 
-if [ -z "$domain" ]; then
+if [ -n "$explicit_domain" ]; then
+  domain="$explicit_domain"
+  domain_source="AI_MAP_PUBLIC_DOMAIN"
+elif [ -n "$traefik_host" ]; then
+  domain="$project_name.$traefik_host"
+  domain_source="Hostinger TRAEFIK_HOST"
+else
   setup_pending
 fi
 
@@ -57,5 +65,6 @@ for label in "$@"; do
   esac
 done
 
-echo "Starting Hostinger ingress gateway for $domain" >&2
+export AI_MAP_PUBLIC_DOMAIN="$domain"
+echo "Starting Hostinger ingress gateway for $domain (source: $domain_source)" >&2
 exec caddy run --config /etc/caddy/Caddyfile.hostinger-gateway --adapter caddyfile
