@@ -223,8 +223,7 @@ def test_hostinger_https_profile_publishes_only_the_tls_edge() -> None:
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
     assert (
         "AI_MAP_PUBLIC_DOMAIN: "
-        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}"
-        in compose
+        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in compose
     )
 
     control_plane = _control_plane_block(compose)
