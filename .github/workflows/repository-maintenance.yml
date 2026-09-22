@@ -45,6 +45,7 @@ jobs:
             );
             const currentPaths = new Set(
               workflows
+                .filter((workflow) => workflow.state !== 'deleted')
                 .map((workflow) => workflow.path)
                 .filter(
                   (path) =>
