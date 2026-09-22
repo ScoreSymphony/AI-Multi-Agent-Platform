@@ -101,11 +101,14 @@ exposure should keep secure cookies enabled and terminate TLS at an explicitly c
 reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
 bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
-default. Hostinger Docker Manager's Compose-from-URL flow uses the direct maintained Compose file
-`deploy/docker/docker-compose.hostinger.yml`, not the GitHub repository landing page. The default
-Hostinger profile is self-contained and HTTPS-first: only its dedicated Caddy gateway publishes
-host ports 80/443; Web and Control Plane remain private on the platform network and Secure cookies
-remain enabled.
+default. New Hostinger Docker Manager Compose-from-URL installs use
+`deploy/docker/docker-compose.hostinger-zero-config.yml`, not the GitHub repository landing page.
+That new-install profile is self-contained and HTTPS-first: only its dedicated Caddy gateway
+publishes host ports 80/443; Web and Control Plane remain private on the platform network and
+Secure cookies remain enabled. The historical `docker-compose.hostinger.yml` and
+`docker-compose.hostinger-https.yml` entry points remain on their previous
+shared-Traefik-compatible topology so an existing deployment can redeploy without unexpectedly
+competing for ports 80/443.
 
 The gateway joins only the host UTS namespace (`uts: host`) so it can read the VPS kernel hostname
 without using the host network namespace, Docker socket, host filesystem, Hostinger API credentials
