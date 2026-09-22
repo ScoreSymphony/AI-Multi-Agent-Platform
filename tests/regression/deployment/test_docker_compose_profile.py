@@ -277,9 +277,10 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "privileged:" not in gateway
     assert "/var/run/docker.sock" not in gateway
 
+    assert "ports:" not in gateway
     assert '"80:80"' not in gateway
     assert '"443:443"' not in gateway
-    assert '"${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080"' in gateway
+    assert "AI_MAP_HOSTINGER_BOOTSTRAP_PORT" not in gateway
     assert "traefik.enable=true" in gateway
     assert "traefik.docker.network" not in gateway
     assert "HostRegexp(" in gateway
@@ -401,8 +402,8 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert "HostRegexp" in runbook
     assert "HostSNIRegexp" in runbook
     assert "TLS passthrough" in runbook
-    assert "18080" in runbook
-    assert "redirect" in runbook
+    assert "publishes **no application host port**" in runbook
+    assert "No additional firewall rule" in runbook
     assert "NET_BIND_SERVICE" in runbook
     assert "hostinger-gateway-data" in runbook
     assert "hostinger-gateway-config" in runbook
