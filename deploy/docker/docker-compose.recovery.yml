@@ -1,0 +1,86 @@
+services:
+  control-plane:
+    volumes:
+      - type: volume
+        source: platform-data
+        target: /var/lib/ai-multi-agent-platform
+        volume:
+          subpath: restored-data
+
+  backup:
+    volumes:
+      - type: volume
+        source: platform-data
+        target: /var/lib/ai-multi-agent-platform
+        volume:
+          subpath: restored-data
+      - type: bind
+        source: ${AI_MAP_BACKUP_DIR:-./backups}
+        target: /backups
+        bind:
+          create_host_path: false
+
+  restore:
+    profiles:
+      - operations
+    build:
+      context: .
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    restart: "no"
+    init: true
+    entrypoint:
+      - platform-backup
+    volumes:
+      - type: volume
+        source: platform-data
+        target: /var/lib/ai-multi-agent-platform
+      - type: bind
+        source: ${AI_MAP_BACKUP_DIR:-./backups}
+        target: /backups
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+
+  recover-restore:
+    profiles:
+      - operations
+    build:
+      context: .
+      dockerfile: deploy/docker/control-plane.Dockerfile
+    restart: "no"
+    init: true
+    environment:
+      AI_MAP_DATA_DIR: /var/lib/ai-multi-agent-platform
+      AI_MAP_HOST: 127.0.0.1
+      AI_MAP_PORT: "8000"
+      AI_MAP_SECURE_COOKIE: "true"
+      AI_MAP_LOG_LEVEL: ${AI_MAP_LOG_LEVEL:-info}
+      AI_MAP_SHUTDOWN_TIMEOUT_SECONDS: ${AI_MAP_SHUTDOWN_TIMEOUT_SECONDS:-30}
+    command:
+      - platform-server
+      - recover-restore
+    volumes:
+      - type: volume
+        source: platform-data
+        target: /var/lib/ai-multi-agent-platform
+        volume:
+          subpath: restored-data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - platform
+
+volumes:
+  platform-data:
+    external: true
+    name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}
