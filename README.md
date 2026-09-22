@@ -65,18 +65,18 @@ The root profile publishes only ports 80/443 through the repository-owned Caddy 
 Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
 Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
 
-For Hostinger Docker Manager, use this maintained Compose URL directly:
+For Hostinger Docker Manager, use this direct Compose-file URL:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger.yml
 ```
 
-Paste that URL into Hostinger's **Compose from URL** field. The repository landing page itself is
-not the Compose URL. The Hostinger profile is importable before a domain is configured and stays
+Copy that URL into Hostinger's **Compose from URL** field. The repository landing page itself is not
+the Compose URL. The Hostinger profile is importable before a domain is configured and stays
 fail-closed in setup-pending mode until `AI_MAP_PUBLIC_DOMAIN` is set and the project is
-redeployed. An explicit `docker-compose.local.yml` preserves the old
-loopback `:8080` workflow for local development and CI only. Detailed backup/restore, TLS,
-Hostinger and alternate external-edge guidance lives in [`deploy/docker/README.md`](deploy/docker/README.md).
+redeployed. An explicit `docker-compose.local.yml` preserves the old loopback `:8080` workflow
+for local development and CI only. Detailed backup/restore, TLS, Hostinger and alternate
+external-edge guidance lives in [`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
