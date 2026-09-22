@@ -15,6 +15,13 @@ COPY deploy/docker/Caddyfile.hostinger-direct /etc/caddy/Caddyfile.hostinger-dir
 COPY deploy/docker/Caddyfile.hostinger-direct-setup-pending /etc/caddy/Caddyfile.hostinger-direct-setup-pending
 COPY deploy/docker/hostinger-gateway-entrypoint.sh /usr/local/bin/ai-map-hostinger-gateway-entrypoint
 
+RUN AI_MAP_PUBLIC_DOMAIN=agents.example.test \
+      caddy validate --config /etc/caddy/Caddyfile.hostinger-direct --adapter caddyfile \
+    && AI_MAP_PUBLIC_DOMAIN=agents.example.test \
+      caddy validate --config /etc/caddy/Caddyfile.hostinger-gateway --adapter caddyfile \
+    && caddy validate --config /etc/caddy/Caddyfile.hostinger-direct-setup-pending --adapter caddyfile \
+    && caddy validate --config /etc/caddy/Caddyfile.hostinger-setup-pending --adapter caddyfile
+
 RUN chmod 0755 /usr/local/bin/ai-map-hostinger-gateway-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/ai-map-hostinger-gateway-entrypoint"]
