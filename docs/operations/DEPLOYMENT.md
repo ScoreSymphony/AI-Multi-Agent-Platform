@@ -103,15 +103,16 @@ bootstrap and sign-in on non-loopback HTTP origins before credentials are submit
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
 default. Hostinger Docker Manager's Compose-from-URL flow uses the direct maintained Compose file
 `deploy/docker/docker-compose.hostinger.yml`, not the GitHub repository landing page. That
-Hostinger profile does not bind host ports 80/443. It joins Hostinger's shared external
-`traefik-proxy` network through a dedicated ingress gateway; Hostinger's Traefik project is the
-single TLS owner and routes `websecure` traffic to that gateway on internal port 8080. The Web
-service and Control Plane remain private on the platform network and Secure cookies remain enabled.
-Until `AI_MAP_PUBLIC_DOMAIN` is configured, the router uses the reserved `setup.invalid` hostname,
-but the gateway stays in fail-closed setup-pending mode and returns only HTTP 503 guidance without
-proxying Web/API traffic. The shared Traefik project/network must exist before deploying this
-Hostinger profile on a fresh VPS. Operators using a separately managed non-Traefik reverse proxy
-may instead use the explicitly named
+Hostinger profile does not bind host ports 80/443. Its first import is self-contained: the
+dedicated ingress gateway joins a Compose-owned isolated ingress network and therefore does not
+require Hostinger's shared Traefik project/network to exist yet. Web and Control Plane remain
+private on the platform network and Secure cookies remain enabled. Before browser use, deploy
+Hostinger Traefik and switch the ingress network to the shared external `traefik-proxy` network
+with `AI_MAP_TRAEFIK_NETWORK=traefik-proxy` and `AI_MAP_TRAEFIK_EXTERNAL=true`; Traefik then
+becomes the single TLS owner and routes `websecure` traffic to the gateway on internal port 8080.
+Until `AI_MAP_PUBLIC_DOMAIN` is configured, the gateway stays in fail-closed setup-pending mode
+and returns only HTTP 503 guidance without proxying Web/API traffic. Operators using a separately
+managed non-Traefik reverse proxy may instead use the explicitly named
 `deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
 the exact Traefik-network, DNS and profile prerequisites.
 
