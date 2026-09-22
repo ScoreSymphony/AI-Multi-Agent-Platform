@@ -48,8 +48,10 @@ def test_compose_keeps_control_plane_private_and_state_durable() -> None:
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
     assert "platform-data:/var/lib/ai-multi-agent-platform" in compose
     assert '      - "8000"' in compose
-    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in compose
-    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?" not in compose
+    assert (
+        "AI_MAP_PUBLIC_DOMAIN: "
+        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in compose
+    )
 
     control_plane = _control_plane_block(compose)
     web = compose.split("\n  web:", 1)[1].split("\n  https-edge:", 1)[0]
@@ -285,10 +287,8 @@ def test_hostinger_https_compatibility_profile_publishes_only_the_tls_edge() -> 
     assert "dockerfile: deploy/docker/web.Dockerfile" in compose
     assert "dockerfile: deploy/docker/https-edge.Dockerfile" in compose
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
-    assert (
-        "AI_MAP_PUBLIC_DOMAIN: "
-        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in compose
-    )
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in compose
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:?" not in compose
 
     control_plane = _control_plane_block(compose)
     web = compose.split("\n  web:", 1)[1].split("\n  https-edge:", 1)[0]
