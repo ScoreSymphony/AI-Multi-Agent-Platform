@@ -97,6 +97,7 @@ def test_repository_maintenance_stays_out_of_pr_gate_and_cleans_orphans() -> Non
     assert "cleanup-orphaned-actions-history" not in _text("repository-quality.yml")
     assert "cleanup-orphaned-actions-history" in maintenance
     assert "listRepoWorkflows" in maintenance
+    assert "workflow.state !== 'deleted'" in maintenance
     assert "path.startsWith('.github/workflows/')" in maintenance
     assert "!currentPaths.has(run.path)" in maintenance
 
