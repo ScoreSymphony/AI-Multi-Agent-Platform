@@ -103,12 +103,15 @@ bootstrap and sign-in on non-loopback HTTP origins before credentials are submit
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
 default. New Hostinger Docker Manager Compose-from-URL installs use
 `deploy/docker/docker-compose.hostinger-zero-config.yml`, not the GitHub repository landing page.
-That new-install profile is HTTPS-first and coexists with Hostinger's shared Traefik edge:
+That new-install profile is HTTPS-first and coexists with Hostinger's Traefik edge:
 Traefik remains the only owner of host ports 80/443, while Web and Control Plane remain private on
-the platform network and Secure cookies remain enabled. The gateway joins the existing external
-`traefik-proxy` network and also joins only the host UTS namespace (`uts: host`) so it can read
-the VPS kernel hostname without using the host network namespace, Docker socket, host filesystem,
-Hostinger API credentials or an external discovery service.
+the platform network and Secure cookies remain enabled. On the currently observed Hostinger
+template, Traefik itself uses Docker `host` networking and no external `traefik-proxy` network
+exists. The gateway therefore stays only on the private platform bridge; host-network Traefik can
+reach that bridge address directly through the Docker provider. The gateway also joins only the
+host UTS namespace (`uts: host`) so it can read the VPS kernel hostname without using the host
+network namespace, Docker socket, host filesystem, Hostinger API credentials or an external
+discovery service.
 
 When the hostname matches Hostinger's managed default form `srvNNNNNN.hstgr.cloud`, the gateway
 derives `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. Traefik uses narrowly scoped
