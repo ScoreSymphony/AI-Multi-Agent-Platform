@@ -84,12 +84,14 @@ services:
         condition: service_healthy
     environment:
       AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}
+      AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}
+      AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}
     expose:
       - "8080"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST:-setup.invalid}}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.tls.certresolver=letsencrypt"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
