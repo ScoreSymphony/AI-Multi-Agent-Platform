@@ -192,6 +192,7 @@ jobs:
     timeout-minutes: 15
     env:
       AI_MAP_PUBLIC_PORT: "18080"
+      AI_MAP_PUBLIC_DOMAIN: "agents.example.test"
       AI_MAP_SOURCE_CONTEXT: "../.."
     steps:
       - uses: actions/checkout@v7
