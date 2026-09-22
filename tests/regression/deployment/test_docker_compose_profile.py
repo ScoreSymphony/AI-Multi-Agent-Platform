@@ -315,7 +315,7 @@ def test_hostinger_https_edge_is_pinned_and_proxies_only_to_web_after_setup() ->
 
     assert "FROM caddy:2.11.4-alpine" in dockerfile
     assert "COPY deploy/docker/Caddyfile.public-https /etc/caddy/Caddyfile" in dockerfile
-    assert "COPY deploy/docker/Caddyfile.setup-pending /etc/caddy/Caddyfile.setup-pending" in dockerfile
+    assert (\n        "COPY deploy/docker/Caddyfile.setup-pending /etc/caddy/Caddyfile.setup-pending"\n        in dockerfile\n    )
     assert "COPY deploy/docker/https-edge-entrypoint.sh" in dockerfile
     assert 'ENTRYPOINT ["/usr/local/bin/ai-map-https-edge-entrypoint"]' in dockerfile
     assert "EXPOSE 80 443" in dockerfile
