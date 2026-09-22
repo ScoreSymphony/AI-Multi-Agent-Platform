@@ -204,13 +204,15 @@ topology. They intentionally do not start binding host ports 80/443 during an or
 
 ### Zero-configuration HTTPS on Hostinger
 
-The maintained zero-config profile is designed for the normal Hostinger multi-project topology:
-Hostinger's Traefik project already owns host ports 80 and 443 and exposes the external
-`traefik-proxy` network. The platform does **not** compete for those ports.
+The maintained zero-config profile is designed for the currently observed Hostinger
+multi-project topology: Hostinger's Traefik project already owns host ports 80 and 443 and runs
+with Docker `host` networking. In that topology there is no external `traefik-proxy` network.
+The platform does **not** compete for 80/443 and does not require any external Docker network.
 
-The dedicated `hostinger-gateway` joins `traefik-proxy` plus the private platform network and
-joins only the host UTS namespace with `uts: host`. It reads the VPS kernel hostname and, when it
-matches Hostinger's managed `srvNNNNNN.hstgr.cloud` form, derives:
+The dedicated `hostinger-gateway` stays on the private platform bridge only. Host-network
+Traefik can reach that bridge address directly and discovers the gateway through Docker provider
+labels. The gateway joins only the host UTS namespace with `uts: host`. It reads the VPS kernel
+hostname and, when it matches Hostinger's managed `srvNNNNNN.hstgr.cloud` form, derives:
 
 ```text
 ${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
@@ -266,7 +268,8 @@ same managed Hostinger hostname through `uts: host`, and owns certificate issuan
 
 ### Explicit shared-Traefik profile
 
-The older environment-driven shared-edge variant remains available at:
+For Hostinger installations that actually provide the documented external `traefik-proxy`
+network, the older environment-driven shared-edge variant remains available at:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-shared-traefik.yml

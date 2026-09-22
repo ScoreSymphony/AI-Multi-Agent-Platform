@@ -72,12 +72,13 @@ https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/dep
 ```
 
 Copy that URL into Hostinger's **Compose from URL** field. The repository landing page itself is not
-the Compose URL. The zero-config Hostinger path now assumes Hostinger's Traefik project is already
-running, which is the supported shared-edge topology when ports 80/443 are in use. The platform
-does **not** bind 80/443 itself. Instead, the dedicated gateway joins `traefik-proxy`, reads the
-VPS hostname through the host UTS namespace, derives
-`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`, and lets Traefik route only that Hostinger
-hostname to Caddy with TLS passthrough. Web and Control Plane remain private.
+the Compose URL. The zero-config Hostinger path assumes Hostinger's Traefik project is already
+running and owns ports 80/443. On current Hostinger deployments Traefik may itself use Docker
+`host` networking and therefore does not require a shared `traefik-proxy` network. The platform
+does **not** bind 80/443 itself and does not require an external Docker network. The dedicated
+gateway stays on the private platform bridge, reads the VPS hostname through the host UTS namespace,
+derives `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`, and is discovered through Traefik's
+Docker provider labels. Web and Control Plane remain private.
 
 No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required
 for this zero-config profile. A small bootstrap HTTP port defaults to `:18080` and performs only a
