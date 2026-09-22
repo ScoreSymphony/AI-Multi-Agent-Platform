@@ -62,6 +62,30 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+    read_only: true
+    tmpfs:
+      - /config
+      - /data
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - platform
+
+  hostinger-gateway:
+    build:
+      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#main}
+      dockerfile: deploy/docker/hostinger-gateway.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}
+    expose:
+      - "8080"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}"

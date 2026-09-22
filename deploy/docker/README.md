@@ -216,17 +216,22 @@ Before deploying this platform profile:
    redeploy the platform project;
 6. verify `https://<your-domain>/api/v1/health` and open that same HTTPS origin in the browser.
 
-The Web container joins both the private `platform` network and the shared Traefik network.
-Traefik routes HTTPS traffic to the Web container's internal port `8080`; the Control Plane
-remains reachable only through the private `platform` network on port `8000`.
+The Web container stays only on the private `platform` network. A dedicated
+`hostinger-gateway` joins both the private `platform` network and the shared Traefik network.
+Traefik routes HTTPS traffic to that gateway on internal port `8080`; the gateway is the only
+Hostinger ingress path to the private Web service. The Control Plane remains reachable only through
+the private `platform` network on port `8000`.
 
 The default shared-network name is `traefik-proxy`. If the Hostinger Traefik project on a specific
 VPS uses a different external network name, set `AI_MAP_TRAEFIK_NETWORK` to that name before
 redeploying.
 
 The profile remains importable before `AI_MAP_PUBLIC_DOMAIN` is configured. In that state the
-Traefik Host rule uses the reserved hostname `setup.invalid`, which has no public DNS destination.
-The profile never falls back to direct public HTTP or to publishing `:8080`, and
+Traefik Host rule uses the reserved hostname `setup.invalid`, but the route terminates at the
+dedicated gateway in fail-closed setup-pending mode. The gateway returns HTTP 503 setup guidance
+for every request and contains no reverse proxy to Web/API until a valid public hostname is
+configured. This remains safe even if a client deliberately sends `Host: setup.invalid` to the
+VPS. The profile never falls back to direct public HTTP or to publishing `:8080`, and
 `AI_MAP_SECURE_COOKIE=true` remains unchanged.
 
 If deployment fails with an error that the external `traefik-proxy` network does not exist,
@@ -249,8 +254,8 @@ small intentionally:
 
 - `AI_MAP_PUBLIC_DOMAIN` — hostname used by the default `docker-compose.hostinger.yml` (and its
   `docker-compose.hostinger-https.yml` compatibility alias). It may be absent during initial
-  Hostinger import; the Traefik router then targets the reserved `setup.invalid` hostname. Set it
-  before browser use;
+  Hostinger import; the Traefik router then targets the reserved `setup.invalid` hostname and the
+  dedicated gateway remains in fail-closed 503 setup-pending mode. Set it before browser use;
 - `AI_MAP_TRAEFIK_NETWORK` — shared external Traefik network for the Hostinger profile, default
   `traefik-proxy`;
 - `AI_MAP_PUBLIC_PORT` — host-side Web port only for the explicit
