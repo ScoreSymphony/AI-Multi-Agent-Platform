@@ -281,7 +281,7 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert '"443:443"' not in gateway
     assert '"${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080"' in gateway
     assert "traefik.enable=true" in gateway
-    assert "traefik.docker.network=traefik-proxy" in gateway
+    assert "traefik.docker.network" not in gateway
     assert "HostRegexp(" in gateway
     assert "HostSNIRegexp(" in gateway
     assert "srv[0-9]+" in gateway
@@ -299,11 +299,11 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "    cap_drop:\n      - ALL" in gateway
     assert "    cap_add:\n      - NET_BIND_SERVICE" in gateway
     assert "      - platform" in gateway
-    assert "      - traefik-proxy" in gateway
+    assert "      - traefik-proxy" not in gateway
 
     assert "hostinger-gateway-data:" in compose
     assert "hostinger-gateway-config:" in compose
-    assert "traefik-proxy:\n    external: true" in compose
+    assert "traefik-proxy:" not in compose
     assert "TRAEFIK_HOST" not in compose
     assert "AI_MAP_TRAEFIK_NETWORK" not in compose
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
@@ -395,6 +395,8 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert "srvNNNNNN.hstgr.cloud" in runbook
     assert "${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud" in runbook
     assert "No `TRAEFIK_HOST`" in runbook
+    assert "Docker `host` networking" in runbook
+    assert "does not require any external Docker network" in runbook
     assert "traefik-proxy" in runbook
     assert "HostRegexp" in runbook
     assert "HostSNIRegexp" in runbook
