@@ -62,6 +62,14 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.rule=Host(\`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}\`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.loadbalancer.server.port=8080"
     read_only: true
     tmpfs:
       - /config
@@ -73,39 +81,13 @@ services:
       - ALL
     networks:
       - platform
-
-  https-edge:
-    build:
-      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#main}
-      dockerfile: deploy/docker/https-edge.Dockerfile
-    restart: unless-stopped
-    depends_on:
-      web:
-        condition: service_healthy
-    environment:
-      AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - caddy-data:/data
-      - caddy-config:/config
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-    networks:
-      - platform
+      - traefik-proxy
 
 volumes:
   platform-data:
-  caddy-data:
-  caddy-config:
 
 networks:
   platform:
+  traefik-proxy:
+    external: true
+    name: ${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}
