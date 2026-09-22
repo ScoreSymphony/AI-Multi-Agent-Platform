@@ -1,18 +1,26 @@
 import { useState, type FormEvent } from "react";
 import type { BrowserSessionClient } from "../api/browserSession";
 import { Card, ErrorState } from "../components/States";
+import { BrowserAuthenticationTransportNotice } from "../security/BrowserAuthenticationTransportNotice";
+import {
+  currentBrowserAuthenticationTransport,
+  type BrowserAuthenticationTransport,
+} from "../security/browserAuthenticationTransport";
 
 export function SignInPage({
   session,
   onAuthenticated,
+  transport,
 }: {
   session: BrowserSessionClient;
   onAuthenticated: () => Promise<void> | void;
+  transport?: BrowserAuthenticationTransport;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const authenticationTransport = transport ?? currentBrowserAuthenticationTransport();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,10 +49,14 @@ export function SignInPage({
         </p>
       </header>
 
-      {error ? <ErrorState error={error} /> : null}
+      {!authenticationTransport.supported ? (
+        <BrowserAuthenticationTransportNotice transport={authenticationTransport} />
+      ) : (
+        <>
+          {error ? <ErrorState error={error} /> : null}
 
-      <Card title="Local account">
-        <form className="stack" onSubmit={submit}>
+          <Card title="Local account">
+            <form className="stack" onSubmit={submit}>
           <label>
             Username
             <input
@@ -72,8 +84,10 @@ export function SignInPage({
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </div>
-        </form>
-      </Card>
+            </form>
+          </Card>
+        </>
+      )}
     </main>
   );
 }
