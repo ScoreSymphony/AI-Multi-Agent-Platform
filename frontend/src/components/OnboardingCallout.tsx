@@ -26,8 +26,9 @@ export function OnboardingCallout({ client }: { client: OnboardingClient }) {
     <aside className="state state-warning onboarding-callout" aria-label="First-run onboarding">
       <strong>First-run setup is incomplete.</strong>
       <p>
-        Current state: <code>{status.state}</code>. Continue the guided local/self-hosted setup
-        before starting the first Assistant task.
+        Current state: <code>{status.state}</code>. The authenticated platform remains available
+        while setup is incomplete; features that depend on unfinished prerequisites may stay
+        unavailable until those prerequisites are configured.
       </p>
       <AppLink href="/onboarding">Continue first-run onboarding</AppLink>
     </aside>
