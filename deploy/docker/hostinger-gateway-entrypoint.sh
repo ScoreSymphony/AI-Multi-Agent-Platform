@@ -7,9 +7,9 @@ traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
 project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 
 case "$edge_mode" in
-  direct|shared-traefik) ;;
+  direct|shared-traefik|traefik-passthrough) ;;
   *)
-    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct or shared-traefik." >&2
+    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, or traefik-passthrough." >&2
     exit 64
     ;;
 esac
@@ -22,7 +22,7 @@ If that hostname is unavailable or has been customized, set AI_MAP_PUBLIC_DOMAIN
 public DNS hostname that points to this VPS and redeploy. Application traffic remains blocked.
 EOF
 
-  if [ "$edge_mode" = "direct" ]; then
+  if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
     exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct-setup-pending --adapter caddyfile
   fi
 
@@ -58,7 +58,7 @@ if [ -n "$explicit_domain" ]; then
 elif [ "$edge_mode" = "shared-traefik" ] && [ -n "$traefik_host" ]; then
   domain="$project_name.$traefik_host"
   domain_source="Hostinger TRAEFIK_HOST"
-elif [ "$edge_mode" = "direct" ] && derive_hostinger_domain; then
+elif { [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; }   && derive_hostinger_domain; then
   :
 else
   setup_pending
@@ -101,7 +101,7 @@ done
 export AI_MAP_PUBLIC_DOMAIN="$domain"
 echo "Starting Hostinger ingress gateway for $domain (source: $domain_source, mode: $edge_mode)" >&2
 
-if [ "$edge_mode" = "direct" ]; then
+if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
   exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct --adapter caddyfile
 fi
 

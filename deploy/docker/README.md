@@ -204,54 +204,75 @@ topology. They intentionally do not start binding host ports 80/443 during an or
 
 ### Zero-configuration HTTPS on Hostinger
 
-The maintained default Hostinger profile owns its own HTTPS edge. Only the dedicated
-`hostinger-gateway` publishes host ports 80 and 443; the Web service and Control Plane remain
-private on the `platform` network.
+The maintained zero-config profile is designed for the normal Hostinger multi-project topology:
+Hostinger's Traefik project already owns host ports 80 and 443 and exposes the external
+`traefik-proxy` network. The platform does **not** compete for those ports.
 
-For a normal Hostinger VPS, the default kernel hostname has the managed form
-`srvNNNNNN.hstgr.cloud`. The gateway joins only the host UTS namespace with `uts: host`, reads
-that hostname, validates the numeric server-id pattern, and derives:
+The dedicated `hostinger-gateway` joins `traefik-proxy` plus the private platform network and
+joins only the host UTS namespace with `uts: host`. It reads the VPS kernel hostname and, when it
+matches Hostinger's managed `srvNNNNNN.hstgr.cloud` form, derives:
 
 ```text
 ${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
 ```
 
-Caddy then obtains and renews public HTTPS automatically. Hostinger's initial **Open** action may
-start from the VPS IP/HTTP port; the gateway redirects that request to the derived canonical HTTPS
-origin. No Hostinger project Environment variables are required for this default path.
+No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required.
+The Compose labels use project-scoped `HostRegexp` and `HostSNIRegexp` rules:
 
-The gateway does **not** receive the host network namespace, Docker socket, host filesystem mounts,
-privileged mode, or any external IP/hostname discovery service. It runs read-only, drops all
-capabilities, receives only `NET_BIND_SERVICE` so it can bind 80/443, and stores TLS state in
-dedicated named volumes.
+- HTTP on Traefik's `web` entrypoint is forwarded to Caddy port 80 so ACME HTTP-01 and redirects
+  work;
+- HTTPS on Traefik's `websecure` entrypoint uses **TLS passthrough** only for the platform's
+  `<project>.srv<digits>.hstgr.cloud` SNI pattern, so Caddy terminates TLS for the exact derived
+  hostname;
+- there is no catch-all TLS router, so unrelated HTTPS projects remain untouched.
+
+The gateway also publishes a bootstrap HTTP mapping on
+`${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080`. That listener performs **only** a redirect to
+the canonical HTTPS origin and never proxies Web/API traffic. This gives Hostinger an ordinary
+published port for initial access while Traefik remains the sole owner of 80/443.
 
 The normal flow is therefore:
 
-1. paste the Compose URL above;
-2. click **Deploy**;
-3. wait for the three containers to become healthy/running;
-4. click **Open**;
-5. the HTTP/IP entry point redirects to
-   `https://<project>.srvNNNNNN.hstgr.cloud`.
+1. deploy Hostinger's Traefik project if it is not already running;
+2. paste the zero-config Compose URL above;
+3. click **Deploy**;
+4. wait for the three platform containers to become healthy/running;
+5. open the published bootstrap access or Hostinger's **Open** action;
+6. the request redirects to `https://<project>.srvNNNNNN.hstgr.cloud`.
 
-If you set `AI_MAP_PUBLIC_DOMAIN=agents.example.com`, that explicit DNS hostname overrides the
-automatic Hostinger hostname. Point the DNS record at the VPS before redeploying so Caddy can
-complete public certificate validation.
+The gateway does **not** receive the host network namespace, Docker socket, host filesystem mounts,
+privileged mode, or an external IP/hostname discovery service. It runs read-only, drops all
+capabilities and receives only `NET_BIND_SERVICE` so Caddy can listen on internal ports 80/443.
+TLS state is stored in dedicated named volumes.
+
+If `AI_MAP_PUBLIC_DOMAIN=agents.example.com` is set, that explicit hostname overrides the
+automatic Hostinger hostname. Point DNS at the VPS before redeploying so Caddy can complete public
+certificate validation.
 
 If the host hostname is not a recognized Hostinger-managed `srvNNNNNN.hstgr.cloud` value and no
-explicit public domain is configured, the gateway remains fail-closed: it serves only HTTP 503 setup
-guidance and never proxies Web/API traffic.
+explicit public domain is configured, the gateway remains fail-closed and serves only setup
+guidance.
 
-### Advanced shared-Traefik profile
+### Direct Hostinger edge without Traefik
 
-If ports 80/443 are already owned by Hostinger's shared Traefik because several public Docker
-projects share one edge, do **not** deploy a second direct TLS owner. Use:
+If Hostinger Traefik is **not** running and host ports 80/443 are free, use:
+
+```text
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-direct.yml
+```
+
+That profile preserves the direct Caddy edge: the gateway itself publishes 80/443, derives the
+same managed Hostinger hostname through `uts: host`, and owns certificate issuance directly.
+
+### Explicit shared-Traefik profile
+
+The older environment-driven shared-edge variant remains available at:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-shared-traefik.yml
 ```
 
-That advanced profile preserves the explicit shared-edge contract:
+That advanced profile keeps the explicit contract:
 
 ```text
 TRAEFIK_HOST=srv123456.hstgr.cloud
@@ -259,19 +280,13 @@ AI_MAP_TRAEFIK_NETWORK=traefik-proxy
 AI_MAP_TRAEFIK_EXTERNAL=true
 ```
 
-The Hostinger Traefik project must already be running and its shared external network must exist.
-An optional `AI_MAP_PUBLIC_DOMAIN` still overrides the derived
-`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` hostname.
-
 The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` files
-remain compatibility entry points for existing shared-Traefik-style deployments. New installations
-that want the zero-configuration direct HTTPS edge should use
-`docker-compose.hostinger-zero-config.yml`. The explicit
-`docker-compose.hostinger-external-edge.yml` alternative remains available only for operators
-using a separately managed non-Traefik reverse proxy.
+remain migration-safe compatibility entry points. The explicit
+`docker-compose.hostinger-external-edge.yml` alternative remains available for operators using a
+separately managed non-Traefik reverse proxy.
 
-Canonical platform state remains in `platform-data`. TLS state for the default Hostinger gateway
-is retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
+Canonical platform state remains in `platform-data`. TLS state for zero-config/direct Caddy is
+retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
 `docker compose down -v` for ordinary redeployments.
 
 ## Configuration
@@ -285,7 +300,11 @@ overrides are intentionally small:
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
 
-The following variables are only for the advanced
+The zero-config profile additionally supports
+`AI_MAP_HOSTINGER_BOOTSTRAP_PORT` to override the redirect-only bootstrap port (default
+`18080`).
+
+The following variables are only for the explicit
 `docker-compose.hostinger-shared-traefik.yml` profile:
 
 - `TRAEFIK_HOST` — Hostinger VPS hostname, for example `srv123456.hstgr.cloud`;

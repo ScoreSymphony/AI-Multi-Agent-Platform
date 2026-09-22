@@ -16,6 +16,7 @@ DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
+HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
 HOSTINGER_GATEWAY_DOCKERFILE = DOCKER_DIR / "hostinger-gateway.Dockerfile"
@@ -243,7 +244,7 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     )
 
 
-def test_hostinger_zero_config_profile_is_direct_https() -> None:
+def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     compose = HOSTINGER_ZERO_CONFIG_COMPOSE.read_text(encoding="utf-8")
 
     remote_context = (
@@ -265,7 +266,7 @@ def test_hostinger_zero_config_profile_is_direct_https() -> None:
     assert '      - "8000"' in control_plane
     assert '      - "8080"' in web
 
-    assert "AI_MAP_HOSTINGER_EDGE_MODE: direct" in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
     assert (
         "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
@@ -275,22 +276,55 @@ def test_hostinger_zero_config_profile_is_direct_https() -> None:
     assert "network_mode: host" not in gateway
     assert "privileged:" not in gateway
     assert "/var/run/docker.sock" not in gateway
-    assert '      - "80:80"' in gateway
-    assert '      - "443:443"' in gateway
-    assert "traefik.enable=true" not in gateway
-    assert "traefik-proxy" not in gateway
+
+    assert '"80:80"' not in gateway
+    assert '"443:443"' not in gateway
+    assert '"${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080"' in gateway
+    assert "traefik.enable=true" in gateway
+    assert "traefik.docker.network=traefik-proxy" in gateway
+    assert "HostRegexp(" in gateway
+    assert "HostSNIRegexp(" in gateway
+    assert "srv[0-9]+" in gateway
+    assert ".entrypoints=web" in gateway
+    assert ".entrypoints=websecure" in gateway
+    assert ".tls.passthrough=true" in gateway
+    assert "HostSNI(`*`)" not in gateway
+    assert "HostSNIRegexp(`^.*$`)" not in gateway
+    assert ".loadbalancer.server.port=80" in gateway
+    assert ".loadbalancer.server.port=443" in gateway
+
     assert "      - hostinger-gateway-data:/data" in gateway
     assert "      - hostinger-gateway-config:/config" in gateway
     assert "      - no-new-privileges:true" in gateway
     assert "    cap_drop:\n      - ALL" in gateway
     assert "    cap_add:\n      - NET_BIND_SERVICE" in gateway
     assert "      - platform" in gateway
+    assert "      - traefik-proxy" in gateway
 
     assert "hostinger-gateway-data:" in compose
     assert "hostinger-gateway-config:" in compose
+    assert "traefik-proxy:\n    external: true" in compose
+    assert "TRAEFIK_HOST" not in compose
     assert "AI_MAP_TRAEFIK_NETWORK" not in compose
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
-    assert "TRAEFIK_HOST" not in compose
+
+
+def test_hostinger_direct_profile_preserves_direct_caddy_edge() -> None:
+    compose = HOSTINGER_DIRECT_COMPOSE.read_text(encoding="utf-8")
+    control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
+    assert "ports:" not in control_plane
+    assert "ports:" not in web
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: direct" in gateway
+    assert "uts: host" in gateway
+    assert '      - "80:80"' in gateway
+    assert '      - "443:443"' in gateway
+    assert "traefik.enable=true" not in gateway
+    assert "traefik-proxy" not in gateway
+    assert "hostinger-gateway-data:" in compose
+    assert "hostinger-gateway-config:" in compose
 
 
 def test_hostinger_legacy_entry_points_remain_migration_safe() -> None:
@@ -343,11 +377,16 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
     )
+    direct_url = (
+        "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
+        "main/deploy/docker/docker-compose.hostinger-direct.yml"
+    )
     shared_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger-shared-traefik.yml"
     )
     assert compose_url in runbook
+    assert direct_url in runbook
     assert shared_url in runbook
     assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
@@ -355,19 +394,25 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert "uts: host" in runbook
     assert "srvNNNNNN.hstgr.cloud" in runbook
     assert "${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud" in runbook
-    assert "No Hostinger project Environment variables are required" in normalized
+    assert "No `TRAEFIK_HOST`" in runbook
+    assert "traefik-proxy" in runbook
+    assert "HostRegexp" in runbook
+    assert "HostSNIRegexp" in runbook
+    assert "TLS passthrough" in runbook
+    assert "18080" in runbook
+    assert "redirect" in runbook
     assert "NET_BIND_SERVICE" in runbook
     assert "hostinger-gateway-data" in runbook
     assert "hostinger-gateway-config" in runbook
+    assert "docker-compose.hostinger-direct.yml" in runbook
     assert "docker-compose.hostinger-shared-traefik.yml" in runbook
     assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK=traefik-proxy" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL=true" in runbook
     assert "fail-closed" in runbook
-    assert "HTTP 503" in runbook
 
 
-def test_hostinger_gateway_supports_direct_https_and_shared_traefik_modes() -> None:
+def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes() -> None:
     dockerfile = HOSTINGER_GATEWAY_DOCKERFILE.read_text(encoding="utf-8")
     shared_active = HOSTINGER_GATEWAY_CADDY.read_text(encoding="utf-8")
     shared_pending = HOSTINGER_GATEWAY_PENDING_CADDY.read_text(encoding="utf-8")
@@ -383,12 +428,14 @@ def test_hostinger_gateway_supports_direct_https_and_shared_traefik_modes() -> N
     assert "EXPOSE 80 443 8080" in dockerfile
 
     assert "http:// {" in direct_active
-    assert "redir https://{$AI_MAP_PUBLIC_DOMAIN}{uri} 308" in direct_active
+    assert ":8080 {" in direct_active
+    assert direct_active.count("redir https://{$AI_MAP_PUBLIC_DOMAIN}{uri} 308") == 2
     assert "{$AI_MAP_PUBLIC_DOMAIN} {" in direct_active
     assert "reverse_proxy web:8080" in direct_active
     assert "control-plane:8000" not in direct_active
 
     assert ":80 {" in direct_pending
+    assert ":8080 {" in direct_pending
     assert "setup pending" in direct_pending
     assert "503" in direct_pending
     assert "reverse_proxy" not in direct_pending
@@ -400,6 +447,7 @@ def test_hostinger_gateway_supports_direct_https_and_shared_traefik_modes() -> N
     assert "reverse_proxy" not in shared_pending
 
     assert 'edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-shared-traefik}"' in entrypoint
+    assert "direct|shared-traefik|traefik-passthrough" in entrypoint
     assert 'explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
     assert 'traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"' in entrypoint
     assert 'project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"' in entrypoint
@@ -470,6 +518,25 @@ def test_hostinger_direct_gateway_derives_managed_vps_hostname(tmp_path: Path) -
     assert "Caddyfile.hostinger-direct" in result.stdout
     assert "source: Hostinger VPS hostname" in result.stderr
     assert "mode: direct" in result.stderr
+
+
+def test_hostinger_traefik_passthrough_gateway_derives_managed_vps_hostname(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "FAKE_HOSTNAME": "srv123456.hstgr.cloud",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv123456.hstgr.cloud" in result.stdout
+    assert "Caddyfile.hostinger-direct" in result.stdout
+    assert "source: Hostinger VPS hostname" in result.stderr
+    assert "mode: traefik-passthrough" in result.stderr
 
 
 def test_hostinger_direct_gateway_explicit_domain_overrides_host_hostname(
@@ -569,6 +636,7 @@ def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None
     normalized = " ".join(runbook.split())
 
     assert "main/deploy/docker/docker-compose.hostinger-zero-config.yml" in runbook
+    assert "docker-compose.hostinger-direct.yml" in runbook
     assert "docker-compose.hostinger.yml" in runbook
     assert "docker-compose.hostinger-shared-traefik.yml" in runbook
     assert "docker-compose.hostinger-external-edge.yml" in runbook

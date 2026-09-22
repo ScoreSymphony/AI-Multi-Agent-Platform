@@ -233,10 +233,28 @@ jobs:
             -f deploy/docker/docker-compose.hostinger-zero-config.yml \
             config > /tmp/hostinger-zero-config.yml
           grep -F 'uts: host' /tmp/hostinger-zero-config.yml
-          grep -F 'published: "80"' /tmp/hostinger-zero-config.yml
-          grep -F 'published: "443"' /tmp/hostinger-zero-config.yml
-          if grep -F 'traefik.enable:' /tmp/hostinger-zero-config.yml; then
-            echo "zero-config Hostinger profile unexpectedly contains Traefik labels" >&2
+          grep -F 'published: "18080"' /tmp/hostinger-zero-config.yml
+          if grep -F 'published: "80"' /tmp/hostinger-zero-config.yml \
+            || grep -F 'published: "443"' /tmp/hostinger-zero-config.yml; then
+            echo "zero-config Hostinger profile unexpectedly claims Traefik-owned 80/443" >&2
+            exit 1
+          fi
+          grep -F 'traefik.enable:' /tmp/hostinger-zero-config.yml
+          grep -F 'HostRegexp(' /tmp/hostinger-zero-config.yml
+          grep -F 'HostSNIRegexp(' /tmp/hostinger-zero-config.yml
+          grep -F 'tls.passthrough: "true"' /tmp/hostinger-zero-config.yml
+          grep -F 'name: traefik-proxy' /tmp/hostinger-zero-config.yml
+          if grep -F 'HostSNI(`*`)' /tmp/hostinger-zero-config.yml; then
+            echo "zero-config Hostinger profile must not install a catch-all TLS router" >&2
+            exit 1
+          fi
+          AI_MAP_PUBLIC_DOMAIN= AI_MAP_SOURCE_CONTEXT=../.. docker compose \
+            -f deploy/docker/docker-compose.hostinger-direct.yml \
+            config > /tmp/hostinger-direct.yml
+          grep -F 'published: "80"' /tmp/hostinger-direct.yml
+          grep -F 'published: "443"' /tmp/hostinger-direct.yml
+          if grep -F 'traefik.enable:' /tmp/hostinger-direct.yml; then
+            echo "direct Hostinger profile unexpectedly contains Traefik labels" >&2
             exit 1
           fi
           AI_MAP_PUBLIC_DOMAIN= AI_MAP_SOURCE_CONTEXT=../.. docker compose \
@@ -271,6 +289,9 @@ jobs:
           docker compose -f docker-compose.local.yml build
           AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger-zero-config.yml \
+            build
+          AI_MAP_SOURCE_CONTEXT=../.. docker compose \
+            -f deploy/docker/docker-compose.hostinger-direct.yml \
             build
           AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger.yml \
