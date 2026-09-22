@@ -212,15 +212,21 @@ The first platform deployment does **not** require Traefik to exist already:
    host ports and leaves the gateway in fail-closed setup-pending mode;
 3. deploy Hostinger's Traefik template/project if it is not already running and verify that its
    shared external Docker network `traefik-proxy` exists;
-4. in the platform Docker project environment set:
+4. read the VPS default hostname from hPanel, for example `srv123456.hstgr.cloud`;
+5. in the **platform project's** Environment variables add:
+   - `TRAEFIK_HOST=srv123456.hstgr.cloud` (replace with that VPS hostname)
    - `AI_MAP_TRAEFIK_NETWORK=traefik-proxy`
    - `AI_MAP_TRAEFIK_EXTERNAL=true`
-5. redeploy the platform project;
-6. when Hostinger provides `TRAEFIK_HOST`, the platform derives the temporary HTTPS hostname as
+6. redeploy the platform project;
+7. the platform derives the temporary HTTPS hostname as
    `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`; use Hostinger's **Open** action or verify
    `https://<project>.<traefik-host>/api/v1/health`;
-7. optionally configure your own DNS name by pointing it at the VPS, setting
+8. optionally configure your own DNS name by pointing it at the VPS, setting
    `AI_MAP_PUBLIC_DOMAIN=agents.example.com`, and redeploying again.
+
+Hostinger's Docker Catalog/one-click projects may already contain `TRAEFIK_HOST` in their project
+environment. A generic **Compose from URL** import does not guarantee that value, so this runbook
+treats it as an explicit project setting rather than an automatically injected variable.
 
 The Web container stays only on the private `platform` network. A dedicated
 `hostinger-gateway` joins the private `platform` network and one ingress network. On a clean
@@ -235,13 +241,17 @@ If the Hostinger Traefik project uses a different shared network name, set
 `AI_MAP_TRAEFIK_NETWORK` to that name while keeping `AI_MAP_TRAEFIK_EXTERNAL=true`.
 
 The profile remains importable before any public hostname is available. Hostname selection is
-ordered deliberately: an explicit `AI_MAP_PUBLIC_DOMAIN` wins; otherwise, when Hostinger provides
-`TRAEFIK_HOST`, the platform uses `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` so Hostinger's
-temporary `*.hstgr.cloud` HTTPS address works with the **Open** action. If neither value exists,
-the Traefik rule falls back to the reserved `${COMPOSE_PROJECT_NAME}.setup.invalid` hostname and
-the gateway runs in fail-closed setup-pending mode, returns HTTP 503 guidance for every request,
-and contains no reverse proxy to Web/API. The profile never falls back to direct public HTTP or to
-publishing `:8080`, and `AI_MAP_SECURE_COOKIE=true` remains unchanged.
+ordered deliberately: an explicit `AI_MAP_PUBLIC_DOMAIN` wins; otherwise, a configured
+`TRAEFIK_HOST` produces `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` for Hostinger's temporary
+`*.hstgr.cloud` HTTPS address. On a raw **Compose from URL** deployment, do not assume
+`TRAEFIK_HOST` exists until it is added to that project's Environment variables. If neither value
+exists, the Traefik rule falls back to the reserved
+`${COMPOSE_PROJECT_NAME}.setup.invalid` hostname and the gateway runs in fail-closed
+setup-pending mode, returns HTTP 503 guidance for every request, and contains no reverse proxy to
+Web/API. Hostinger may still render **Open** from that label; the resulting `*.setup.invalid`
+NXDOMAIN is intentional until the project environment is completed. The profile never falls back
+to direct public HTTP or to publishing `:8080`, and `AI_MAP_SECURE_COOKIE=true` remains
+unchanged.
 
 If deployment reports that host port 80 or 443 is already in use, do not add another
 application-owned TLS edge; Hostinger Traefik should remain the single owner of those ports.
@@ -259,9 +269,13 @@ ordinary redeployments.
 The checked-in Compose profile contains no credentials. Supported deployment overrides are kept
 small intentionally:
 
+- `TRAEFIK_HOST` — for Hostinger **Compose from URL**, set this explicitly in the platform
+  project's Environment variables to the VPS default hostname shown in hPanel, for example
+  `srv123456.hstgr.cloud`. It is then combined with the Compose project name to form the temporary
+  HTTPS hostname;
 - `AI_MAP_PUBLIC_DOMAIN` — optional explicit hostname override used by the default
   `docker-compose.hostinger.yml` (and its `docker-compose.hostinger-https.yml` compatibility
-  alias). When absent, Hostinger's `TRAEFIK_HOST` is used to derive the temporary hostname as
+  alias). When absent, the configured `TRAEFIK_HOST` is used to derive the temporary hostname as
   `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`. If neither is available, the gateway remains in
   fail-closed 503 setup-pending mode;
 - `AI_MAP_TRAEFIK_NETWORK` — ingress network name. The clean-import default is the isolated
