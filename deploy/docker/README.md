@@ -221,7 +221,7 @@ The Compose labels use project-scoped `HostRegexp` and `HostSNIRegexp` rules:
 
 - HTTP on Traefik's `web` entrypoint is forwarded to Caddy port 80 so ACME HTTP-01 and redirects
   work;
-- HTTPS on Traefik's `websecure` entrypoint is passed through only for the platform's
+- HTTPS on Traefik's `websecure` entrypoint uses **TLS passthrough** only for the platform's
   `<project>.srv<digits>.hstgr.cloud` SNI pattern, so Caddy terminates TLS for the exact derived
   hostname;
 - there is no catch-all TLS router, so unrelated HTTPS projects remain untouched.
