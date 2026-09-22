@@ -391,6 +391,7 @@ def test_hostinger_default_and_https_compatibility_profiles_match() -> None:
 
 def test_readme_exposes_hostinger_compose_url_directly_without_button() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
+    normalized = " ".join(readme.split())
     compose_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger.yml"
@@ -400,4 +401,4 @@ def test_readme_exposes_hostinger_compose_url_directly_without_button() -> None:
     assert "Paste that URL into Hostinger's **Compose from URL** field." in readme
     assert "https://assets.hostinger.com/vps/deploy.svg" not in readme
     assert "https://www.hostinger.com/docker-hosting?compose_url=" not in readme
-    assert "repository landing page itself is not the Compose URL" in readme
+    assert "repository landing page itself is not the Compose URL" in normalized
