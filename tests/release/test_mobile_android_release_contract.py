@@ -98,6 +98,30 @@ def test_release_workflow_fails_closed_around_identity_and_integrity() -> None:
     assert "npm install --no-audit --no-fund --package-lock=false" not in workflow
 
 
+def test_pull_requests_skip_native_apk_assembly_and_signing() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    for step in (
+        "actions/setup-java@v5",
+        "Generate native Android project",
+        "Keep release assembly unsigned until the signing job",
+        "Assemble production release APK",
+        "Verify unsigned APK metadata",
+        "Upload unsigned build and provenance evidence",
+    ):
+        pattern = (
+            rf"(?:- uses: {re.escape(step)}|- name: {re.escape(step)})\n"
+            r"\s+if: github.event_name == 'workflow_dispatch'"
+        )
+        assert re.search(pattern, workflow)
+
+    assert (
+        "  test-signing:\n"
+        "    if: github.event_name == 'workflow_dispatch'\n"
+        "    needs: build"
+    ) in workflow
+
+
 def test_normal_ci_uses_the_same_mobile_lockfile_contract() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
