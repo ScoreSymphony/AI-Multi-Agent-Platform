@@ -1,10 +1,16 @@
 name: Repository maintenance
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/repository-maintenance.yml"
+  schedule:
+    - cron: "41 5 * * 1"
   workflow_dispatch:
     inputs:
       cleanup_orphaned_history:
-        description: Delete completed Actions runs for explicitly retired workflow paths
+        description: Delete completed Actions runs for workflow files that no longer exist
         required: false
         default: false
         type: boolean
@@ -14,54 +20,64 @@ permissions:
 
 jobs:
   cleanup-orphaned-actions-history:
-    if: inputs.cleanup_orphaned_history
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      inputs.cleanup_orphaned_history
     permissions:
       actions: write
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - name: Delete completed runs for explicitly retired workflow paths
+      - name: Delete completed runs for orphaned workflow files
         uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
-            const retiredPaths = new Set([
-              '.github/workflows/forge-removal-guard.yml',
-              '.github/workflows/ha-postgres-coordination.yml',
-              '.github/workflows/ha-postgres-persistence.yml',
-              '.github/workflows/issue-862-garage-multinode-evidence.yml',
-              '.github/workflows/issue-862-rustfs-multinode-evidence.yml',
-              '.github/workflows/issue-862-storage-disaster-recovery-evidence.yml',
-              '.github/workflows/issue-862-storage-evidence.yml',
-              '.github/workflows/issue-862-storage-tls-evidence.yml',
-              '.github/workflows/issue-862-storage-upgrade-evidence.yml',
-              '.github/workflows/issue859-bifrost-dns-rebinding.yml',
-              '.github/workflows/issue859-bifrost-performance.yml',
-              '.github/workflows/issue859-bifrost-security.yml',
-              '.github/workflows/pipelock-candidate-compat.yml',
-              '.github/workflows/test-layout.yml',
-            ]);
 
-            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
-              owner,
-              repo,
-              per_page: 100,
-            });
-            const retired = runs.filter(
+            const workflows = await github.paginate(
+              github.rest.actions.listRepoWorkflows,
+              {
+                owner,
+                repo,
+                per_page: 100,
+              },
+            );
+            const currentPaths = new Set(
+              workflows
+                .map((workflow) => workflow.path)
+                .filter(
+                  (path) =>
+                    typeof path === 'string' &&
+                    path.startsWith('.github/workflows/'),
+                ),
+            );
+
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner,
+                repo,
+                per_page: 100,
+              },
+            );
+            const orphaned = runs.filter(
               (run) =>
                 run.status === 'completed' &&
-                run.path &&
-                retiredPaths.has(run.path),
+                typeof run.path === 'string' &&
+                run.path.startsWith('.github/workflows/') &&
+                !currentPaths.has(run.path),
             );
+
             const byPath = new Map();
-            for (const run of retired) {
+            for (const run of orphaned) {
               const bucket = byPath.get(run.path) || [];
               bucket.push(run);
               byPath.set(run.path, bucket);
             }
 
-            core.info(`explicit_retired_workflow_paths=${retiredPaths.size}`);
-            core.info(`completed_retired_runs=${retired.length}`);
+            core.info(`current_workflow_paths=${currentPaths.size}`);
+            core.info(`orphaned_completed_runs=${orphaned.length}`);
             for (const [path, pathRuns] of [...byPath.entries()].sort()) {
               core.info(`${path}: ${pathRuns.length} completed run(s)`);
             }
@@ -77,7 +93,11 @@ jobs:
               }
               for (const run of pathRuns) {
                 try {
-                  await github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
+                  await github.rest.actions.deleteWorkflowRun({
+                    owner,
+                    repo,
+                    run_id: run.id,
+                  });
                   deleted += 1;
                 } catch (error) {
                   if (error.status === 404) {
@@ -87,4 +107,4 @@ jobs:
                 }
               }
             }
-            core.info(`deleted_retired_runs=${deleted}`);
+            core.info(`deleted_orphaned_runs=${deleted}`);
