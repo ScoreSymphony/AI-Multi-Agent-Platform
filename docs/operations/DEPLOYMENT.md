@@ -113,8 +113,10 @@ host UTS namespace (`uts: host`) so it can read the VPS kernel hostname without 
 network namespace, Docker socket, host filesystem, Hostinger API credentials or an external
 discovery service.
 
-When the hostname matches Hostinger's managed default form `srvNNNNNN.hstgr.cloud`, the gateway
-derives `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. Traefik uses narrowly scoped
+When the host UTS hostname is either the short Hostinger form `srvNNNNNN` or the
+fully-qualified `srvNNNNNN.hstgr.cloud` form, the gateway validates the numeric server id,
+normalizes the short form to `srvNNNNNN.hstgr.cloud`, and derives
+`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. Traefik uses narrowly scoped
 HostRegexp/HostSNIRegexp routes for that project hostname; HTTP reaches Caddy for ACME/redirect
 handling and HTTPS is passed through to Caddy for termination. A bootstrap HTTP mapping defaults to
 host port 18080 and redirects only to the canonical HTTPS origin. An explicit
