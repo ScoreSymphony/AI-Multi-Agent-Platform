@@ -214,7 +214,7 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
 
     assert "AI_MAP_SECURE_COOKIE=true" in runbook
-    assert "HTTPS-first" in runbook
+    assert "https://<your-domain>" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "docker compose down -v" in runbook
     normalized = " ".join(runbook.split())
@@ -355,7 +355,7 @@ def test_hostinger_runbook_documents_both_tls_ownership_modes() -> None:
     assert "docker-compose.hostinger-https.yml" in runbook
     assert "https://assets.hostinger.com/vps/deploy.svg" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
-    assert "setup-pending" in runbook
+    assert "setup pending" in runbook
     assert "ports 80 and 443" in normalized
     assert "DNS" in runbook
     assert "Caddy" in runbook
