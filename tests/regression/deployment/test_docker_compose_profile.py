@@ -293,9 +293,9 @@ def test_hostinger_default_url_profile_is_zero_config_https() -> None:
 
 
 def test_hostinger_https_compatibility_alias_matches_zero_config_default() -> None:
-    assert HOSTINGER_HTTPS_COMPOSE.read_text(
+    assert HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8") == HOSTINGER_COMPOSE.read_text(
         encoding="utf-8"
-    ) == HOSTINGER_COMPOSE.read_text(encoding="utf-8")
+    )
 
 
 def test_hostinger_shared_traefik_profile_remains_explicit_and_private() -> None:
