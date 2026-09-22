@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-direct}"
+edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-shared-traefik}"
 explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"
 traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
 project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
