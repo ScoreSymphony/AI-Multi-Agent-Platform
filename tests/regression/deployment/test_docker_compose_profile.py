@@ -290,6 +290,7 @@ def test_hostinger_profile_can_switch_to_shared_external_traefik_without_yaml_ed
     assert "AI_MAP_TRAEFIK_NETWORK=traefik-proxy" not in compose
     assert "AI_MAP_TRAEFIK_EXTERNAL=true" not in compose
 
+
 def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisite() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
@@ -335,6 +336,7 @@ def test_hostinger_https_compatibility_profile_matches_clean_import_contract() -
     assert "${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}" in gateway
     assert '"80:80"' not in compose
     assert '"443:443"' not in compose
+
 
 def test_hostinger_gateway_is_fail_closed_until_public_domain_is_valid() -> None:
     dockerfile = HOSTINGER_GATEWAY_DOCKERFILE.read_text(encoding="utf-8")
