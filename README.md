@@ -72,14 +72,17 @@ https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/dep
 ```
 
 Copy that URL into Hostinger's **Compose from URL** field. The repository landing page itself is not
-the Compose URL. The maintained Hostinger profile does not bind VPS ports 80/443 itself; it joins
-Hostinger's shared `traefik-proxy` network and lets the Hostinger Traefik project own HTTPS.
-On a fresh VPS, deploy Hostinger's Traefik template first so that the shared `traefik-proxy`
-network exists. Then deploy this Compose file, set `AI_MAP_PUBLIC_DOMAIN`, point that DNS name at
-the VPS, and redeploy. Until a domain is configured, Traefik's reserved `setup.invalid` route
-terminates at a dedicated fail-closed gateway that returns setup guidance only; Web/API traffic is
-not proxied. An explicit `docker-compose.local.yml` preserves the loopback `:8080` workflow for
-local development and CI only. Detailed backup/restore, TLS, Hostinger and alternate external-edge
+the Compose URL. The default Hostinger import is deliberately self-contained: it creates an
+isolated ingress network, publishes no VPS ports, and can therefore create the project even before
+Hostinger's shared `traefik-proxy` network exists. The gateway stays fail-closed until HTTPS is
+configured.
+
+Before browser use, deploy Hostinger's Traefik project, then set
+`AI_MAP_TRAEFIK_NETWORK=traefik-proxy`, `AI_MAP_TRAEFIK_EXTERNAL=true`, and
+`AI_MAP_PUBLIC_DOMAIN=<your-hostname>` in the Docker project environment and redeploy. Traefik
+then becomes the single HTTPS edge and routes only to the dedicated gateway; Web/API remain private.
+An explicit `docker-compose.local.yml` preserves the loopback `:8080` workflow for local
+development and CI only. Detailed backup/restore, TLS, Hostinger and alternate external-edge
 guidance lives in [`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
