@@ -25,10 +25,14 @@ jobs:
             kind: test
             marker: not unit
             paths: tests/architecture tests/contract tests/release
-          - lane: integration
+          - lane: integration-core
             kind: test
             marker: not unit
-            paths: tests/integration
+            paths: tests/integration --ignore=tests/integration/deployment --ignore=tests/integration/recovery
+          - lane: integration-recovery-deployment
+            kind: test
+            marker: not unit
+            paths: tests/integration/deployment tests/integration/recovery
           - lane: system-regression
             kind: test
             marker: not unit

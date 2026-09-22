@@ -13,7 +13,8 @@ EXPECTED_LANES = frozenset(
     {
         "unit",
         "contract-architecture-release",
-        "integration",
+        "integration-core",
+        "integration-recovery-deployment",
         "system-regression",
     }
 )

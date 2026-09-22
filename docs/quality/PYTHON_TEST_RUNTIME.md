@@ -47,6 +47,39 @@ The next contributors are the canonical replanning path, repository-wide AST bou
 real MCP SDK transports. In the system/regression shard, the largest costs are reference-host
 reproducibility setup, secure-entrypoint E2E and recovery/performance campaigns.
 
+
+### 2026-09-22 integration re-sharding trigger
+
+A later retained run on current release-candidate code completed **2668 integration tests with
+58 skips and no behavioral failures**, but the unsplit lane took **395.443 seconds** and therefore
+exceeded the retained 330-second regression guard. The largest measured responsibility groups were
+`tests/integration/deployment` at approximately **126.448 testcase-seconds** and
+`tests/integration/recovery` at approximately **74.206 testcase-seconds**. A rerun then reached
+the seven-minute outer job timeout before the unsplit suite completed.
+
+The CI layout therefore splits the integration responsibility into two isolated jobs without
+parallelizing tests inside either pytest process:
+
+- `integration-core`: all integration tests except `deployment` and `recovery`;
+- `integration-recovery-deployment`: the deployment and recovery integration suites.
+
+This is a scheduling change, not a coverage reduction. `verify_pytest_shards.py` still proves
+that the union of all non-unit lanes equals the canonical serial collection exactly. The retained
+330-second aggregate pytest critical-path guard is not loosened by the split.
+
+
+The first successful retained split run (`35746793037`) measured:
+
+| Lane | Wall time | Testcases | Skips | Slowest test | Slowest module |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `integration-core` | 93.360 s | 2507 | 58 | 8.301 s | 8.301 s |
+| `integration-recovery-deployment` | 50.020 s | 219 | 0 | 2.534 s | 5.522 s |
+
+The aggregate pytest critical path on that run was **93.749 seconds** (the
+`system-regression` lane), while the full Python validation critical path was **120.792 seconds**
+(`integration-core`). Both are comfortably inside the unchanged 330-second pytest and
+350-second validation guards.
+
 Static inspection also found many intentionally delayed SQLite/offload tests (typically
 0.03–0.12 seconds), real process/Pipelock/MCP readiness loops, OpenSSL-backed security setup and
 long-lived child-process fixtures whose children are explicitly terminated. Those delays express
@@ -85,7 +118,8 @@ is replaced by independent jobs:
 ```text
 unit
 contract + architecture + release
-integration
+integration core
+integration recovery + deployment
 e2e + performance + regression
 ```
 
@@ -131,20 +165,25 @@ The unit wall-clock budget is 30 seconds against an observed 11–17 second base
 contract/architecture/release lane has a 120-second wall budget against a measured 23.081-second
 run, with 10-second individual-test and 15-second module thresholds.
 
-Integration uses a 330-second wall budget. The three observed runs are 120.435, 122.020 and
-277.123 seconds; 330 seconds is about 19% above the healthy runner-slow maximum. Its 15-second
-individual-test and 20-second module thresholds remain above the measured maxima of 9.680 and
-17.397 seconds. System/regression uses a 240-second wall budget against a measured 95.651-second
-run and the same 15/20-second test/module thresholds.
+The historical unsplit integration lane used a 330-second wall budget. The split
+`integration-core` and `integration-recovery-deployment` lanes each retain that same
+330-second wall guard, so CI gains parallel scheduling without weakening the previous critical-path
+limit. `integration-core` keeps the 15-second individual-test and 20-second module guards.
+`integration-recovery-deployment` keeps the 15-second individual-test guard and uses a
+30-second module guard because retained evidence measured
+`tests.integration.recovery.test_cross_store_integrity` at 23.918 seconds while its slowest
+individual test remained 6.244 seconds. System/regression uses a 240-second wall budget and the
+same 15/20-second test/module thresholds.
 
 The complete `python-validation` matrix has a seven-minute job timeout. This deliberately differs
 from the typical performance target: the outer fail-safe must leave enough room for the 350-second
 validation budget to record timing evidence and fail deterministically instead of being cancelled
 before the regression guard can report its result.
-The required `test` aggregator downloads all four pytest timing artifacts and fails if their
+The required `test` aggregator downloads all five pytest timing artifacts and fails if their
 measured pytest critical path exceeds 330 seconds or if any expected lane report is missing.
-Typical performance remains tracked separately from the hard guard; the current integration median
-is 122.020 seconds versus the old 224-second median serial non-unit lane.
+Typical performance remains tracked separately from the hard guard; historical unsplit integration
+timings remain evidence, while the split-lane timings are retained independently for future
+re-baselining.
 
 The serial full-suite fallback has a 480-second reference budget through the `full-local` lane.
 That threshold is approximately 21% above the worst 397-second serial pytest observation from the
@@ -181,12 +220,18 @@ Verify that CI shards still cover exactly that non-unit selection:
 python scripts/ci/verify_pytest_shards.py
 ```
 
-Generate the same retained runtime report locally:
+Generate the same retained integration runtime reports locally:
 
 ```bash
 python scripts/ci/run_pytest_lane.py \
-  --lane integration \
-  -- -m "not unit" tests/integration
+  --lane integration-core \
+  -- -m "not unit" tests/integration \
+     --ignore=tests/integration/deployment \
+     --ignore=tests/integration/recovery
+
+python scripts/ci/run_pytest_lane.py \
+  --lane integration-recovery-deployment \
+  -- -m "not unit" tests/integration/deployment tests/integration/recovery
 ```
 
 Run the complete serial suite with the checked-in reference budget:

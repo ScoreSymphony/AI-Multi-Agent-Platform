@@ -15,7 +15,19 @@ SHARDS: dict[str, tuple[str, ...]] = {
         "tests/contract",
         "tests/release",
     ),
-    "integration": ("-m", "not unit", "tests/integration"),
+    "integration-core": (
+        "-m",
+        "not unit",
+        "tests/integration",
+        "--ignore=tests/integration/deployment",
+        "--ignore=tests/integration/recovery",
+    ),
+    "integration-recovery-deployment": (
+        "-m",
+        "not unit",
+        "tests/integration/deployment",
+        "tests/integration/recovery",
+    ),
     "system-regression": (
         "-m",
         "not unit",

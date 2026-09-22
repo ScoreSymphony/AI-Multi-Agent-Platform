@@ -124,8 +124,13 @@ def test_runtime_aggregate_uses_slowest_lane_and_enforces_budget() -> None:
             "pytest_exit_code": 0,
             "budget_violations": [],
         },
-        "integration": {
+        "integration-core": {
             "wall_seconds": 122.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
+        },
+        "integration-recovery-deployment": {
+            "wall_seconds": 95.0,
             "pytest_exit_code": 0,
             "budget_violations": [],
         },
@@ -139,16 +144,17 @@ def test_runtime_aggregate_uses_slowest_lane_and_enforces_budget() -> None:
         "quality": {"wall_seconds": 70.0},
         "unit": {"wall_seconds": 83.0},
         "contract-architecture-release": {"wall_seconds": 43.0},
-        "integration": {"wall_seconds": 148.0},
+        "integration-core": {"wall_seconds": 148.0},
+        "integration-recovery-deployment": {"wall_seconds": 132.0},
         "system-regression": {"wall_seconds": 121.0},
     }
 
     summary = build_aggregate(reports, validation_reports)
 
-    assert summary["pytest_critical_lane"] == "integration"
+    assert summary["pytest_critical_lane"] == "integration-core"
     assert summary["pytest_critical_path_seconds"] == 122.0
-    assert summary["pytest_total_compute_seconds"] == 273.0
-    assert summary["validation_critical_lane"] == "integration"
+    assert summary["pytest_total_compute_seconds"] == 368.0
+    assert summary["validation_critical_lane"] == "integration-core"
     assert summary["validation_critical_path_seconds"] == 148.0
     assert (
         aggregate_violations(
@@ -180,10 +186,15 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
             "pytest_exit_code": 0,
             "budget_violations": [],
         },
-        "integration": {
+        "integration-core": {
             "wall_seconds": 122.0,
             "pytest_exit_code": 0,
             "budget_violations": ["slowest test exceeded budget"],
+        },
+        "integration-recovery-deployment": {
+            "wall_seconds": 95.0,
+            "pytest_exit_code": 0,
+            "budget_violations": [],
         },
         "system-regression": {
             "wall_seconds": 96.0,
@@ -195,7 +206,8 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
         "quality": {"wall_seconds": 70.0},
         "unit": {"wall_seconds": 83.0},
         "contract-architecture-release": {"wall_seconds": 43.0},
-        "integration": {"wall_seconds": 148.0},
+        "integration-core": {"wall_seconds": 148.0},
+        "integration-recovery-deployment": {"wall_seconds": 132.0},
         "system-regression": {"wall_seconds": 121.0},
     }
 
@@ -207,7 +219,7 @@ def test_runtime_aggregate_rejects_failed_or_over_budget_lane() -> None:
             "pytest_critical_path_seconds": 330,
             "validation_critical_path_seconds": 350,
         },
-    ) == ["failed or over-budget lanes: integration"]
+    ) == ["failed or over-budget lanes: integration-core"]
 
 
 def test_runtime_report_loaders_prefer_latest_rerun_attempt(tmp_path: Path) -> None:
@@ -275,7 +287,7 @@ def test_runtime_report_loader_rejects_duplicate_same_attempt(tmp_path: Path) ->
         (tmp_path / name).write_text(
             json.dumps(
                 {
-                    "lane": "integration",
+                    "lane": "integration-core",
                     "run_attempt": 2,
                     "wall_seconds": 1.0,
                     "pytest_exit_code": 0,
@@ -287,7 +299,7 @@ def test_runtime_report_loader_rejects_duplicate_same_attempt(tmp_path: Path) ->
 
     with pytest.raises(
         ValueError,
-        match="duplicate pytest runtime report for lane integration at run attempt 2",
+        match="duplicate pytest runtime report for lane integration-core at run attempt 2",
     ):
         load_lane_reports(tmp_path)
 
@@ -304,7 +316,7 @@ def test_runtime_report_loader_rejects_duplicate_stale_attempt(
         (tmp_path / name).write_text(
             json.dumps(
                 {
-                    "lane": "integration",
+                    "lane": "integration-core",
                     "run_attempt": attempt,
                     "wall_seconds": 1.0,
                     "pytest_exit_code": 0,
@@ -316,6 +328,6 @@ def test_runtime_report_loader_rejects_duplicate_stale_attempt(
 
     with pytest.raises(
         ValueError,
-        match="duplicate pytest runtime report for lane integration at run attempt 1",
+        match="duplicate pytest runtime report for lane integration-core at run attempt 1",
     ):
         load_lane_reports(tmp_path)
