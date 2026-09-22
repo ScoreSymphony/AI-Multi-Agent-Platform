@@ -203,10 +203,11 @@ def test_hostinger_url_profile_is_self_contained_and_uses_remote_source_context(
 
 def test_hostinger_runbook_points_to_standalone_compose_file() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
+    normalized = " ".join(runbook.split())
 
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
     assert "repository root" in runbook
-    assert "public Git repository itself as the Docker build context" in runbook
+    assert "public Git repository itself as the Docker build context" in normalized
 
 
 def test_hostinger_https_profile_publishes_only_the_tls_edge() -> None:
