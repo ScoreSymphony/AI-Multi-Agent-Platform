@@ -76,8 +76,11 @@ the Compose URL. The zero-config Hostinger path assumes Hostinger's Traefik proj
 running and owns ports 80/443. On current Hostinger deployments Traefik may itself use Docker
 `host` networking and therefore does not require a shared `traefik-proxy` network. The platform
 does **not** bind 80/443 itself and does not require an external Docker network. The dedicated
-gateway stays on the private platform bridge, reads the VPS hostname through the host UTS namespace,
-derives `${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`, and is discovered through Traefik's
+gateway stays on the private platform bridge and reads the VPS hostname through the host UTS
+namespace. Hostinger may expose that kernel hostname as either `srvNNNNNN` or
+`srvNNNNNN.hstgr.cloud`; the numeric short form is normalized to the managed
+`srvNNNNNN.hstgr.cloud` DNS hostname before deriving
+`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. The gateway is then discovered through Traefik's
 Docker provider labels. Web and Control Plane remain private.
 
 No `TRAEFIK_HOST`, `AI_MAP_TRAEFIK_NETWORK`, or `AI_MAP_TRAEFIK_EXTERNAL` value is required
