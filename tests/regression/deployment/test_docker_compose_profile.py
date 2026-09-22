@@ -456,7 +456,8 @@ def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes(
     assert 'host_hostname="$(hostname 2>/dev/null || true)"' in entrypoint
     assert 'vps_id="${host_hostname#srv}"' in entrypoint
     assert 'vps_id="${vps_id%.hstgr.cloud}"' in entrypoint
-    assert 'domain="$project_name.$host_hostname"' in entrypoint
+    assert 'managed_hostname="$host_hostname.hstgr.cloud"' in entrypoint
+    assert 'domain="$project_name.$managed_hostname"' in entrypoint
     assert 'domain="$project_name.$traefik_host"' in entrypoint
     assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "Caddyfile.hostinger-direct-setup-pending" in entrypoint
@@ -522,6 +523,25 @@ def test_hostinger_direct_gateway_derives_managed_vps_hostname(tmp_path: Path) -
     assert "mode: direct" in result.stderr
 
 
+def test_hostinger_traefik_passthrough_gateway_derives_short_hostinger_hostname(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "FAKE_HOSTNAME": "srv1940023",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv1940023.hstgr.cloud" in result.stdout
+    assert "Caddyfile.hostinger-direct" in result.stdout
+    assert "source: Hostinger VPS hostname" in result.stderr
+    assert "mode: traefik-passthrough" in result.stderr
+
+
 def test_hostinger_traefik_passthrough_gateway_derives_managed_vps_hostname(
     tmp_path: Path,
 ) -> None:
@@ -575,6 +595,36 @@ def test_hostinger_direct_gateway_rejects_unmanaged_host_hostname(tmp_path: Path
     assert "fail-closed setup-pending mode" in result.stderr
     assert "domain=" in result.stdout
     assert "web:8080" not in result.stdout
+
+
+def test_hostinger_gateway_rejects_invalid_short_hostinger_hostname(tmp_path: Path) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "FAKE_HOSTNAME": "srvabc",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "fail-closed setup-pending mode" in result.stderr
+
+
+def test_hostinger_gateway_rejects_hostinger_hostname_lookalike(tmp_path: Path) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "FAKE_HOSTNAME": "srv123.hstgr.cloud.evil.example",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "fail-closed setup-pending mode" in result.stderr
 
 
 def test_hostinger_shared_gateway_derives_temporary_hostname_from_traefik_host(
