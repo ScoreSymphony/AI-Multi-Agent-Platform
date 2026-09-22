@@ -110,11 +110,15 @@ private on the platform network and Secure cookies remain enabled. Before browse
 Hostinger Traefik and switch the ingress network to the shared external `traefik-proxy` network
 with `AI_MAP_TRAEFIK_NETWORK=traefik-proxy` and `AI_MAP_TRAEFIK_EXTERNAL=true`; Traefik then
 becomes the single TLS owner and routes `websecure` traffic to the gateway on internal port 8080.
-An explicit `AI_MAP_PUBLIC_DOMAIN` overrides hostname selection. Otherwise, when Hostinger
-provides `TRAEFIK_HOST`, the router and gateway use
-`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` so the normal temporary `*.hstgr.cloud` **Open**
-URL works. If neither hostname source exists, the gateway stays in fail-closed setup-pending mode
-and returns only HTTP 503 guidance without proxying Web/API traffic. Operators using a separately
+An explicit `AI_MAP_PUBLIC_DOMAIN` overrides hostname selection. Otherwise the router and
+gateway use `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` when `TRAEFIK_HOST` is configured.
+Hostinger Docker Catalog projects may receive that value as part of their generated project
+environment, but a generic **Compose from URL** import does not guarantee it. For this maintained
+URL flow, operators set `TRAEFIK_HOST` explicitly to the VPS default hostname shown in hPanel
+(for example `srv123456.hstgr.cloud`) together with the shared-network settings before browser
+use. If neither hostname source exists, the gateway stays in fail-closed setup-pending mode and
+returns only HTTP 503 guidance without proxying Web/API traffic; an hPanel **Open** link may then
+resolve only to the intentionally non-public `*.setup.invalid` sentinel. Operators using a separately
 managed non-Traefik reverse proxy may instead use the explicitly named
 `deploy/docker/docker-compose.hostinger-external-edge.yml` alternative. The Docker runbook owns
 the exact Traefik-network, DNS and profile prerequisites.

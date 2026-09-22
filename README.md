@@ -77,14 +77,24 @@ isolated ingress network, publishes no VPS ports, and can therefore create the p
 Hostinger's shared `traefik-proxy` network exists. The gateway stays fail-closed until HTTPS is
 configured.
 
-Before browser use, deploy Hostinger's Traefik project, then set
-`AI_MAP_TRAEFIK_NETWORK=traefik-proxy` and `AI_MAP_TRAEFIK_EXTERNAL=true` in the Docker project
-environment and redeploy. When Hostinger provides its standard `TRAEFIK_HOST` value, the platform
-uses `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` automatically as the temporary HTTPS hostname, so
-Hostinger's **Open** action can use the normal `*.hstgr.cloud` address without requiring a custom
-domain first. Set `AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to override that
-temporary hostname with your own DNS name. Traefik remains the single HTTPS edge and routes only to
-the dedicated gateway; Web/API remain private. An explicit `docker-compose.local.yml` preserves
+Before browser use, deploy Hostinger's Traefik project. For a **Compose from URL** project,
+Hostinger does not automatically add the catalog-style `TRAEFIK_HOST` value, so open the
+platform project's Environment variables and set all three values:
+
+```text
+TRAEFIK_HOST=srv123456.hstgr.cloud
+AI_MAP_TRAEFIK_NETWORK=traefik-proxy
+AI_MAP_TRAEFIK_EXTERNAL=true
+```
+
+Replace the example `srv123456.hstgr.cloud` with the default VPS hostname shown in hPanel, then
+redeploy. The platform derives `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` as its temporary HTTPS
+hostname and Hostinger's **Open** action can use that `*.hstgr.cloud` address. Until
+`TRAEFIK_HOST` (or an explicit `AI_MAP_PUBLIC_DOMAIN`) exists, an **Open** link may point to the
+intentionally non-resolving `*.setup.invalid` sentinel. Set
+`AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to override the temporary hostname with
+your own DNS name. Traefik remains the single HTTPS edge and routes only to the dedicated gateway;
+Web/API remain private. An explicit `docker-compose.local.yml` preserves
 the loopback `:8080` workflow for local development and CI only. Detailed backup/restore, TLS,
 Hostinger and alternate external-edge guidance lives in
 [`deploy/docker/README.md`](deploy/docker/README.md).

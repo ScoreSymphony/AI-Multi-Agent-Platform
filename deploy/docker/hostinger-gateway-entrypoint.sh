@@ -8,9 +8,10 @@ project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 setup_pending() {
   cat >&2 <<'EOF'
 AI Multi-Agent Platform Hostinger ingress is in fail-closed setup-pending mode.
-Deploy/enable Hostinger Traefik so TRAEFIK_HOST is available, or set AI_MAP_PUBLIC_DOMAIN
-to a public DNS hostname. Until then, the gateway returns setup guidance only and never
-proxies Web/API traffic.
+For Compose-from-URL deployments, add TRAEFIK_HOST (for example srv123456.hstgr.cloud)
+to this Docker project's Environment variables after Hostinger Traefik is available, or
+set AI_MAP_PUBLIC_DOMAIN to an explicit public DNS hostname. Until then, the gateway
+returns setup guidance only and never proxies Web/API traffic.
 EOF
   exec caddy run --config /etc/caddy/Caddyfile.hostinger-setup-pending --adapter caddyfile
 }
