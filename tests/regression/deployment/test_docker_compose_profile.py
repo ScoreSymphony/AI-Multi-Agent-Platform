@@ -335,10 +335,11 @@ def test_hostinger_custom_domain_profile_requires_exact_domain() -> None:
         "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}`)"
         in gateway
     )
-    assert (
-        "rule=HostSNI(`${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}`)"
-        in gateway
+    custom_domain_guard = (
+        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}"
     )
+    assert f"rule=Host(`{custom_domain_guard}`)" in gateway
+    assert f"rule=HostSNI(`{custom_domain_guard}`)" in gateway
     assert ".tls.passthrough=true" in gateway
     assert ".loadbalancer.server.port=80" in gateway
     assert ".loadbalancer.server.port=443" in gateway
