@@ -4,13 +4,18 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/repository-maintenance.yml"
+      - ".github/workflows/**"
   schedule:
     - cron: "41 5 * * 1"
   workflow_dispatch:
     inputs:
       cleanup_orphaned_history:
         description: Delete completed Actions runs for workflow files that no longer exist
+        required: false
+        default: false
+        type: boolean
+      full_history_scan:
+        description: Also scan the complete Actions run history for legacy orphaned workflows
         required: false
         default: false
         type: boolean
@@ -34,6 +39,14 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
+            const repoWorkflowPrefix = '.github/workflows/';
+            const fullHistoryScan =
+              context.eventName === 'workflow_dispatch' &&
+              Boolean(context.payload.inputs?.full_history_scan === true ||
+                context.payload.inputs?.full_history_scan === 'true');
+            const maxDelete = 4000;
+            const recentDeletedCutoffMs = 35 * 24 * 60 * 60 * 1000;
+            const recentDeletedCutoff = Date.now() - recentDeletedCutoffMs;
 
             const workflows = await github.paginate(
               github.rest.actions.listRepoWorkflows,
@@ -50,40 +63,124 @@ jobs:
                 .filter(
                   (path) =>
                     typeof path === 'string' &&
-                    path.startsWith('.github/workflows/'),
+                    path.startsWith(repoWorkflowPrefix),
                 ),
             );
+            const recentlyDeletedWorkflows = workflows.filter((workflow) => {
+              if (
+                workflow.state !== 'deleted' ||
+                typeof workflow.path !== 'string' ||
+                !workflow.path.startsWith(repoWorkflowPrefix) ||
+                currentPaths.has(workflow.path)
+              ) {
+                return false;
+              }
+              const updatedAt = Date.parse(workflow.updated_at || '');
+              return Number.isFinite(updatedAt) && updatedAt >= recentDeletedCutoff;
+            });
 
-            const runs = await github.paginate(
+            const candidates = new Map();
+            const orphanWorkflowIds = new Map();
+
+            const retainCandidate = (run) => {
+              if (
+                run.status !== 'completed' ||
+                typeof run.path !== 'string' ||
+                !run.path.startsWith(repoWorkflowPrefix) ||
+                currentPaths.has(run.path)
+              ) {
+                return;
+              }
+              candidates.set(run.id, run);
+              if (run.workflow_id) {
+                orphanWorkflowIds.set(run.workflow_id, run.path);
+              }
+            };
+
+            const collectWorkflowRuns = async (workflowId, expectedPath) => {
+              if (currentPaths.has(expectedPath)) {
+                return;
+              }
+              try {
+                const runs = await github.paginate(
+                  github.rest.actions.listWorkflowRuns,
+                  {
+                    owner,
+                    repo,
+                    workflow_id: workflowId,
+                    per_page: 100,
+                  },
+                );
+                for (const run of runs) {
+                  retainCandidate(run);
+                }
+              } catch (error) {
+                if (error.status === 404) {
+                  core.info(
+                    `workflow_id=${workflowId} is no longer addressable; retaining bounded discovery evidence only`,
+                  );
+                  return;
+                }
+                throw error;
+              }
+            };
+
+            for (const workflow of recentlyDeletedWorkflows) {
+              await collectWorkflowRuns(workflow.id, workflow.path);
+            }
+
+            const recentCompletedRuns = await github.paginate(
               github.rest.actions.listWorkflowRunsForRepo,
               {
                 owner,
                 repo,
+                status: 'completed',
                 per_page: 100,
               },
             );
-            const orphaned = runs.filter(
-              (run) =>
-                run.status === 'completed' &&
-                typeof run.path === 'string' &&
-                run.path.startsWith('.github/workflows/') &&
-                !currentPaths.has(run.path),
-            );
+            for (const run of recentCompletedRuns) {
+              retainCandidate(run);
+            }
+
+            for (const [workflowId, path] of [...orphanWorkflowIds.entries()]) {
+              await collectWorkflowRuns(workflowId, path);
+            }
+
+            if (fullHistoryScan) {
+              core.warning(
+                'full_history_scan=true: scanning complete repository Actions history',
+              );
+              const historicalRuns = await github.paginate(
+                github.rest.actions.listWorkflowRunsForRepo,
+                {
+                  owner,
+                  repo,
+                  per_page: 100,
+                },
+              );
+              for (const run of historicalRuns) {
+                retainCandidate(run);
+              }
+            }
 
             const byPath = new Map();
-            for (const run of orphaned) {
+            for (const run of candidates.values()) {
               const bucket = byPath.get(run.path) || [];
               bucket.push(run);
               byPath.set(run.path, bucket);
             }
 
             core.info(`current_workflow_paths=${currentPaths.size}`);
-            core.info(`orphaned_completed_runs=${orphaned.length}`);
+            core.info(
+              `recent_deleted_workflow_registrations=${recentlyDeletedWorkflows.length}`,
+            );
+            core.info(`bounded_recent_runs=${recentCompletedRuns.length}`);
+            core.info(`orphaned_completed_runs=${candidates.size}`);
+            core.info(`full_history_scan=${fullHistoryScan}`);
             for (const [path, pathRuns] of [...byPath.entries()].sort()) {
               core.info(`${path}: ${pathRuns.length} completed run(s)`);
             }
 
-            const maxDelete = 4000;
             let deleted = 0;
             for (const [path, pathRuns] of [...byPath.entries()].sort()) {
               if (deleted + pathRuns.length > maxDelete) {
