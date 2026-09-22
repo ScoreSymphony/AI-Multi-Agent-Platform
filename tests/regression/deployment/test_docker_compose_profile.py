@@ -285,7 +285,8 @@ def test_hostinger_runbook_documents_both_tls_ownership_modes() -> None:
     normalized = " ".join(runbook.split())
 
     assert "main/deploy/docker/docker-compose.hostinger.yml" in runbook
-    assert "main/deploy/docker/docker-compose.hostinger-https.yml" in runbook
+    assert "main/deploy/docker/docker-compose.hostinger-external-edge.yml" in runbook
+    assert "docker-compose.hostinger-https.yml" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "ports 80 and 443" in normalized
     assert "DNS" in runbook
