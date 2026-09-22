@@ -16,6 +16,7 @@ DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
+HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
 HOSTINGER_GATEWAY_DOCKERFILE = DOCKER_DIR / "hostinger-gateway.Dockerfile"
@@ -243,7 +244,7 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     )
 
 
-def test_hostinger_zero_config_profile_is_direct_https() -> None:
+def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     compose = HOSTINGER_ZERO_CONFIG_COMPOSE.read_text(encoding="utf-8")
 
     remote_context = (
@@ -265,7 +266,7 @@ def test_hostinger_zero_config_profile_is_direct_https() -> None:
     assert '      - "8000"' in control_plane
     assert '      - "8080"' in web
 
-    assert "AI_MAP_HOSTINGER_EDGE_MODE: direct" in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
     assert (
         "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
@@ -275,22 +276,55 @@ def test_hostinger_zero_config_profile_is_direct_https() -> None:
     assert "network_mode: host" not in gateway
     assert "privileged:" not in gateway
     assert "/var/run/docker.sock" not in gateway
-    assert '      - "80:80"' in gateway
-    assert '      - "443:443"' in gateway
-    assert "traefik.enable=true" not in gateway
-    assert "traefik-proxy" not in gateway
+
+    assert '"80:80"' not in gateway
+    assert '"443:443"' not in gateway
+    assert '"${AI_MAP_HOSTINGER_BOOTSTRAP_PORT:-18080}:8080"' in gateway
+    assert "traefik.enable=true" in gateway
+    assert "traefik.docker.network=traefik-proxy" in gateway
+    assert "HostRegexp(" in gateway
+    assert "HostSNIRegexp(" in gateway
+    assert "srv[0-9]+" in gateway
+    assert ".entrypoints=web" in gateway
+    assert ".entrypoints=websecure" in gateway
+    assert ".tls.passthrough=true" in gateway
+    assert "HostSNI(`*`)" not in gateway
+    assert "HostSNIRegexp(`^.*$`)" not in gateway
+    assert ".loadbalancer.server.port=80" in gateway
+    assert ".loadbalancer.server.port=443" in gateway
+
     assert "      - hostinger-gateway-data:/data" in gateway
     assert "      - hostinger-gateway-config:/config" in gateway
     assert "      - no-new-privileges:true" in gateway
     assert "    cap_drop:\n      - ALL" in gateway
     assert "    cap_add:\n      - NET_BIND_SERVICE" in gateway
     assert "      - platform" in gateway
+    assert "      - traefik-proxy" in gateway
 
     assert "hostinger-gateway-data:" in compose
     assert "hostinger-gateway-config:" in compose
+    assert "traefik-proxy:\n    external: true" in compose
+    assert "TRAEFIK_HOST" not in compose
     assert "AI_MAP_TRAEFIK_NETWORK" not in compose
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
-    assert "TRAEFIK_HOST" not in compose
+
+
+def test_hostinger_direct_profile_preserves_direct_caddy_edge() -> None:
+    compose = HOSTINGER_DIRECT_COMPOSE.read_text(encoding="utf-8")
+    control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
+    assert "ports:" not in control_plane
+    assert "ports:" not in web
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: direct" in gateway
+    assert "uts: host" in gateway
+    assert '      - "80:80"' in gateway
+    assert '      - "443:443"' in gateway
+    assert "traefik.enable=true" not in gateway
+    assert "traefik-proxy" not in gateway
+    assert "hostinger-gateway-data:" in compose
+    assert "hostinger-gateway-config:" in compose
 
 
 def test_hostinger_legacy_entry_points_remain_migration_safe() -> None:
