@@ -235,7 +235,7 @@ automatic Hostinger hostname. Point the DNS record at the VPS before redeploying
 complete public certificate validation.
 
 If the host hostname is not a recognized Hostinger-managed `srvNNNNNN.hstgr.cloud` value and no
-explicit public domain is configured, the gateway fails closed: it serves only HTTP 503 setup
+explicit public domain is configured, the gateway remains fail-closed: it serves only HTTP 503 setup
 guidance and never proxies Web/API traffic.
 
 ### Advanced shared-Traefik profile
