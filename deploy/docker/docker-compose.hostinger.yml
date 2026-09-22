@@ -65,7 +65,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.rule=Host(\`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}\`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.tls.certresolver=letsencrypt"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
