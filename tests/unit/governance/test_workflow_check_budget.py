@@ -90,16 +90,20 @@ def test_repository_maintenance_stays_out_of_pr_gate_and_cleans_orphans() -> Non
     assert "schedule:" in maintenance_triggers
     assert "\n  push:" in maintenance_triggers
     assert "main" in maintenance_triggers
-    assert '".github/workflows/repository-maintenance.yml"' in maintenance_triggers
+    assert '".github/workflows/**"' in maintenance_triggers
     assert "pull_request:" not in maintenance_triggers
 
     maintenance = _text("repository-maintenance.yml")
     assert "cleanup-orphaned-actions-history" not in _text("repository-quality.yml")
     assert "cleanup-orphaned-actions-history" in maintenance
+    assert "full_history_scan:" in maintenance
     assert "listRepoWorkflows" in maintenance
     assert "workflow.state !== 'deleted'" in maintenance
-    assert "path.startsWith('.github/workflows/')" in maintenance
-    assert "!currentPaths.has(run.path)" in maintenance
+    assert "status: 'completed'" in maintenance
+    assert "listWorkflowRuns" in maintenance
+    assert "listWorkflowRunsForRepo" in maintenance
+    assert "currentPaths.has(run.path)" in maintenance
+    assert "maxDelete = 4000" in maintenance
 
 
 def test_conformance_keeps_pr_and_scheduled_coverage() -> None:
