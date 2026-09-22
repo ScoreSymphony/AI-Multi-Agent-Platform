@@ -17,6 +17,9 @@ from ai_multi_agent_platform.configuration import (
     ConfigurationSchema,
 )
 
+DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30
+MAX_SHUTDOWN_TIMEOUT_SECONDS = 3600
+
 _SINGLE_NODE_SCHEMA = ConfigurationSchema(
     version="1",
     json_schema={
@@ -48,7 +51,7 @@ _SINGLE_NODE_SCHEMA = ConfigurationSchema(
                     "shutdown_timeout_seconds": {
                         "type": "integer",
                         "minimum": 1,
-                        "maximum": 3600,
+                        "maximum": MAX_SHUTDOWN_TIMEOUT_SECONDS,
                     },
                     "registry_catalog": {"type": ["string", "null"]},
                     "registry_signature_keys": {"type": ["string", "null"]},
@@ -68,7 +71,7 @@ _DEFAULTS = ConfigLayer(
             "port": 8000,
             "secure_cookie": True,
             "log_level": "info",
-            "shutdown_timeout_seconds": 30,
+            "shutdown_timeout_seconds": DEFAULT_SHUTDOWN_TIMEOUT_SECONDS,
             "registry_catalog": None,
             "registry_signature_keys": None,
             "application_release_gate_policy": None,
@@ -87,7 +90,7 @@ class SingleNodeConfig:
     port: int = 8000
     secure_cookie: bool = True
     log_level: str = "info"
-    shutdown_timeout_seconds: int = 30
+    shutdown_timeout_seconds: int = DEFAULT_SHUTDOWN_TIMEOUT_SECONDS
     registry_catalog: Path | None = None
     registry_signature_keys: Path | None = None
     application_release_gate_policy: Path | None = None

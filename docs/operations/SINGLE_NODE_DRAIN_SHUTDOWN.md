@@ -36,6 +36,12 @@ export AI_MAP_SHUTDOWN_TIMEOUT_SECONDS="30"
 
 The supported range is 1–3600 seconds.
 
+For the optional Docker Compose deployment profiles, the container hard-stop grace is 3610
+seconds: ten seconds beyond the maximum supported application drain budget. Compose therefore
+does not shorten any supported `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` value; the application timeout
+remains the canonical drain authority and normally terminates the process before the outer
+container deadline.
+
 A first SIGTERM/SIGINT requests the normal bounded drain. A second termination signal while the
 server is already exiting escalates to Uvicorn force-exit semantics: connection/task settlement and
 application lifespan cleanup may be skipped. The drain is then recorded as forced with

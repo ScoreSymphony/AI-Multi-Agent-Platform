@@ -121,9 +121,8 @@ small intentionally:
 
 - `AI_MAP_PUBLIC_PORT` — host-side Web port, default `8080`;
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
-- `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`. The current Compose
-  profile supports the default 30-second budget; do not raise it above 30 seconds while the
-  container stop grace remains fixed at 40 seconds.
+- `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
+  `1–3600` seconds.
 
 The container-internal data directory, Control Plane port and secure-cookie setting are fixed by
 the reference composition because changing them is not required for ordinary operator use.
@@ -147,10 +146,13 @@ Stop gracefully:
 docker compose -f docker-compose.yml stop
 ```
 
-The Control Plane gets a 40-second Compose stop grace period around the supported 30-second
-platform shutdown/drain budget. Larger application drain budgets are not currently supported by
-this Compose profile because the fixed container grace could terminate the process before the
-configured drain completes.
+The Control Plane gets a 3610-second Compose hard-stop grace period. This is deliberately
+strictly greater than the platform's maximum supported 3600-second shutdown/drain budget, with
+10 seconds of container-level overhead. The application drain budget remains the lifecycle
+authority: with the default 30-second budget, the Control Plane normally exits on its own within
+that bound rather than waiting for the outer Compose grace period. Any supported
+`AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` value therefore remains shorter than Compose's hard-kill
+deadline.
 
 Remove containers and the private network while retaining canonical state:
 
