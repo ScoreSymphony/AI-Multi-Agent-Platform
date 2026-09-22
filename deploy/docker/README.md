@@ -212,13 +212,15 @@ The first platform deployment does **not** require Traefik to exist already:
    host ports and leaves the gateway in fail-closed setup-pending mode;
 3. deploy Hostinger's Traefik template/project if it is not already running and verify that its
    shared external Docker network `traefik-proxy` exists;
-4. create a DNS `A` record for the hostname you want to use and point it at the VPS;
-5. in the platform Docker project environment set:
+4. in the platform Docker project environment set:
    - `AI_MAP_TRAEFIK_NETWORK=traefik-proxy`
    - `AI_MAP_TRAEFIK_EXTERNAL=true`
-   - `AI_MAP_PUBLIC_DOMAIN=agents.example.com` (replace with your hostname)
-6. redeploy the platform project;
-7. verify `https://<your-domain>/api/v1/health` and open that same HTTPS origin in the browser.
+5. redeploy the platform project;
+6. when Hostinger provides `TRAEFIK_HOST`, the platform derives the temporary HTTPS hostname as
+   `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`; use Hostinger's **Open** action or verify
+   `https://<project>.<traefik-host>/api/v1/health`;
+7. optionally configure your own DNS name by pointing it at the VPS, setting
+   `AI_MAP_PUBLIC_DOMAIN=agents.example.com`, and redeploying again.
 
 The Web container stays only on the private `platform` network. A dedicated
 `hostinger-gateway` joins the private `platform` network and one ingress network. On a clean
@@ -232,12 +234,13 @@ the private `platform` network on port `8000`.
 If the Hostinger Traefik project uses a different shared network name, set
 `AI_MAP_TRAEFIK_NETWORK` to that name while keeping `AI_MAP_TRAEFIK_EXTERNAL=true`.
 
-The profile remains importable before `AI_MAP_PUBLIC_DOMAIN` is configured. In that state the
-gateway runs in fail-closed setup-pending mode, returns HTTP 503 setup guidance for every request,
-and contains no reverse proxy to Web/API. Once a shared Traefik network is enabled but the domain is
-still absent, the Traefik Host rule uses the reserved hostname `setup.invalid` and still reaches
-only that inert gateway. This remains safe even if a client deliberately sends
-`Host: setup.invalid` to the VPS. The profile never falls back to direct public HTTP or to
+The profile remains importable before any public hostname is available. Hostname selection is
+ordered deliberately: an explicit `AI_MAP_PUBLIC_DOMAIN` wins; otherwise, when Hostinger provides
+`TRAEFIK_HOST`, the platform uses `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` so Hostinger's
+temporary `*.hstgr.cloud` HTTPS address works with the **Open** action. If neither value exists,
+the Traefik rule falls back to the reserved `${COMPOSE_PROJECT_NAME}.setup.invalid` hostname and
+the gateway runs in fail-closed setup-pending mode, returns HTTP 503 guidance for every request,
+and contains no reverse proxy to Web/API. The profile never falls back to direct public HTTP or to
 publishing `:8080`, and `AI_MAP_SECURE_COOKIE=true` remains unchanged.
 
 If deployment reports that host port 80 or 443 is already in use, do not add another
@@ -256,10 +259,11 @@ ordinary redeployments.
 The checked-in Compose profile contains no credentials. Supported deployment overrides are kept
 small intentionally:
 
-- `AI_MAP_PUBLIC_DOMAIN` — hostname used by the default `docker-compose.hostinger.yml` (and its
-  `docker-compose.hostinger-https.yml` compatibility alias). It may be absent during initial
-  Hostinger import; the Traefik router then targets the reserved `setup.invalid` hostname and the
-  dedicated gateway remains in fail-closed 503 setup-pending mode. Set it before browser use;
+- `AI_MAP_PUBLIC_DOMAIN` — optional explicit hostname override used by the default
+  `docker-compose.hostinger.yml` (and its `docker-compose.hostinger-https.yml` compatibility
+  alias). When absent, Hostinger's `TRAEFIK_HOST` is used to derive the temporary hostname as
+  `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`. If neither is available, the gateway remains in
+  fail-closed 503 setup-pending mode;
 - `AI_MAP_TRAEFIK_NETWORK` — ingress network name. The clean-import default is the isolated
   `ai-map-hostinger-edge`; set it to Hostinger's shared network (normally `traefik-proxy`) before
   browser use;
