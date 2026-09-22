@@ -31,6 +31,33 @@ The page renders these server-owned states:
 
 Server-provided guidance, execution blockers and candidate IDs remain authoritative.
 
+## Applications and components
+
+The persistent browser-first setup lifecycle exposes reviewed Registry-backed packages in the same
+`/onboarding` journey. The shipped single-node profile provides a small starter Registry by
+default; a normal fresh installation therefore does not need an operator-side
+`AI_MAP_REGISTRY_CATALOG` step before optional components can be displayed.
+
+The starter catalog is deliberately conservative. It currently includes the platform-owned
+**Hermes adapter** as an optional orchestrator package. Selection and installation use the
+canonical Registry/Marketplace and Plugin owner-domain paths. The browser never runs an upstream
+installer script directly.
+
+Hermes has two distinct states that the UI must not collapse:
+
+- the platform-owned adapter package may be installed through browser setup;
+- the Hermes API server remains a separately managed self-hosted runtime until a future canonical
+  managed-runtime installer exists.
+
+After only the first step, the product reports `adapter_installed`, keeps the external runtime as
+an explicit prerequisite and does not treat the selected Hermes option as readiness-complete. The
+selection remains removable from the setup plan, so an intentionally unconfigured optional runtime
+cannot dead-end the rest of first-run setup. The platform-native orchestrator remains the baseline,
+and no remote or paid service is selected implicitly.
+
+An operator-provided `registry_catalog` replaces the starter catalog for deployments that govern
+their own distribution source.
+
 ## Model setup
 
 Model configuration uses only:

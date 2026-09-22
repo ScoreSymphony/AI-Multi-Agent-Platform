@@ -127,6 +127,14 @@ async function waitForButton(page, name) {
   return button;
 }
 
+async function waitForCheckboxState(locator, expected, label) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if ((await locator.isChecked()) === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`${label} did not persist the expected checkbox state ${expected}.`);
+}
+
 async function logoutThroughBrowserClient(page) {
   await page.evaluate(async () => {
     const { BrowserSessionClient } = await import("/src/api/browserSession.ts");
@@ -492,6 +500,41 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
+
+  // #1391: a clean default install must expose the shipped optional-component catalog without
+  // operator-side Registry configuration. Hermes is deliberately presented as an adapter package,
+  // not as an already managed Hermes runtime.
+  const hermesCard = page.locator("article.state").filter({ hasText: "Hermes adapter" });
+  await hermesCard.waitFor();
+  const hermesCardText = await hermesCard.innerText();
+  requireText(hermesCardText, "installable", "Fresh-install Hermes adapter card");
+  requireText(hermesCardText, "external", "Fresh-install Hermes delivery mode");
+  requireText(
+    hermesCardText,
+    "does not install or start Hermes itself",
+    "Fresh-install Hermes runtime prerequisite",
+  );
+
+  const hermesSelection = hermesCard.getByLabel("Include in setup plan", { exact: true });
+  await hermesSelection.click();
+  await waitForCheckboxState(hermesSelection, true, "Hermes setup selection");
+  await page.getByRole("status").filter({ hasText: "Component selection saved" }).waitFor();
+  await (await waitForButton(page, "Provision selected components")).click();
+  await page.getByRole("status").filter({ hasText: "canonical owner domains" }).waitFor();
+  await hermesCard.getByText("adapter_installed", { exact: true }).waitFor();
+  const installedHermesText = await hermesCard.innerText();
+  requireText(
+    installedHermesText,
+    "required external runtime",
+    "Installed Hermes adapter prerequisite state",
+  );
+
+  // Adapter installation is durable, but removing it from the setup plan must remain possible so
+  // an intentionally unconfigured optional runtime cannot dead-end the rest of first-run setup.
+  await hermesSelection.click();
+  await page.getByRole("status").filter({ hasText: "Component selection saved" }).waitFor();
+  await hermesSelection.waitFor({ state: "detached" });
+
   await assertModelSetupContract(page);
 
   await page.locator('select[name="adapter_id"]').selectOption("openai-compatible");

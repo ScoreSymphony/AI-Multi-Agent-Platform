@@ -28,11 +28,11 @@ from .components import (
     CompatibilityState,
     ComponentAvailability,
     ComponentCategory,
-    ComponentLifecycle,
     DiscoveredComponent,
     SetupProfile,
 )
 from .service import OnboardingService
+from .setup_catalog import project_registry_card, registry_category
 from .setup_registry_contracts import SetupRegistryItem, SetupRegistryPort
 
 SETUP_SESSION_RESOURCE_ID = "initial-setup"
@@ -559,7 +559,7 @@ class BrowserFirstSetupService:
                 blockers = ("registry item is not available from the configured Registry",)
             else:
                 display_name = item.name
-                category = _registry_category(item.categories)
+                category = registry_category(item.categories)
                 if item.route == "manual":
                     state = ProvisioningActionState.MANUAL_REQUIRED
                     blockers = ("registry item declares a manual distribution route",)
@@ -684,50 +684,14 @@ class BrowserFirstSetupService:
         }
 
     def _registry_card(self, item: SetupRegistryItem) -> dict[str, JsonValue]:
-        technical = item.technical
         registry = self.registry
-        installed = registry.installed_version(item.item_id) if registry is not None else None
-        manual = item.route == "manual"
-        blocked = item.deprecated or item.yanked
-        deployment_modes = list(technical.deployment_modes) if technical else []
-        external = "hosted" in deployment_modes or (
-            technical is not None and technical.network_status == "required"
+        return project_registry_card(
+            item,
+            installed_version=(
+                registry.installed_version(item.item_id) if registry is not None else None
+            ),
+            mutation_enabled=registry is not None and registry.mutation_enabled,
         )
-        return {
-            "id": f"{item.item_id}@{item.version}",
-            "kind": "registry_item",
-            "display_name": item.name,
-            "utility": item.description,
-            "category": _registry_category(item.categories),
-            "install_status": (
-                "installed"
-                if installed is not None
-                else "blocked"
-                if blocked
-                else "manual_required"
-                if manual or registry is None or not registry.mutation_enabled
-                else "installable"
-            ),
-            "compatibility": "blocked" if blocked else "compatible",
-            "recommendation": _registry_recommendation(
-                technical.lifecycle_status if technical else None
-            ),
-            "dependencies": [dependency.item_id for dependency in item.dependencies],
-            "blockers": (
-                ["registry item is deprecated or yanked"]
-                if blocked
-                else ["manual distribution route"]
-                if manual
-                else []
-            ),
-            "delivery": "external" if external else "local",
-            "requires_secrets": False,
-            "configuration_fields": [],
-            "license": item.license,
-            "upstream": item.source_repository,
-            "version": item.version,
-            "technical_id": item.item_id,
-        }
 
     def _steps(
         self,
@@ -945,29 +909,6 @@ def _category_utility(category: ComponentCategory) -> str:
         ComponentCategory.STORAGE: "Persists files, artifacts and platform data.",
         ComponentCategory.COMPUTE: "Provides local or distributed compute capacity.",
     }[category]
-
-
-def _registry_category(categories: tuple[str, ...]) -> str:
-    category_set = set(categories)
-    if category_set & {"inference-runtime", "model-and-dataset-tooling"}:
-        return "model_provider"
-    if category_set & {"agent-framework"}:
-        return "orchestrator"
-    if category_set & {"memory-and-context", "retrieval"}:
-        return "memory_knowledge"
-    if category_set & {"browser-and-execution", "coding-agent"}:
-        return "executor"
-    return "tools_mcp"
-
-
-def _registry_recommendation(lifecycle: str | None) -> str:
-    if lifecycle in {"adopted", "reference"}:
-        return ComponentLifecycle.RECOMMENDED.value
-    if lifecycle in {"pilot", "candidate"}:
-        return ComponentLifecycle.EXPERIMENTAL.value
-    if lifecycle in {"deprecated", "rejected"}:
-        return ComponentLifecycle.DEPRECATED.value
-    return ComponentLifecycle.SUPPORTED.value
 
 
 def _reject_unknown_fields(payload: dict[str, JsonValue], allowed: set[str]) -> None:

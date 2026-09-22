@@ -38,6 +38,7 @@ class SetupRegistryTechnicalMetadata:
     deployment_modes: tuple[str, ...] = ()
     network_status: str | None = None
     lifecycle_status: str | None = None
+    external_runtime_required: bool = False
 
 
 @dataclass(frozen=True, slots=True)

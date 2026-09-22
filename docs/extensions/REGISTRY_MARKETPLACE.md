@@ -189,11 +189,13 @@ parallel error types.
 
 ## Production composition
 
-The shipped single-node entrypoint keeps Registry support opt-in. When no registry catalog is configured, no `registry-items` collection or Registry mutation commands are registered and ordinary self-hosted operation is unchanged.
+The shipped single-node entrypoint enables a small reviewed starter Registry by default so the browser-first setup can offer optional installable packages on a clean deployment without an operator-side catalog step. An explicitly configured `registry_catalog` replaces that starter source with the operator-managed filesystem catalog.
 
-When an operator configures a local catalog, the default composition connects:
+Registry connectivity remains optional at the deployment boundary. Set `AI_MAP_REGISTRY_ENABLED=false` (or `SingleNodeConfig.registry_enabled=False`) for an explicit no-Registry topology; in that mode no `registry-items` collection, Registry/Marketplace mutation commands or Plugin Registry runtime are attached, and ordinary non-Registry platform operation remains independent.
 
-`FilesystemRegistryProvider -> DistributionService -> CanonicalDistributionRouter -> Plugin/Portability`
+With Registry enabled, the default composition connects either the shipped starter provider or an explicit filesystem provider to:
+
+`RegistryProvider -> DistributionService -> CanonicalDistributionRouter -> Plugin/Portability`
 
 and supplies durable installation state plus `PlatformRegistryValidationContextResolver`. The resolver derives platform version, host OS/architecture, available application runtimes, installed component evidence, capabilities, plugins, **ConnectorDefinition IDs**, models and grantable permissions from live server-side platform state rather than accepting those claims from a client. Canonical owner/local installed items may have no Marketplace source (`source_registry=None`); they are merged with Marketplace installation evidence by canonical item ID. Persisted Marketplace evidence takes precedence for the same ID, while unrelated local items remain visible to dependency decisions. Connector and runtime requirements therefore use the same canonical inventories as the rest of the single-node platform. Optional signature keys add the reference HMAC verifier at the same composition boundary.
 

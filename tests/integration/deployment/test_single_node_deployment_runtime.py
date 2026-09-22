@@ -54,6 +54,7 @@ def test_single_node_configuration_is_explicit_and_rejects_insecure_public_cooki
             "AI_MAP_PORT": "8123",
             "AI_MAP_SECURE_COOKIE": "false",
             "AI_MAP_LOG_LEVEL": "debug",
+            "AI_MAP_REGISTRY_ENABLED": "false",
             "IGNORED_SECRET": "must-not-be-imported",
         }
     )
@@ -61,6 +62,7 @@ def test_single_node_configuration_is_explicit_and_rejects_insecure_public_cooki
     assert config.port == 8123
     assert config.secure_cookie is False
     assert config.log_level == "debug"
+    assert config.registry_enabled is False
 
     with pytest.raises(ConfigurationError, match="loopback-only"):
         load_single_node_config(

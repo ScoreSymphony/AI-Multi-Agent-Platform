@@ -453,6 +453,24 @@ class DependencyAwareBrowserFirstSetupService(BrowserFirstSetupService):
 
         installed_version = registry.installed_version(selection.item_id)
         if installed_version == selection.version:
+            try:
+                item = registry.get(selection.item_id, selection.version)
+            except (LookupError, RuntimeError):
+                item = None
+            if (
+                item is not None
+                and item.technical is not None
+                and item.technical.external_runtime_required
+            ):
+                return replace(
+                    action,
+                    kind=ProvisioningActionKind.MANUAL,
+                    state=ProvisioningActionState.MANUAL_REQUIRED,
+                    blockers=(
+                        "adapter is installed, but the required external runtime/service "
+                        "must be configured and validated separately",
+                    ),
+                )
             return replace(
                 action,
                 kind=ProvisioningActionKind.REUSE,
