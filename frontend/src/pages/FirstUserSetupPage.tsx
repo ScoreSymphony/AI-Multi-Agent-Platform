@@ -4,21 +4,29 @@ import {
   type FirstUserBootstrapStatus,
 } from "../api/browserSession";
 import { Card, ErrorState } from "../components/States";
+import { BrowserAuthenticationTransportNotice } from "../security/BrowserAuthenticationTransportNotice";
+import {
+  currentBrowserAuthenticationTransport,
+  type BrowserAuthenticationTransport,
+} from "../security/browserAuthenticationTransport";
 
 export function FirstUserSetupPage({
   session,
   status,
   onComplete,
+  transport,
 }: {
   session: BrowserSessionClient;
   status: FirstUserBootstrapStatus;
   onComplete: () => void;
+  transport?: BrowserAuthenticationTransport;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const authenticationTransport = transport ?? currentBrowserAuthenticationTransport();
 
   const passwordBytes = new TextEncoder().encode(password).byteLength;
   const passwordTooShort = password.length < status.password_policy.min_length;
@@ -66,10 +74,14 @@ export function FirstUserSetupPage({
         </p>
       </header>
 
-      {error ? <ErrorState error={error} /> : null}
+      {!authenticationTransport.supported ? (
+        <BrowserAuthenticationTransportNotice transport={authenticationTransport} />
+      ) : (
+        <>
+          {error ? <ErrorState error={error} /> : null}
 
-      <Card title={recovering ? "Verify first administrator" : "Administrator account"}>
-        <form className="stack" onSubmit={submit}>
+          <Card title={recovering ? "Verify first administrator" : "Administrator account"}>
+            <form className="stack" onSubmit={submit}>
           <label>
             Username
             <input
@@ -129,8 +141,10 @@ export function FirstUserSetupPage({
                   : "Create administrator"}
             </button>
           </div>
-        </form>
-      </Card>
+            </form>
+          </Card>
+        </>
+      )}
     </main>
   );
 }
