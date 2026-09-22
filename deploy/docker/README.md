@@ -223,8 +223,12 @@ ${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
 No `TRAEFIK_HOST`, `AI_MAP_PUBLIC_DOMAIN`, `AI_MAP_TRAEFIK_NETWORK`, or
 `AI_MAP_TRAEFIK_EXTERNAL` value is required. The zero-config profile intentionally contains no
 exact fake `Host(...)` / `HostSNI(...)` fallback such as `setup.invalid`; that would cause
-Hostinger hPanel to choose the wrong URL for **Open**. The Compose labels use only project-scoped
-`HostRegexp` and `HostSNIRegexp` rules:
+Hostinger hPanel to choose the wrong URL for **Open**. The managed Hostinger route uses
+project-scoped `HostRegexp` and `HostSNIRegexp` rules. For migration compatibility, the profile
+also accepts an optional existing `AI_MAP_PUBLIC_DOMAIN` override through anchored
+`HostRegexp` / `HostSNIRegexp` rules that wrap the configured hostname in Go-regexp
+`\Q...\E` literal quoting. With no override, those compatibility expressions reduce to an
+empty-host match and therefore do not advertise a concrete fallback hostname:
 
 - HTTP on Traefik's `web` entrypoint is forwarded to Caddy port 80 so ACME HTTP-01 and redirects
   work;
@@ -260,9 +264,12 @@ fail-closed and serves only setup guidance.
 
 ### Explicit custom domain on host-network Traefik
 
-The zero-config profile is deliberately limited to Hostinger's managed temporary hostname so its
-hPanel **Open** metadata cannot fall back to a reserved placeholder. To use your own DNS hostname
-with the same host-network Traefik topology, use:
+For **new** custom-domain installations, the strict profile below is preferred because it requires
+the hostname explicitly. Existing deployments already tracking the zero-config URL and setting
+`AI_MAP_PUBLIC_DOMAIN` may keep doing so without migration; the compatibility route described
+above preserves that behavior without restoring `setup.invalid`.
+
+To use the strict custom-domain profile with the same host-network Traefik topology, use:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-custom-domain.yml
@@ -318,8 +325,9 @@ overrides are intentionally small:
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
 
-`AI_MAP_PUBLIC_DOMAIN` is required by the explicit
-`docker-compose.hostinger-custom-domain.yml` profile and is not part of the zero-config path.
+`AI_MAP_PUBLIC_DOMAIN` is optional on the zero-config profile for backward compatibility with
+existing deployments. New custom-domain installs should prefer
+`docker-compose.hostinger-custom-domain.yml`, where the variable is required.
 
 The following variables are only for the explicit
 `docker-compose.hostinger-shared-traefik.yml` profile:
