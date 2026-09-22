@@ -15,6 +15,7 @@ LOCAL_COMPOSE = Path("docker-compose.local.yml")
 DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
+HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
 HOSTINGER_GATEWAY_DOCKERFILE = DOCKER_DIR / "hostinger-gateway.Dockerfile"
@@ -242,8 +243,8 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     )
 
 
-def test_hostinger_default_url_profile_is_zero_config_https() -> None:
-    compose = HOSTINGER_COMPOSE.read_text(encoding="utf-8")
+def test_hostinger_zero_config_profile_is_direct_https() -> None:
+    compose = HOSTINGER_ZERO_CONFIG_COMPOSE.read_text(encoding="utf-8")
 
     remote_context = (
         "${AI_MAP_SOURCE_CONTEXT:-"
@@ -292,10 +293,18 @@ def test_hostinger_default_url_profile_is_zero_config_https() -> None:
     assert "TRAEFIK_HOST" not in compose
 
 
-def test_hostinger_https_compatibility_alias_matches_zero_config_default() -> None:
-    assert HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8") == HOSTINGER_COMPOSE.read_text(
-        encoding="utf-8"
-    )
+def test_hostinger_legacy_entry_points_remain_migration_safe() -> None:
+    legacy = HOSTINGER_COMPOSE.read_text(encoding="utf-8")
+    https_alias = HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8")
+
+    assert https_alias == legacy
+    assert "uts: host" not in legacy
+    assert '"80:80"' not in legacy
+    assert '"443:443"' not in legacy
+    assert "traefik.enable=true" in legacy
+    assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-ai-map-hostinger-edge}" in legacy
+    assert "external: ${AI_MAP_TRAEFIK_EXTERNAL:-false}" in legacy
+    assert "${TRAEFIK_HOST:-setup.invalid}" in legacy
 
 
 def test_hostinger_shared_traefik_profile_remains_explicit_and_private() -> None:
@@ -332,6 +341,10 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
 
     compose_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
+        "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
+    )
+    legacy_url = (
+        "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
         "main/deploy/docker/docker-compose.hostinger.yml"
     )
     shared_url = (
@@ -339,6 +352,7 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
         "main/deploy/docker/docker-compose.hostinger-shared-traefik.yml"
     )
     assert compose_url in runbook
+    assert legacy_url in runbook
     assert shared_url in runbook
     assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
@@ -390,7 +404,7 @@ def test_hostinger_gateway_supports_direct_https_and_shared_traefik_modes() -> N
     assert ":8080 {" in shared_pending
     assert "reverse_proxy" not in shared_pending
 
-    assert 'edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-direct}"' in entrypoint
+    assert 'edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-shared-traefik}"' in entrypoint
     assert 'explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
     assert 'traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"' in entrypoint
     assert 'project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"' in entrypoint
