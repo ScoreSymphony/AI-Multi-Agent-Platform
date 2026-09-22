@@ -67,6 +67,19 @@ This is a scheduling change, not a coverage reduction. `verify_pytest_shards.py`
 that the union of all non-unit lanes equals the canonical serial collection exactly. The retained
 330-second aggregate pytest critical-path guard is not loosened by the split.
 
+
+The first successful retained split run (`35746793037`) measured:
+
+| Lane | Wall time | Testcases | Skips | Slowest test | Slowest module |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `integration-core` | 93.360 s | 2507 | 58 | 8.301 s | 8.301 s |
+| `integration-recovery-deployment` | 50.020 s | 219 | 0 | 2.534 s | 5.522 s |
+
+The aggregate pytest critical path on that run was **93.749 seconds** (the
+`system-regression` lane), while the full Python validation critical path was **120.792 seconds**
+(`integration-core`). Both are comfortably inside the unchanged 330-second pytest and
+350-second validation guards.
+
 Static inspection also found many intentionally delayed SQLite/offload tests (typically
 0.03–0.12 seconds), real process/Pipelock/MCP readiness loops, OpenSSL-backed security setup and
 long-lived child-process fixtures whose children are explicitly terminated. Those delays express
