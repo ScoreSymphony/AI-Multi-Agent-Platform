@@ -156,7 +156,7 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. On a fresh installation the server-owned bootstrap state routes directly to **Create your administrator account**. Creating the account installs the explicit initial administrator policy, establishes the browser session, and continues into the persistent setup wizard. The wizard discovers the environment, lets you review component/application choices, previews compatibility and dependency actions before mutation, resumes persisted progress after reload/restart, validates the actual backend state, and only then enables the dashboard.
+Open `http://127.0.0.1:5173`. On a fresh installation the server-owned bootstrap state routes directly to **Create your administrator account**. Creating the account installs the explicit initial administrator policy, establishes the browser session, and continues into the persistent setup wizard. The wizard discovers the environment, lets you review component/application choices, previews compatibility and dependency actions before mutation, resumes persisted progress after reload/restart, and validates the actual backend state. Onboarding readiness does not lock the authenticated shell: installation and configuration surfaces remain reachable while setup is incomplete, with an advisory callout linking back to the wizard. Operations that genuinely need unfinished prerequisites still remain unavailable until those prerequisites are configured.
 
 The normal single-node profile also ships a conservative starter Registry, so optional reviewed packages can appear in this component step without an operator first configuring `AI_MAP_REGISTRY_CATALOG`. The current starter catalog exposes the platform-owned **Hermes adapter** as an optional orchestration package. Installing that package does not install or start the Hermes API server: the UI reports `adapter_installed` and keeps the separately managed self-hosted runtime as an explicit prerequisite. No remote or paid provider is selected implicitly. An explicitly configured `registry_catalog` remains the operator-controlled replacement distribution source, while `AI_MAP_REGISTRY_ENABLED=false` preserves an explicit no-Registry deployment when desired.
 
@@ -188,7 +188,7 @@ The reference Control Plane listener is `127.0.0.1:8000`; the local Vite Web UI 
 
 The maintained first product workflow is a real multi-agent run, not a UI-only demo. It uses the same canonical Control Plane state as the rest of the platform.
 
-The browser-first setup routes incomplete installations back into `/onboarding` after authentication. CLI users can inspect the same canonical onboarding state after authenticating:
+The browser-first setup initially lands incomplete installations on `/onboarding` after authentication, but it does not trap the authenticated user there. Marketplace, Applications, Models, Integrations, Settings and other product surfaces remain reachable while setup is incomplete; the shell shows a resumable onboarding callout instead of redirecting every route. CLI users can inspect the same canonical onboarding state after authenticating:
 
 ```bash
 platform auth login --username admin
