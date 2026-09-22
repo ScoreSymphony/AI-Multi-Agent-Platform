@@ -272,15 +272,16 @@ def test_hostinger_default_url_profile_is_clean_import_safe() -> None:
     assert (
         "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-"
         "${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}."
-        "${TRAEFIK_HOST:-setup.invalid}}`)"
-        in gateway
+        "${TRAEFIK_HOST:-setup.invalid}}`)" in gateway
     )
     assert ".entrypoints=websecure" in gateway
     assert ".tls.certresolver=letsencrypt" in gateway
     assert ".loadbalancer.server.port=8080" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
     assert "AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}" in gateway
-    assert "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
+    assert (
+        "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
+    )
     assert "      - platform" in gateway
     assert "      - hostinger-edge" in gateway
     assert "hostinger-edge:" in compose
