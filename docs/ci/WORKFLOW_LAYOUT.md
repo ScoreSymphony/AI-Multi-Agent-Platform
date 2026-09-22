@@ -10,7 +10,7 @@ The repository keeps durable CI organized by stable responsibility rather than b
 - `governance.yml` — pull-request dependency review only.
 - `governance-maintenance.yml` — issue metadata validation and scheduled/manual upstream discovery.
 - `repository-quality.yml` — pull-request test-layout policy and collection reconciliation.
-- `repository-maintenance.yml` — manual repository-maintenance operations such as bounded orphaned Actions-history cleanup.
+- `repository-maintenance.yml` — bounded orphaned Actions-history cleanup; it runs on a weekly schedule, by explicit manual dispatch, and once when its own definition changes on `main`.
 - `conformance.yml` — path-scoped pull-request conformance plus scheduled/manual platform, MCP and acceptance evidence.
 - `benchmark-smoke.yml` and `performance-extended-smoke.yml` — durable benchmark and pressure/fault smoke coverage.
 - `ha-postgres.yml` — PostgreSQL HA coordination and persistence acceptance.
@@ -124,6 +124,8 @@ Workflow consolidation must preserve the identities of checks that are still int
 
 ## Actions history cleanup
 
-Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-maintenance.yml` contains the bounded cleanup job with an explicit allowlist of workflow paths retired by the workflow consolidation. It deletes only completed runs whose recorded path is in that reviewed retirement set; unrelated historical or active workflow runs are not selected.
+Deleting a workflow file does not immediately remove its old runs from the Actions sidebar. `repository-maintenance.yml` therefore compares completed workflow runs with the workflow definitions that still exist in the repository. A run is eligible for cleanup only when its recorded path starts with `.github/workflows/` and that exact path is absent from the current repository workflow inventory.
 
-The cleanup is deliberately manual-only through `workflow_dispatch`. Keeping maintenance outside `repository-quality.yml` prevents an otherwise skipped maintenance job from appearing as an extra check on every pull request or default-branch push.
+This deliberately excludes active workflow definitions and GitHub-managed workflow surfaces whose run paths are not repository workflow files. Deletion remains bounded by a hard per-run cap so an unexpected inventory change cannot erase an unbounded amount of history in one maintenance execution.
+
+The cleanup runs weekly, can be requested explicitly through `workflow_dispatch`, and also runs when `repository-maintenance.yml` itself is changed on `main`. The self-path-scoped push trigger lets cleanup-policy changes take effect immediately without adding a routine check to unrelated default-branch pushes. Keeping maintenance outside `repository-quality.yml` also prevents maintenance jobs from appearing as pull-request checks.
