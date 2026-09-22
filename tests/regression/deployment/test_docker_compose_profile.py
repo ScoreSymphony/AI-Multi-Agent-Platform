@@ -326,8 +326,7 @@ def test_hostinger_custom_domain_profile_requires_exact_domain() -> None:
     assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
     assert (
         "AI_MAP_PUBLIC_DOMAIN: "
-        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}"
-        in gateway
+        "${AI_MAP_PUBLIC_DOMAIN:?set AI_MAP_PUBLIC_DOMAIN to the public DNS hostname}" in gateway
     )
     assert "setup.invalid" not in gateway
     assert "HostRegexp(" not in gateway
