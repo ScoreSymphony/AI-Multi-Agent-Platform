@@ -319,6 +319,8 @@ def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisit
     assert "ai-map-hostinger-edge" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "TRAEFIK_HOST" in runbook
+    assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
+    assert "Compose from URL" in runbook
     assert "${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}" in runbook
     assert "*.hstgr.cloud" in runbook
     assert "setup.invalid" in runbook
@@ -380,6 +382,9 @@ def test_hostinger_gateway_is_fail_closed_until_public_domain_is_valid() -> None
     assert 'domain="$project_name.$traefik_host"' in entrypoint
     assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "setup_pending" in entrypoint
+    assert "For Compose-from-URL deployments, add TRAEFIK_HOST" in entrypoint
+    assert "srv123456.hstgr.cloud" in entrypoint
+    assert "Environment variables" in entrypoint
     assert "invalid_domain" in entrypoint
     assert "Do not include a scheme, path, port, wildcard, whitespace, or IP address." in entrypoint
     assert "Caddyfile.hostinger-setup-pending" in entrypoint
