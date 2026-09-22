@@ -78,12 +78,16 @@ Hostinger's shared `traefik-proxy` network exists. The gateway stays fail-closed
 configured.
 
 Before browser use, deploy Hostinger's Traefik project, then set
-`AI_MAP_TRAEFIK_NETWORK=traefik-proxy`, `AI_MAP_TRAEFIK_EXTERNAL=true`, and
-`AI_MAP_PUBLIC_DOMAIN=<your-hostname>` in the Docker project environment and redeploy. Traefik
-then becomes the single HTTPS edge and routes only to the dedicated gateway; Web/API remain private.
-An explicit `docker-compose.local.yml` preserves the loopback `:8080` workflow for local
-development and CI only. Detailed backup/restore, TLS, Hostinger and alternate external-edge
-guidance lives in [`deploy/docker/README.md`](deploy/docker/README.md).
+`AI_MAP_TRAEFIK_NETWORK=traefik-proxy` and `AI_MAP_TRAEFIK_EXTERNAL=true` in the Docker project
+environment and redeploy. When Hostinger provides its standard `TRAEFIK_HOST` value, the platform
+uses `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}` automatically as the temporary HTTPS hostname, so
+Hostinger's **Open** action can use the normal `*.hstgr.cloud` address without requiring a custom
+domain first. Set `AI_MAP_PUBLIC_DOMAIN=<your-hostname>` only when you want to override that
+temporary hostname with your own DNS name. Traefik remains the single HTTPS edge and routes only to
+the dedicated gateway; Web/API remain private. An explicit `docker-compose.local.yml` preserves
+the loopback `:8080` workflow for local development and CI only. Detailed backup/restore, TLS,
+Hostinger and alternate external-edge guidance lives in
+[`deploy/docker/README.md`](deploy/docker/README.md).
 
 ### Linux/macOS
 
