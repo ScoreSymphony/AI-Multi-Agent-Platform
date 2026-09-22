@@ -229,14 +229,14 @@ jobs:
             -f docker-compose.local.yml \
             -f deploy/docker/docker-compose.recovery.yml \
             config
-          AI_MAP_SOURCE_CONTEXT=. docker compose \
+          AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger.yml \
             config
       - name: Build production container images
         run: |
           docker compose -f docker-compose.yml build --pull
           docker compose -f docker-compose.local.yml build
-          AI_MAP_SOURCE_CONTEXT=. docker compose \
+          AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger.yml \
             build
       - name: Start Compose profile
