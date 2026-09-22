@@ -11,6 +11,7 @@ from ai_multi_agent_platform.deployment.config import (
 COMPOSE = Path("docker-compose.yml")
 DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
+RECOVERY_COMPOSE = DOCKER_DIR / "docker-compose.recovery.yml"
 
 _STOP_GRACE_RE = re.compile(r"^\s*stop_grace_period:\s*(\d+)s\s*$", re.MULTILINE)
 _SHUTDOWN_DEFAULT_RE = re.compile(
@@ -20,6 +21,8 @@ _SHUTDOWN_DEFAULT_RE = re.compile(
 
 
 def _control_plane_block(compose: str) -> str:
+    if "\n\n  backup:" in compose:
+        return compose.split("\n\n  backup:", 1)[0]
     return compose.split("\n  web:", 1)[0]
 
 
@@ -66,6 +69,65 @@ def test_compose_stop_grace_exceeds_every_supported_shutdown_budget() -> None:
     assert root_grace == hostinger_grace
 
 
+def test_compose_backup_service_exports_quiesced_backup_outside_data_volume() -> None:
+    compose = COMPOSE.read_text(encoding="utf-8")
+
+    assert "  backup:" in compose
+    assert "profiles:\n      - operations" in compose
+    assert "entrypoint:\n      - platform-backup" in compose
+    assert "source: platform-data" in compose
+    assert "target: /var/lib/ai-multi-agent-platform" in compose
+
+    backup_service = compose.split("\n\n  backup:", 1)[1].split("\n  web:", 1)[0]
+    data_mount = backup_service.split("      - type: volume", 1)[1].split(
+        "      - type: bind", 1
+    )[0]
+    assert "read_only:" not in data_mount
+    assert "read_only: true" in backup_service
+    assert "source: ${AI_MAP_BACKUP_DIR:-./backups}" in compose
+    assert "target: /backups" in compose
+    assert "create_host_path: false" in compose
+    assert "network_mode: none" in compose
+
+
+def test_recovery_override_restores_into_clean_volume_subpath() -> None:
+    recovery = RECOVERY_COMPOSE.read_text(encoding="utf-8")
+
+    assert "subpath: restored-data" in recovery
+    assert "external: true" in recovery
+    assert (
+        "name: ${AI_MAP_DATA_VOLUME:?set AI_MAP_DATA_VOLUME to the replacement volume name}"
+        in recovery
+    )
+    assert "  restore:" in recovery
+    assert "entrypoint:\n      - platform-backup" in recovery
+    assert "  recover-restore:" in recovery
+    assert "platform-server\n      - recover-restore" in recovery
+
+    backup_service = recovery.split("\n\n  backup:", 1)[1].split(
+        "\n\n  restore:", 1
+    )[0]
+    data_mount = backup_service.split("      - type: volume", 1)[1].split(
+        "      - type: bind", 1
+    )[0]
+    assert "read_only:" not in data_mount
+
+    restore_service = recovery.split("\n\n  restore:", 1)[1].split(
+        "\n\n  recover-restore:", 1
+    )[0]
+    assert "read_only: true" in restore_service
+    assert "network_mode: none" in restore_service
+
+
+def test_recovery_override_keeps_canonical_data_path_for_replacement_runtime() -> None:
+    recovery = RECOVERY_COMPOSE.read_text(encoding="utf-8")
+    control_plane = recovery.split("\n\n  backup:", 1)[0]
+
+    assert "target: /var/lib/ai-multi-agent-platform" in control_plane
+    assert "subpath: restored-data" in control_plane
+    assert "AI_MAP_DATA_DIR" not in control_plane
+
+
 def test_container_edge_preserves_api_prefix_and_spa_fallback() -> None:
     caddy = (DOCKER_DIR / "Caddyfile").read_text(encoding="utf-8")
 
@@ -110,6 +172,9 @@ def test_docker_runbook_documents_secure_external_edge_and_volume_retention() ->
     _, grace_seconds = _shutdown_contract(COMPOSE.read_text(encoding="utf-8"))
     assert "deletes the named volume" in normalized
     assert "raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform" in runbook
+    assert "docker-compose.recovery.yml" in runbook
+    assert "recover-restore" in runbook
+    assert "restored-data" in runbook
     assert f"{grace_seconds}-second Compose hard-stop grace period" in normalized
     assert (
         f"maximum supported {MAX_SHUTDOWN_TIMEOUT_SECONDS}-second shutdown/drain budget"
