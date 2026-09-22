@@ -14,6 +14,10 @@ DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
+HOSTINGER_GATEWAY_DOCKERFILE = DOCKER_DIR / "hostinger-gateway.Dockerfile"
+HOSTINGER_GATEWAY_CADDY = DOCKER_DIR / "Caddyfile.hostinger-gateway"
+HOSTINGER_GATEWAY_PENDING_CADDY = DOCKER_DIR / "Caddyfile.hostinger-setup-pending"
+HOSTINGER_GATEWAY_ENTRYPOINT = DOCKER_DIR / "hostinger-gateway-entrypoint.sh"
 RECOVERY_COMPOSE = DOCKER_DIR / "docker-compose.recovery.yml"
 
 _STOP_GRACE_RE = re.compile(r"^\s*stop_grace_period:\s*(\d+)s\s*$", re.MULTILINE)
@@ -240,34 +244,40 @@ def test_hostinger_default_url_profile_uses_shared_traefik_edge() -> None:
         "${AI_MAP_SOURCE_CONTEXT:-"
         "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#main}"
     )
-    assert compose.count(remote_context) == 2
+    assert compose.count(remote_context) == 3
     assert "dockerfile: deploy/docker/control-plane.Dockerfile" in compose
     assert "dockerfile: deploy/docker/web.Dockerfile" in compose
+    assert "dockerfile: deploy/docker/hostinger-gateway.Dockerfile" in compose
     assert "dockerfile: deploy/docker/https-edge.Dockerfile" not in compose
     assert "  https-edge:" not in compose
     assert "platform-data:/var/lib/ai-multi-agent-platform" in compose
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
 
     control_plane = _control_plane_block(compose)
-    web = compose.split("\n  web:", 1)[1].split("\nvolumes:", 1)[0]
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
 
     assert "ports:" not in control_plane
     assert "ports:" not in web
+    assert "ports:" not in gateway
     assert '      - "8000"' in control_plane
     assert '      - "8080"' in web
-    assert "traefik.enable=true" in web
-    assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}" in web
-    assert "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)" in web
-    assert ".entrypoints=websecure" in web
-    assert ".tls.certresolver=letsencrypt" in web
-    assert ".loadbalancer.server.port=8080" in web
-    assert "      - platform" in web
-    assert "      - traefik-proxy" in web
+    assert '      - "8080"' in gateway
+    assert "traefik.enable=true" not in web
+    assert "traefik-proxy" not in web
+    assert "traefik.enable=true" in gateway
+    assert "traefik.docker.network=${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}" in gateway
+    assert "rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}`)" in gateway
+    assert ".entrypoints=websecure" in gateway
+    assert ".tls.certresolver=letsencrypt" in gateway
+    assert ".loadbalancer.server.port=8080" in gateway
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
+    assert "      - platform" in gateway
+    assert "      - traefik-proxy" in gateway
     assert "traefik-proxy:\n    external: true" in compose
     assert "name: ${AI_MAP_TRAEFIK_NETWORK:-traefik-proxy}" in compose
     assert '"80:80"' not in compose
     assert '"443:443"' not in compose
-
 
 def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisite() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
@@ -285,23 +295,61 @@ def test_hostinger_runbook_points_to_direct_compose_file_and_traefik_prerequisit
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
     assert "AI_MAP_PUBLIC_DOMAIN" in runbook
     assert "setup.invalid" in runbook
+    assert "hostinger-gateway" in runbook
+    assert "fail-closed" in runbook
+    assert "HTTP 503" in runbook
+    assert "shared external Docker network `traefik-proxy`" in normalized
     assert "does **not** publish host ports 80 or 443" in runbook
 
 
 def test_hostinger_https_compatibility_profile_uses_shared_traefik_edge() -> None:
     compose = HOSTINGER_HTTPS_COMPOSE.read_text(encoding="utf-8")
 
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
     assert "  https-edge:" not in compose
     assert "dockerfile: deploy/docker/https-edge.Dockerfile" not in compose
-    assert "traefik.enable=true" in compose
+    assert "dockerfile: deploy/docker/hostinger-gateway.Dockerfile" in gateway
+    assert "traefik.enable=true" not in web
+    assert "traefik.enable=true" in gateway
     assert "traefik-proxy:\n    external: true" in compose
-    assert ".entrypoints=websecure" in compose
-    assert ".tls.certresolver=letsencrypt" in compose
-    assert ".loadbalancer.server.port=8080" in compose
-    assert "${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}" in compose
+    assert ".entrypoints=websecure" in gateway
+    assert ".tls.certresolver=letsencrypt" in gateway
+    assert ".loadbalancer.server.port=8080" in gateway
+    assert "${AI_MAP_PUBLIC_DOMAIN:-setup.invalid}" in gateway
     assert '"80:80"' not in compose
     assert '"443:443"' not in compose
 
+
+def test_hostinger_gateway_is_fail_closed_until_public_domain_is_valid() -> None:
+    dockerfile = HOSTINGER_GATEWAY_DOCKERFILE.read_text(encoding="utf-8")
+    active = HOSTINGER_GATEWAY_CADDY.read_text(encoding="utf-8")
+    pending = HOSTINGER_GATEWAY_PENDING_CADDY.read_text(encoding="utf-8")
+    entrypoint = HOSTINGER_GATEWAY_ENTRYPOINT.read_text(encoding="utf-8")
+
+    assert "FROM caddy:2.11.4-alpine" in dockerfile
+    assert "setcap -r /usr/bin/caddy" in dockerfile
+    assert 'ENTRYPOINT ["/usr/local/bin/ai-map-hostinger-gateway-entrypoint"]' in dockerfile
+    assert "EXPOSE 8080" in dockerfile
+
+    assert "http://{$AI_MAP_PUBLIC_DOMAIN}:8080" in active
+    assert "reverse_proxy web:8080" in active
+    assert "control-plane:8000" not in active
+
+    assert ":8080 {" in pending
+    assert "setup pending" in pending
+    assert "503" in pending
+    assert "reverse_proxy" not in pending
+    assert "web:8080" not in pending
+    assert "control-plane:8000" not in pending
+
+    assert 'domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
+    assert "setup_pending" in entrypoint
+    assert "invalid_domain" in entrypoint
+    assert "Do not include a scheme, path, port, wildcard, whitespace, or IP address." in entrypoint
+    assert "Caddyfile.hostinger-setup-pending" in entrypoint
+    assert "Caddyfile.hostinger-gateway" in entrypoint
 
 def test_generic_https_edge_remains_pinned_for_non_hostinger_root_profile() -> None:
     dockerfile = (DOCKER_DIR / "https-edge.Dockerfile").read_text(encoding="utf-8")
@@ -334,6 +382,8 @@ def test_hostinger_runbook_documents_traefik_and_alternate_external_edge() -> No
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
     assert "traefik-proxy" in runbook
     assert "setup.invalid" in runbook
+    assert "hostinger-gateway" in runbook
+    assert "fail-closed" in runbook
     assert "single HTTPS edge" in normalized
     assert "DNS" in runbook
     hostinger_section = runbook[
