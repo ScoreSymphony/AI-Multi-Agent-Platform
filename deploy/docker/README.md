@@ -211,8 +211,10 @@ The platform does **not** compete for 80/443 and does not require any external D
 
 The dedicated `hostinger-gateway` stays on the private platform bridge only. Host-network
 Traefik can reach that bridge address directly and discovers the gateway through Docker provider
-labels. The gateway joins only the host UTS namespace with `uts: host`. It reads the VPS kernel
-hostname and, when it matches Hostinger's managed `srvNNNNNN.hstgr.cloud` form, derives:
+labels. The gateway joins only the host UTS namespace with `uts: host`. Hostinger currently
+exposes the kernel hostname either as the short form `srvNNNNNN` or as the fully-qualified
+`srvNNNNNN.hstgr.cloud`. Both forms are accepted only when the server-id portion is numeric; the
+short form is normalized to `srvNNNNNN.hstgr.cloud` before the application hostname is derived:
 
 ```text
 ${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
@@ -251,9 +253,9 @@ If `AI_MAP_PUBLIC_DOMAIN=agents.example.com` is set, that explicit hostname over
 automatic Hostinger hostname. Point DNS at the VPS before redeploying so Caddy can complete public
 certificate validation.
 
-If the host hostname is not a recognized Hostinger-managed `srvNNNNNN.hstgr.cloud` value and no
-explicit public domain is configured, the gateway remains fail-closed and serves only setup
-guidance.
+If the host hostname is neither an exact `srvNNNNNN` short hostname nor an exact
+`srvNNNNNN.hstgr.cloud` hostname and no explicit public domain is configured, the gateway remains
+fail-closed and serves only setup guidance.
 
 ### Direct Hostinger edge without Traefik
 
