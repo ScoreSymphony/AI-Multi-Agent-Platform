@@ -86,12 +86,20 @@ services:
     environment:
       AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough
       AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}
+      AI_MAP_HOSTINGER_COMPOSE_HOSTNAME: ${HOSTNAME:-}
       AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}
     expose:
       - "80"
       - "443"
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.rule=Host(\`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}.hstgr.cloud}\`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.entrypoints=web"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.rule=HostSNI(\`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}.hstgr.cloud}\`)"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.entrypoints=websecure"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.tls.passthrough=true"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=HostRegexp(`^${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}\\.srv[0-9]+\\.hstgr\\.cloud$`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http"
