@@ -4,6 +4,7 @@ set -eu
 edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-shared-traefik}"
 explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"
 traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
+compose_hostname="${AI_MAP_HOSTINGER_COMPOSE_HOSTNAME:-}"
 project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 
 case "$edge_mode" in
@@ -35,17 +36,17 @@ invalid_domain() {
   exit 64
 }
 
-derive_hostinger_domain() {
-  host_hostname="$(hostname 2>/dev/null || true)"
-  case "$host_hostname" in
+normalize_hostinger_hostname() {
+  candidate="$1"
+  case "$candidate" in
     srv*.hstgr.cloud)
-      vps_id="${host_hostname#srv}"
+      vps_id="${candidate#srv}"
       vps_id="${vps_id%.hstgr.cloud}"
-      managed_hostname="$host_hostname"
+      normalized_hostname="$candidate"
       ;;
     srv*)
-      vps_id="${host_hostname#srv}"
-      managed_hostname="$host_hostname.hstgr.cloud"
+      vps_id="${candidate#srv}"
+      normalized_hostname="$candidate.hstgr.cloud"
       ;;
     *)
       return 1
@@ -56,8 +57,39 @@ derive_hostinger_domain() {
     ""|*[!0-9]*) return 1 ;;
   esac
 
+  printf "%s\n" "$normalized_hostname"
+}
+
+derive_hostinger_domain() {
+  host_hostname="$(hostname 2>/dev/null || true)"
+  managed_hostname="$(normalize_hostinger_hostname "$host_hostname")" || return 1
   domain="$project_name.$managed_hostname"
   domain_source="Hostinger VPS hostname"
+  return 0
+}
+
+verify_compose_hostname() {
+  [ -n "$compose_hostname" ] || {
+    echo "Hostinger Compose did not expose HOSTNAME at compose time; refusing an unverifiable Open target." >&2
+    return 1
+  }
+
+  compose_managed_hostname="$(normalize_hostinger_hostname "$compose_hostname")" || {
+    echo "Hostinger Compose HOSTNAME is not a validated srv<digits>[.hstgr.cloud] value: $compose_hostname" >&2
+    return 1
+  }
+
+  host_hostname="$(hostname 2>/dev/null || true)"
+  runtime_managed_hostname="$(normalize_hostinger_hostname "$host_hostname")" || {
+    echo "Runtime host UTS hostname is not a validated Hostinger hostname: $host_hostname" >&2
+    return 1
+  }
+
+  if [ "$compose_managed_hostname" != "$runtime_managed_hostname" ]; then
+    echo "Compose-time HOSTNAME ($compose_managed_hostname) does not match runtime host UTS hostname ($runtime_managed_hostname); refusing Open target." >&2
+    return 1
+  fi
+
   return 0
 }
 
@@ -67,7 +99,11 @@ if [ -n "$explicit_domain" ]; then
 elif [ "$edge_mode" = "shared-traefik" ] && [ -n "$traefik_host" ]; then
   domain="$project_name.$traefik_host"
   domain_source="Hostinger TRAEFIK_HOST"
-elif { [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; }   && derive_hostinger_domain; then
+elif [ "$edge_mode" = "traefik-passthrough" ]; then
+  verify_compose_hostname || setup_pending
+  derive_hostinger_domain || setup_pending
+  domain_source="Hostinger VPS hostname (compose/runtime verified)"
+elif [ "$edge_mode" = "direct" ] && derive_hostinger_domain; then
   :
 else
   setup_pending
