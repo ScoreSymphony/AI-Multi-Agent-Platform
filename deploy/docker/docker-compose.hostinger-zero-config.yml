@@ -93,10 +93,10 @@ services:
       - "443"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.rule=Host(\`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}.hstgr.cloud}\`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.rule=Host(`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}.hstgr.cloud}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.rule=HostSNI(\`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}.hstgr.cloud}\`)"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.rule=HostSNI(`${AI_MAP_PUBLIC_DOMAIN:-${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}.hstgr.cloud}`)"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.entrypoints=websecure"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.tls.passthrough=true"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-open.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls"
