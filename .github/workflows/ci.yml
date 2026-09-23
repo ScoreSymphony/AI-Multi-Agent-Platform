@@ -346,7 +346,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml build --pull
           docker compose -f docker-compose.local.yml build
-          AI_MAP_SOURCE_CONTEXT=../.. docker compose \
+          HOSTNAME=srv1887380 AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger-zero-config.yml \
             build
           AI_MAP_PUBLIC_DOMAIN=agents.example.test AI_MAP_SOURCE_CONTEXT=../.. docker compose \
