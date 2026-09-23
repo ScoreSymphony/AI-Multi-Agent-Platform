@@ -269,6 +269,7 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
 
     assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
+    assert "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME: ${HOSTNAME:-}" in gateway
     assert (
         "AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}" in gateway
     )
@@ -286,6 +287,9 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "traefik.docker.network" not in gateway
     assert "HostRegexp(" in gateway
     assert "HostSNIRegexp(" in gateway
+    assert "-hostinger-open.rule=Host(" in gateway
+    assert "-hostinger-open.rule=HostSNI(" in gateway
+    assert "${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}" in gateway
     assert "srv[0-9]+" in gateway
     assert ".entrypoints=web" in gateway
     assert ".entrypoints=websecure" in gateway
@@ -508,12 +512,15 @@ def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes(
     assert "direct|shared-traefik|traefik-passthrough" in entrypoint
     assert 'explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
     assert 'traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"' in entrypoint
+    assert 'compose_hostname="${AI_MAP_HOSTINGER_COMPOSE_HOSTNAME:-}"' in entrypoint
     assert 'project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"' in entrypoint
     assert 'host_hostname="$(hostname 2>/dev/null || true)"' in entrypoint
-    assert 'vps_id="${host_hostname#srv}"' in entrypoint
+    assert 'vps_id="${candidate#srv}"' in entrypoint
     assert 'vps_id="${vps_id%.hstgr.cloud}"' in entrypoint
-    assert 'managed_hostname="$host_hostname.hstgr.cloud"' in entrypoint
+    assert 'normalized_hostname="$candidate.hstgr.cloud"' in entrypoint
+    assert 'managed_hostname="$(normalize_hostinger_hostname "$host_hostname")"' in entrypoint
     assert 'domain="$project_name.$managed_hostname"' in entrypoint
+    assert 'verify_compose_hostname || setup_pending' in entrypoint
     assert 'domain="$project_name.$traefik_host"' in entrypoint
     assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "Caddyfile.hostinger-direct-setup-pending" in entrypoint
@@ -546,6 +553,7 @@ def _run_hostinger_gateway_entrypoint(
         "AI_MAP_HOSTINGER_EDGE_MODE",
         "AI_MAP_PUBLIC_DOMAIN",
         "AI_MAP_HOSTINGER_TRAEFIK_HOST",
+        "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME",
         "AI_MAP_COMPOSE_PROJECT_NAME",
         "FAKE_HOSTNAME",
     ):
@@ -586,6 +594,7 @@ def test_hostinger_traefik_passthrough_gateway_derives_short_hostinger_hostname(
         tmp_path,
         {
             "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME": "srv1940023",
             "FAKE_HOSTNAME": "srv1940023",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
         },
@@ -605,6 +614,7 @@ def test_hostinger_traefik_passthrough_gateway_derives_managed_vps_hostname(
         tmp_path,
         {
             "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME": "srv123456",
             "FAKE_HOSTNAME": "srv123456.hstgr.cloud",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
         },
@@ -615,6 +625,25 @@ def test_hostinger_traefik_passthrough_gateway_derives_managed_vps_hostname(
     assert "Caddyfile.hostinger-direct" in result.stdout
     assert "source: Hostinger VPS hostname" in result.stderr
     assert "mode: traefik-passthrough" in result.stderr
+
+
+def test_hostinger_traefik_passthrough_rejects_compose_runtime_hostname_mismatch(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME": "srv111111",
+            "FAKE_HOSTNAME": "srv222222",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "does not match runtime host UTS hostname" in result.stderr
+    assert "web:8080" not in result.stdout
 
 
 def test_hostinger_direct_gateway_explicit_domain_overrides_host_hostname(
@@ -658,6 +687,7 @@ def test_hostinger_gateway_rejects_invalid_short_hostinger_hostname(tmp_path: Pa
         tmp_path,
         {
             "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME": "srvabc",
             "FAKE_HOSTNAME": "srvabc",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
         },
@@ -673,6 +703,7 @@ def test_hostinger_gateway_rejects_hostinger_hostname_lookalike(tmp_path: Path) 
         tmp_path,
         {
             "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME": "srv123",
             "FAKE_HOSTNAME": "srv123.hstgr.cloud.evil.example",
             "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
         },
