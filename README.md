@@ -91,9 +91,10 @@ advertises no fake exact fallback hostname; Hostinger's normal **Open** action i
 the managed `<project>.srvNNNNNN.hstgr.cloud` route directly.
 
 For backward compatibility, an existing zero-config deployment may continue to set
-`AI_MAP_PUBLIC_DOMAIN=<your-hostname>`. That optional override is routed through literal
-HostRegexp/HostSNIRegexp compatibility rules and does not reintroduce a concrete
-`setup.invalid` host. For new custom-domain deployments, the explicit
+`AI_MAP_PUBLIC_DOMAIN=<your-hostname>`. That optional override is routed through literal,
+case-insensitive HostRegexp/HostSNIRegexp compatibility rules. When the override is absent those
+compatibility routers render an impossible matcher, so they neither match empty SNI nor
+reintroduce a concrete `setup.invalid` host. For new custom-domain deployments, the explicit
 `docker-compose.hostinger-custom-domain.yml` profile remains the clearer strict configuration.
 
 Existing installations already tracking

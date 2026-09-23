@@ -123,8 +123,9 @@ application host port: Hostinger Traefik is the only public ingress on ports 80/
 high-port firewall opening is part of the default deployment. The zero-config Traefik labels do
 not advertise an exact placeholder hostname; hPanel can therefore use its managed Hostinger route
 instead of selecting `setup.invalid`. Existing zero-config installations that already set
-`AI_MAP_PUBLIC_DOMAIN` remain supported through literal, anchored HostRegexp/HostSNIRegexp
-compatibility rules whose empty-variable form matches no valid hostname. New custom-domain
+`AI_MAP_PUBLIC_DOMAIN` remain supported through literal, anchored, case-insensitive
+HostRegexp/HostSNIRegexp compatibility rules. With no override, those routers render an impossible
+regex so they match neither a valid hostname nor empty SNI. New custom-domain
 installations may use the stricter `docker-compose.hostinger-custom-domain.yml` profile, which
 requires `AI_MAP_PUBLIC_DOMAIN`. If neither an explicit override nor a recognized
 Hostinger-managed hostname is available, the zero-config gateway remains fail-closed.

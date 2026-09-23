@@ -260,12 +260,17 @@ jobs:
             deploy/docker/docker-compose.hostinger-zero-config.yml
           grep -F 'custom-compat-tls.rule=HostSNIRegexp' \
             deploy/docker/docker-compose.hostinger-zero-config.yml
-          grep -F '^\\Q${AI_MAP_PUBLIC_DOMAIN:-}\\E$' \
+          grep -F '(?i)^${AI_MAP_PUBLIC_DOMAIN:+\\Q}${AI_MAP_PUBLIC_DOMAIN:-a^}${AI_MAP_PUBLIC_DOMAIN:+\\E}$' \
             deploy/docker/docker-compose.hostinger-zero-config.yml
-          AI_MAP_PUBLIC_DOMAIN=agents.example.test AI_MAP_SOURCE_CONTEXT=../.. docker compose \
+          grep -F '(?i)^a^$' /tmp/hostinger-zero-config.yml
+          if grep -F '^\\Q\\E$' /tmp/hostinger-zero-config.yml; then
+            echo "empty Hostinger compatibility matcher unexpectedly matches empty host/SNI" >&2
+            exit 1
+          fi
+          AI_MAP_PUBLIC_DOMAIN=Agents.Example.Test AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger-zero-config.yml \
             config > /tmp/hostinger-zero-config-custom.yml
-          grep -F 'agents.example.test' /tmp/hostinger-zero-config-custom.yml
+          grep -F '(?i)^\\QAgents.Example.Test\\E$' /tmp/hostinger-zero-config-custom.yml
           grep -F 'custom-compat-http' /tmp/hostinger-zero-config-custom.yml
           grep -F 'custom-compat-tls' /tmp/hostinger-zero-config-custom.yml
           if grep -F 'setup.invalid' /tmp/hostinger-zero-config-custom.yml \
