@@ -226,9 +226,10 @@ exact fake `Host(...)` / `HostSNI(...)` fallback such as `setup.invalid`; that w
 Hostinger hPanel to choose the wrong URL for **Open**. The managed Hostinger route uses
 project-scoped `HostRegexp` and `HostSNIRegexp` rules. For migration compatibility, the profile
 also accepts an optional existing `AI_MAP_PUBLIC_DOMAIN` override through anchored
-`HostRegexp` / `HostSNIRegexp` rules that wrap the configured hostname in Go-regexp
-`\Q...\E` literal quoting. With no override, those compatibility expressions reduce to an
-empty-host match and therefore do not advertise a concrete fallback hostname:
+case-insensitive `HostRegexp` / `HostSNIRegexp` rules that wrap the configured hostname in
+Go-regexp `\Q...\E` literal quoting. With no override, those compatibility expressions render
+to an intentionally impossible regex rather than an empty-host/SNI match, so they stay inert and
+do not advertise a concrete fallback hostname:
 
 - HTTP on Traefik's `web` entrypoint is forwarded to Caddy port 80 so ACME HTTP-01 and redirects
   work;

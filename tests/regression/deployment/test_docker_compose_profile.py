@@ -297,9 +297,14 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "setup.invalid" not in gateway
     assert "-custom-http.rule=Host(" not in gateway
     assert "-custom-tls.rule=HostSNI(" not in gateway
-    literal_compat_pattern = r"^\\Q${AI_MAP_PUBLIC_DOMAIN:-}\\E$"
-    assert f"custom-compat-http.rule=HostRegexp(`{literal_compat_pattern}`)" in gateway
-    assert f"custom-compat-tls.rule=HostSNIRegexp(`{literal_compat_pattern}`)" in gateway
+    compat_pattern = (
+        r"(?i)^${AI_MAP_PUBLIC_DOMAIN:+\\Q}"
+        r"${AI_MAP_PUBLIC_DOMAIN:-a^}"
+        r"${AI_MAP_PUBLIC_DOMAIN:+\\E}$"
+    )
+    assert f"custom-compat-http.rule=HostRegexp(`{compat_pattern}`)" in gateway
+    assert f"custom-compat-tls.rule=HostSNIRegexp(`{compat_pattern}`)" in gateway
+    assert "setup.invalid" not in compat_pattern
 
     assert "      - hostinger-gateway-data:/data" in gateway
     assert "      - hostinger-gateway-config:/config" in gateway
