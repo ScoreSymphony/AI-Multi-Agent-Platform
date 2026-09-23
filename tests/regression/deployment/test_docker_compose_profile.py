@@ -289,7 +289,10 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "HostSNIRegexp(" in gateway
     assert "-hostinger-open.rule=Host(" in gateway
     assert "-hostinger-open.rule=HostSNI(" in gateway
-    assert "${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}" in gateway
+    assert (
+        "${HOSTNAME:?Hostinger Compose must expose HOSTNAME for zero-config Open autodiscovery}"
+        in gateway
+    )
     assert "srv[0-9]+" in gateway
     assert ".entrypoints=web" in gateway
     assert ".entrypoints=websecure" in gateway
@@ -520,7 +523,7 @@ def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes(
     assert 'normalized_hostname="$candidate.hstgr.cloud"' in entrypoint
     assert 'managed_hostname="$(normalize_hostinger_hostname "$host_hostname")"' in entrypoint
     assert 'domain="$project_name.$managed_hostname"' in entrypoint
-    assert 'verify_compose_hostname || setup_pending' in entrypoint
+    assert "verify_compose_hostname || setup_pending" in entrypoint
     assert 'domain="$project_name.$traefik_host"' in entrypoint
     assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "Caddyfile.hostinger-direct-setup-pending" in entrypoint
