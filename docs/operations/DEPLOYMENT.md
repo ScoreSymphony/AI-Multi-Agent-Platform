@@ -104,10 +104,12 @@ actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-o
 default. New Hostinger Docker Manager Compose-from-URL installs that need hPanel's **Open** action
 use `deploy/docker/docker-compose.hostinger-managed.yml`, not the repository landing page.
 
-Set the Hostinger project environment variable `TRAEFIK_HOST` to the VPS hostname shown in hPanel,
-for example `srv123456.hstgr.cloud`, before deployment. This explicit value is required because a
-real Hostinger generic Compose-from-URL probe demonstrated that the Compose interpolation
-environment does not provide `HOSTNAME` or another VPS-hostname variable. Runtime UTS discovery
+The first URL import intentionally succeeds without `TRAEFIK_HOST` but remains setup-pending.
+After the project exists, set `TRAEFIK_HOST` through **Manage → Environment variables (.env)**
+to the full VPS hostname shown in hPanel, for example `srv123456.hstgr.cloud`, then choose
+**Save and deploy**. This explicit value is required because a real Hostinger generic
+Compose-from-URL probe demonstrated that the Compose interpolation environment does not provide
+`HOSTNAME` or another VPS-hostname variable. Runtime UTS discovery
 still works, but it occurs only after container creation and therefore cannot provide hPanel with
 the exact pre-deployment route it needs for **Open**.
 
@@ -117,7 +119,9 @@ remain enabled. On the observed Hostinger topology, Traefik itself uses Docker `
 and no external `traefik-proxy` network exists. The gateway therefore remains on the private
 platform bridge and is discovered through Docker provider labels.
 
-Compose renders exact `Host(...)` / `HostSNI(...)` rules for
+With `TRAEFIK_HOST` unset, Compose renders intentionally impossible HostRegexp/HostSNIRegexp
+matchers and the gateway stays fail-closed. After the value is configured, Compose renders exact
+`Host(...)` / `HostSNI(...)` rules for
 `${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`, allowing hPanel to expose a concrete URL. HTTPS uses
 TLS passthrough to Caddy. Independently, the gateway joins only the host UTS namespace
 (`uts: host`) and validates the configured `TRAEFIK_HOST` against the actual runtime Hostinger
