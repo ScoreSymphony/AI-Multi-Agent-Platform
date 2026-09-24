@@ -482,7 +482,7 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert "HostSNI(...)" in runbook
     assert "HTTPS is passed through to Caddy" in runbook
     assert "publishes **no application host port**" in runbook
-    assert "no arbitrary high-port firewall" in normalized
+    assert "high bootstrap port" in normalized
     assert "NET_BIND_SERVICE" in runbook
     assert "hostinger-gateway-data" in runbook
     assert "hostinger-gateway-config" in runbook
