@@ -196,14 +196,15 @@ managed-host Compose URL:
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
 ```
 
-Copy that URL into Hostinger's **Compose from URL** field and set one project environment variable
-before deployment:
+Copy that URL into Hostinger's **Compose from URL** field and deploy it with the desired project
+name. The first deployment is intentionally setup-pending and does not advertise a fake public
+hostname. Then open **Manage → Environment variables (.env)**, add:
 
 ```text
 TRAEFIK_HOST=srv123456.hstgr.cloud
 ```
 
-Use the VPS hostname shown by hPanel for your server. A real Hostinger Compose-from-URL probe showed
+Use the full VPS hostname shown by hPanel for your server and choose **Save and deploy**. A real Hostinger Compose-from-URL probe showed
 that generic URL imports do **not** expose `HOSTNAME` or an equivalent VPS hostname to Compose
 interpolation, so the exact hPanel **Open** target cannot be constructed safely from the URL alone.
 Hostinger's own multi-project Traefik guidance likewise uses an explicit `TRAEFIK_HOST` value.
@@ -230,11 +231,17 @@ Traefik remains the sole public ingress on 80/443.
 The supported flow is:
 
 1. ensure Hostinger's Traefik project is running;
-2. read the VPS hostname shown in hPanel, such as `srv123456.hstgr.cloud`;
-3. create/update the project with `TRAEFIK_HOST` set to that exact hostname;
-4. paste the managed Compose URL above and deploy;
-5. wait for all three platform containers to become healthy/running;
-6. use Hostinger's **Open** action.
+2. paste the managed Compose URL above, choose the project name, and deploy once;
+3. open **Manage → Environment variables (.env)** for the new project;
+4. add `TRAEFIK_HOST` using the full VPS hostname shown in hPanel, such as
+   `srv123456.hstgr.cloud`;
+5. choose **Save and deploy**;
+6. wait for all three platform containers to become healthy/running;
+7. use Hostinger's **Open** action.
+
+Before step 4, the profile renders impossible Host/HostSNI matchers and the gateway stays
+setup-pending. This makes the initial URL import safe even though Hostinger does not provide a
+compose-time VPS hostname.
 
 The older `docker-compose.hostinger-zero-config.yml` profile remains available for migration
 compatibility. It can derive the managed hostname after container startup through `uts: host` and
@@ -303,9 +310,10 @@ retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
 
 ## Configuration
 
-The checked-in Hostinger profiles contain no credentials. For the new-install managed-host profile,
-set `TRAEFIK_HOST` to the VPS hostname shown by hPanel, for example
-`srv123456.hstgr.cloud`. The profile verifies that value against the runtime host UTS hostname.
+The checked-in Hostinger profiles contain no credentials. For the new-install managed-host profile, the first URL import may leave `TRAEFIK_HOST` empty.
+After the project exists, set it through **Manage → Environment variables (.env)** to the full VPS
+hostname shown by hPanel, for example `srv123456.hstgr.cloud`. The profile verifies that value
+against the runtime host UTS hostname before serving application traffic.
 
 Shared runtime overrides remain intentionally small:
 
