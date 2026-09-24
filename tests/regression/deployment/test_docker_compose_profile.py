@@ -16,6 +16,7 @@ DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
+HOSTINGER_MANAGED_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-managed.yml"
 HOSTINGER_CUSTOM_DOMAIN_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-custom-domain.yml"
 HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
@@ -322,6 +323,34 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
 
 
+def test_hostinger_managed_profile_requires_exact_hostinger_hostname() -> None:
+    compose = HOSTINGER_MANAGED_COMPOSE.read_text(encoding="utf-8")
+    control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
+    assert "ports:" not in control_plane
+    assert "ports:" not in web
+    assert "ports:" not in gateway
+    assert "uts: host" in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
+    assert (
+        "AI_MAP_HOSTINGER_TRAEFIK_HOST: "
+        "${TRAEFIK_HOST:?set TRAEFIK_HOST to the VPS hostname shown in hPanel, "
+        "for example srv123456.hstgr.cloud}" in gateway
+    )
+    assert "HostRegexp(" not in gateway
+    assert "HostSNIRegexp(" not in gateway
+    assert "rule=Host(`" in gateway
+    assert "rule=HostSNI(`" in gateway
+    assert ".tls.passthrough=true" in gateway
+    assert ".loadbalancer.server.port=80" in gateway
+    assert ".loadbalancer.server.port=443" in gateway
+    assert "setup.invalid" not in gateway
+    assert "traefik.docker.network" not in gateway
+    assert "/var/run/docker.sock" not in gateway
+
+
 def test_hostinger_custom_domain_profile_requires_exact_domain() -> None:
     compose = HOSTINGER_CUSTOM_DOMAIN_COMPOSE.read_text(encoding="utf-8")
     control_plane = _control_plane_block(compose)
@@ -513,8 +542,11 @@ def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes(
     assert 'vps_id="${host_hostname#srv}"' in entrypoint
     assert 'vps_id="${vps_id%.hstgr.cloud}"' in entrypoint
     assert 'managed_hostname="$host_hostname.hstgr.cloud"' in entrypoint
+    assert 'managed_hostname="$(normalize_hostinger_hostname "$host_hostname")"' in entrypoint
     assert 'domain="$project_name.$managed_hostname"' in entrypoint
     assert 'domain="$project_name.$traefik_host"' in entrypoint
+    assert "verify_traefik_host_matches_runtime" in entrypoint
+    assert 'domain="$project_name.$runtime_hostname"' in entrypoint
     assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "Caddyfile.hostinger-direct-setup-pending" in entrypoint
     assert "Caddyfile.hostinger-direct" in entrypoint
@@ -681,6 +713,43 @@ def test_hostinger_gateway_rejects_hostinger_hostname_lookalike(tmp_path: Path) 
     assert result.returncode == 0
     assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
     assert "fail-closed setup-pending mode" in result.stderr
+
+
+def test_hostinger_passthrough_gateway_accepts_matching_explicit_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123456.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv123456.hstgr.cloud" in result.stdout
+    assert "source: verified Hostinger TRAEFIK_HOST" in result.stderr
+    assert "Caddyfile.hostinger-direct" in result.stdout
+
+
+def test_hostinger_passthrough_gateway_rejects_mismatched_explicit_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv111111.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv222222",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "does not match runtime host UTS hostname" in result.stderr
 
 
 def test_hostinger_shared_gateway_derives_temporary_hostname_from_traefik_host(
