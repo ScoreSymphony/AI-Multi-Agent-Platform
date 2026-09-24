@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   OnboardingClient,
   type ComponentSetupMode,
@@ -83,23 +83,28 @@ export function SetupLifecyclePanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const snapshotEpoch = useRef(0);
+  const mutationSequence = useRef(0);
 
   const load = useCallback(async () => {
     if (!available) return;
+    const startedAt = snapshotEpoch.current;
     setLoading(true);
     try {
       const [next, nextComponentSetup] = await Promise.all([
         setup.status(),
         componentSetupAvailable ? onboarding.componentSetup() : Promise.resolve(null),
       ]);
+      if (startedAt !== snapshotEpoch.current) return;
       setStatus(next);
       setComponentSetupStatus(nextComponentSetup);
       setError(null);
       onStateChange?.(next);
     } catch (nextError) {
+      if (startedAt !== snapshotEpoch.current) return;
       setError(nextError);
     } finally {
-      setLoading(false);
+      if (startedAt === snapshotEpoch.current) setLoading(false);
     }
   }, [available, componentSetupAvailable, onStateChange, onboarding, setup]);
 
@@ -128,18 +133,28 @@ export function SetupLifecyclePanel({
   const loadedStatus = status;
 
   async function mutate(label: string, operation: () => Promise<SetupSessionStatus>, success: string) {
+    const mutationId = mutationSequence.current + 1;
+    mutationSequence.current = mutationId;
+    snapshotEpoch.current += 1;
+    setLoading(false);
     setBusy(label);
     setError(null);
     setNotice(null);
     try {
       const next = await operation();
+      if (mutationId !== mutationSequence.current) return;
+      snapshotEpoch.current += 1;
+      setLoading(false);
       setStatus(next);
       onStateChange?.(next);
       setNotice(success);
     } catch (nextError) {
+      if (mutationId !== mutationSequence.current) return;
+      snapshotEpoch.current += 1;
+      setLoading(false);
       setError(nextError);
     } finally {
-      setBusy(null);
+      if (mutationId === mutationSequence.current) setBusy(null);
     }
   }
 
@@ -193,11 +208,18 @@ export function SetupLifecyclePanel({
 
   async function provision() {
     if (!provisionAvailable) return;
+    const mutationId = mutationSequence.current + 1;
+    mutationSequence.current = mutationId;
+    snapshotEpoch.current += 1;
+    setLoading(false);
     setBusy("provision");
     setError(null);
     setNotice(null);
     try {
       const result = await setup.provision();
+      if (mutationId !== mutationSequence.current) return;
+      snapshotEpoch.current += 1;
+      setLoading(false);
       setStatus(result.setup);
       onStateChange?.(result.setup);
       if (result.outcome?.state === "failed") {
@@ -213,9 +235,12 @@ export function SetupLifecyclePanel({
         );
       }
     } catch (nextError) {
+      if (mutationId !== mutationSequence.current) return;
+      snapshotEpoch.current += 1;
+      setLoading(false);
       setError(nextError);
     } finally {
-      setBusy(null);
+      if (mutationId === mutationSequence.current) setBusy(null);
     }
   }
 
