@@ -333,16 +333,12 @@ def test_hostinger_managed_profile_requires_exact_hostinger_hostname() -> None:
     assert "ports:" not in web
     assert "ports:" not in gateway
     assert "uts: host" in gateway
-    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
-    assert (
-        "AI_MAP_HOSTINGER_TRAEFIK_HOST: "
-        "${TRAEFIK_HOST:?set TRAEFIK_HOST to the VPS hostname shown in hPanel, "
-        "for example srv123456.hstgr.cloud}" in gateway
-    )
-    assert "HostRegexp(" not in gateway
-    assert "HostSNIRegexp(" not in gateway
-    assert "rule=Host(`" in gateway
-    assert "rule=HostSNI(`" in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-managed" in gateway
+    assert "AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}" in gateway
+    assert "${TRAEFIK_HOST:+Host(" in gateway
+    assert "${TRAEFIK_HOST:-HostRegexp(`a^`)}" in gateway
+    assert "${TRAEFIK_HOST:+HostSNI(" in gateway
+    assert "${TRAEFIK_HOST:-HostSNIRegexp(`a^`)}" in gateway
     assert ".tls.passthrough=true" in gateway
     assert ".loadbalancer.server.port=80" in gateway
     assert ".loadbalancer.server.port=443" in gateway
@@ -533,7 +529,7 @@ def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes(
     assert "reverse_proxy" not in shared_pending
 
     assert 'edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-shared-traefik}"' in entrypoint
-    assert "direct|shared-traefik|traefik-passthrough" in entrypoint
+    assert "direct|shared-traefik|traefik-passthrough|traefik-managed" in entrypoint
     assert 'explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
     assert 'traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"' in entrypoint
     assert 'project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"' in entrypoint
@@ -712,6 +708,42 @@ def test_hostinger_gateway_rejects_hostinger_hostname_lookalike(tmp_path: Path) 
     assert result.returncode == 0
     assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
     assert "fail-closed setup-pending mode" in result.stderr
+
+
+def test_hostinger_managed_gateway_without_traefik_host_stays_setup_pending(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-managed",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "fail-closed setup-pending mode" in result.stderr
+
+
+def test_hostinger_managed_gateway_accepts_matching_fqdn_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-managed",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123456.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv123456.hstgr.cloud" in result.stdout
+    assert "source: verified Hostinger TRAEFIK_HOST" in result.stderr
+    assert "Caddyfile.hostinger-direct" in result.stdout
 
 
 def test_hostinger_passthrough_gateway_accepts_matching_explicit_traefik_host(
