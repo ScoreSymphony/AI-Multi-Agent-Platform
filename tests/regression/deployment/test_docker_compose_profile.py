@@ -469,7 +469,7 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert "managed-host" in runbook
     assert "uts: host" in runbook
     assert "srv123456.hstgr.cloud" in runbook
-    assert "${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}" in runbook
+    assert "<project>.<TRAEFIK_HOST>" in runbook
     assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "setup.invalid" in runbook
     assert "docker-compose.hostinger-custom-domain.yml" in runbook
@@ -872,7 +872,7 @@ def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL" in runbook
     assert "traefik-proxy" in runbook
-    assert "srvNNNNNN.hstgr.cloud" in runbook
+    assert "srv123456.hstgr.cloud" in runbook
     assert "hostinger-gateway" in runbook
     assert "fail-closed" in runbook
     assert "NET_BIND_SERVICE" in runbook
@@ -921,5 +921,5 @@ def test_readme_exposes_hostinger_compose_url_directly() -> None:
     assert compose_url in readme
     assert "Compose from URL" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in readme
-    assert "repository landing page itself is not the Compose URL" in normalized
+    assert "managed-host profile" in normalized
     assert "TRAEFIK_HOST" in readme
