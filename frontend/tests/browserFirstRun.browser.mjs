@@ -531,10 +531,46 @@ try {
     "Fresh-install Hermes runtime prerequisite",
   );
 
+  let releaseStaleSetupRead;
+  const staleSetupReadRelease = new Promise((resolve) => {
+    releaseStaleSetupRead = resolve;
+  });
+  let markStaleSetupReadCaptured;
+  const staleSetupReadCaptured = new Promise((resolve) => {
+    markStaleSetupReadCaptured = resolve;
+  });
+  let markStaleSetupReadDelivered;
+  const staleSetupReadDelivered = new Promise((resolve) => {
+    markStaleSetupReadDelivered = resolve;
+  });
+  let captureNextSetupRead = true;
+  await page.route("**/api/v1/setup-sessions/initial-setup", async (route) => {
+    if (!captureNextSetupRead || route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    captureNextSetupRead = false;
+    const staleResponse = await route.fetch();
+    markStaleSetupReadCaptured();
+    await staleSetupReadRelease;
+    await route.fulfill({ response: staleResponse });
+    markStaleSetupReadDelivered();
+  });
+
+  // Regression for #1469: capture an older setup snapshot, save a Registry selection while that
+  // read is held, then deliver the stale response. The UI must retain the mutation response rather
+  // than replacing the actionable plan with the older empty snapshot.
+  await (await waitForButton(page, "Refresh setup state")).click();
+  await staleSetupReadCaptured;
+
   const hermesSelection = hermesCard.getByLabel("Include in setup plan", { exact: true });
   await hermesSelection.click();
   await waitForCheckboxState(hermesSelection, true, "Hermes setup selection");
   await page.getByRole("status").filter({ hasText: "Component selection saved" }).waitFor();
+
+  releaseStaleSetupRead();
+  await staleSetupReadDelivered;
+  await waitForCheckboxState(hermesSelection, true, "Hermes selection after stale setup read");
   await (await waitForButton(page, "Provision selected components")).click();
   await page.getByRole("status").filter({ hasText: "canonical owner domains" }).waitFor();
   await hermesCard.getByText("adapter_installed", { exact: true }).waitFor();
