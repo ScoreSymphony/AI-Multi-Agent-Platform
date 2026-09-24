@@ -733,6 +733,24 @@ def test_hostinger_passthrough_gateway_accepts_matching_explicit_traefik_host(
     assert "Caddyfile.hostinger-direct" in result.stdout
 
 
+def test_hostinger_passthrough_gateway_rejects_short_explicit_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123456",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "requires the full srv<digits>.hstgr.cloud hostname" in result.stderr
+
+
 def test_hostinger_passthrough_gateway_rejects_mismatched_explicit_traefik_host(
     tmp_path: Path,
 ) -> None:
