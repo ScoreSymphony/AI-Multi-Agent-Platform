@@ -17,9 +17,10 @@ esac
 setup_pending() {
   cat >&2 <<'EOF'
 AI Multi-Agent Platform Hostinger ingress is in fail-closed setup-pending mode.
-The default zero-config path derives a managed Hostinger VPS hostname automatically.
-If that hostname is unavailable or has been customized, set AI_MAP_PUBLIC_DOMAIN to a
-public DNS hostname that points to this VPS and redeploy. Application traffic remains blocked.
+For the managed hPanel Open path, set TRAEFIK_HOST to this VPS hostname as shown in hPanel
+(for example srv123456.hstgr.cloud). For a custom public DNS name, use the explicit custom-domain
+profile with AI_MAP_PUBLIC_DOMAIN. Application traffic remains blocked until the hostname contract
+is valid.
 EOF
 
   if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
