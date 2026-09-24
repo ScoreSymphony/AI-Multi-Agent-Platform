@@ -323,7 +323,7 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
 
 
-def test_hostinger_managed_profile_requires_exact_hostinger_hostname() -> None:
+def test_hostinger_managed_profile_is_zero_input_and_hpanel_discoverable() -> None:
     compose = HOSTINGER_MANAGED_COMPOSE.read_text(encoding="utf-8")
     control_plane = _control_plane_block(compose)
     web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
@@ -331,14 +331,14 @@ def test_hostinger_managed_profile_requires_exact_hostinger_hostname() -> None:
 
     assert "ports:" not in control_plane
     assert "ports:" not in web
-    assert "ports:" not in gateway
     assert "uts: host" in gateway
-    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-managed" in gateway
-    assert "AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}" in gateway
-    assert "${TRAEFIK_HOST:+Host(" in gateway
-    assert "${TRAEFIK_HOST:-HostRegexp(`a^`)}" in gateway
-    assert "${TRAEFIK_HOST:+HostSNI(" in gateway
-    assert "${TRAEFIK_HOST:-HostSNIRegexp(`a^`)}" in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
+    assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
+    assert "TRAEFIK_HOST" not in gateway
+    assert '      - "8080:8080"' in gateway
+    assert "HostRegexp(" in gateway
+    assert "HostSNIRegexp(" in gateway
+    assert "srv[0-9]+" in gateway
     assert ".tls.passthrough=true" in gateway
     assert ".loadbalancer.server.port=80" in gateway
     assert ".loadbalancer.server.port=443" in gateway
