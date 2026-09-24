@@ -630,6 +630,25 @@ def test_hostinger_traefik_passthrough_gateway_derives_managed_vps_hostname(
     assert "mode: traefik-passthrough" in result.stderr
 
 
+def test_hostinger_traefik_passthrough_rejects_fqdn_compose_probe_hostname(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_COMPOSE_HOSTNAME": "srv123456.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv123456.hstgr.cloud",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "static Open probe supports only the observed short srv<digits> form" in result.stderr
+    assert "web:8080" not in result.stdout
+
+
 def test_hostinger_traefik_passthrough_rejects_compose_runtime_hostname_mismatch(
     tmp_path: Path,
 ) -> None:
