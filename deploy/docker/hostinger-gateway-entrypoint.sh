@@ -74,8 +74,15 @@ verify_compose_hostname() {
     return 1
   }
 
+  case "$compose_hostname" in
+    *.hstgr.cloud)
+      echo "Hostinger Compose exposed HOSTNAME as an FQDN; the static Open probe supports only the observed short srv<digits> form." >&2
+      return 1
+      ;;
+  esac
+
   compose_managed_hostname="$(normalize_hostinger_hostname "$compose_hostname")" || {
-    echo "Hostinger Compose HOSTNAME is not a validated srv<digits>[.hstgr.cloud] value: $compose_hostname" >&2
+    echo "Hostinger Compose HOSTNAME is not a validated short srv<digits> value: $compose_hostname" >&2
     return 1
   }
 
