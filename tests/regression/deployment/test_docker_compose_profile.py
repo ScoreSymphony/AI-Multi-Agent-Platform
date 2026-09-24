@@ -16,6 +16,7 @@ DOCKER_DIR = Path("deploy/docker")
 HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
+HOSTINGER_MANAGED_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-managed.yml"
 HOSTINGER_CUSTOM_DOMAIN_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-custom-domain.yml"
 HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
@@ -322,6 +323,30 @@ def test_hostinger_zero_config_profile_coexists_with_shared_traefik() -> None:
     assert "AI_MAP_TRAEFIK_EXTERNAL" not in compose
 
 
+def test_hostinger_managed_profile_requires_exact_hostinger_hostname() -> None:
+    compose = HOSTINGER_MANAGED_COMPOSE.read_text(encoding="utf-8")
+    control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
+    assert "ports:" not in control_plane
+    assert "ports:" not in web
+    assert "ports:" not in gateway
+    assert "uts: host" in gateway
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-managed" in gateway
+    assert "AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}" in gateway
+    assert "${TRAEFIK_HOST:+Host(" in gateway
+    assert "${TRAEFIK_HOST:-HostRegexp(`a^`)}" in gateway
+    assert "${TRAEFIK_HOST:+HostSNI(" in gateway
+    assert "${TRAEFIK_HOST:-HostSNIRegexp(`a^`)}" in gateway
+    assert ".tls.passthrough=true" in gateway
+    assert ".loadbalancer.server.port=80" in gateway
+    assert ".loadbalancer.server.port=443" in gateway
+    assert "setup.invalid" not in gateway
+    assert "traefik.docker.network" not in gateway
+    assert "/var/run/docker.sock" not in gateway
+
+
 def test_hostinger_custom_domain_profile_requires_exact_domain() -> None:
     compose = HOSTINGER_CUSTOM_DOMAIN_COMPOSE.read_text(encoding="utf-8")
     control_plane = _control_plane_block(compose)
@@ -415,13 +440,13 @@ def test_hostinger_shared_traefik_profile_remains_explicit_and_private() -> None
     assert '"443:443"' not in compose
 
 
-def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> None:
+def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> None:
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
 
     compose_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
-        "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
+        "main/deploy/docker/docker-compose.hostinger-managed.yml"
     )
     custom_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
@@ -439,26 +464,25 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert custom_url in runbook
     assert direct_url in runbook
     assert shared_url in runbook
-    assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
+    assert "Copy that URL into Hostinger's **Compose from URL** field" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
-    assert "Zero-configuration" in runbook
+    assert "managed-host" in runbook
     assert "uts: host" in runbook
-    assert "srvNNNNNN.hstgr.cloud" in runbook
-    assert "${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud" in runbook
-    assert "No `TRAEFIK_HOST`" in runbook
+    assert "srv123456.hstgr.cloud" in runbook
+    assert "<project>.<TRAEFIK_HOST>" in runbook
+    assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "setup.invalid" in runbook
     assert "docker-compose.hostinger-custom-domain.yml" in runbook
-    assert "migration compatibility" in runbook
-    assert "\\Q...\\E" in runbook
-    assert "may keep doing so without migration" in runbook
+    assert "migration" in runbook
+    assert "generic Compose-from-URL" in runbook
     assert "Docker `host` networking" in runbook
-    assert "does not require any external Docker network" in runbook
+    assert "does not require a shared `traefik-proxy` network" in runbook
     assert "traefik-proxy" in runbook
-    assert "HostRegexp" in runbook
-    assert "HostSNIRegexp" in runbook
-    assert "TLS passthrough" in runbook
+    assert "Host(...)" in runbook
+    assert "HostSNI(...)" in runbook
+    assert "HTTPS is passed through to Caddy" in runbook
     assert "publishes **no application host port**" in runbook
-    assert "No additional firewall rule" in runbook
+    assert "high bootstrap port" in normalized
     assert "NET_BIND_SERVICE" in runbook
     assert "hostinger-gateway-data" in runbook
     assert "hostinger-gateway-config" in runbook
@@ -467,7 +491,7 @@ def test_hostinger_runbook_documents_zero_config_default_and_shared_edge() -> No
     assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK=traefik-proxy" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL=true" in runbook
-    assert "fail-closed" in runbook
+    assert "fails closed" in runbook
 
 
 def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes() -> None:
@@ -505,16 +529,19 @@ def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes(
     assert "reverse_proxy" not in shared_pending
 
     assert 'edge_mode="${AI_MAP_HOSTINGER_EDGE_MODE:-shared-traefik}"' in entrypoint
-    assert "direct|shared-traefik|traefik-passthrough" in entrypoint
+    assert "direct|shared-traefik|traefik-passthrough|traefik-managed" in entrypoint
     assert 'explicit_domain="${AI_MAP_PUBLIC_DOMAIN:-}"' in entrypoint
     assert 'traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"' in entrypoint
     assert 'project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"' in entrypoint
     assert 'host_hostname="$(hostname 2>/dev/null || true)"' in entrypoint
-    assert 'vps_id="${host_hostname#srv}"' in entrypoint
+    assert 'vps_id="${candidate#srv}"' in entrypoint
     assert 'vps_id="${vps_id%.hstgr.cloud}"' in entrypoint
-    assert 'managed_hostname="$host_hostname.hstgr.cloud"' in entrypoint
+    assert 'normalized_hostname="$candidate.hstgr.cloud"' in entrypoint
+    assert 'managed_hostname="$(normalize_hostinger_hostname "$host_hostname")"' in entrypoint
     assert 'domain="$project_name.$managed_hostname"' in entrypoint
     assert 'domain="$project_name.$traefik_host"' in entrypoint
+    assert "verify_traefik_host_matches_runtime" in entrypoint
+    assert 'domain="$project_name.$runtime_hostname"' in entrypoint
     assert 'export AI_MAP_PUBLIC_DOMAIN="$domain"' in entrypoint
     assert "Caddyfile.hostinger-direct-setup-pending" in entrypoint
     assert "Caddyfile.hostinger-direct" in entrypoint
@@ -683,6 +710,97 @@ def test_hostinger_gateway_rejects_hostinger_hostname_lookalike(tmp_path: Path) 
     assert "fail-closed setup-pending mode" in result.stderr
 
 
+def test_hostinger_managed_gateway_without_traefik_host_stays_setup_pending(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-managed",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "fail-closed setup-pending mode" in result.stderr
+
+
+def test_hostinger_managed_gateway_accepts_matching_fqdn_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-managed",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123456.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv123456.hstgr.cloud" in result.stdout
+    assert "source: verified Hostinger TRAEFIK_HOST" in result.stderr
+    assert "Caddyfile.hostinger-direct" in result.stdout
+
+
+def test_hostinger_passthrough_gateway_accepts_matching_explicit_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123456.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "domain=ai-multi-agent-platform.srv123456.hstgr.cloud" in result.stdout
+    assert "source: verified Hostinger TRAEFIK_HOST" in result.stderr
+    assert "Caddyfile.hostinger-direct" in result.stdout
+
+
+def test_hostinger_passthrough_gateway_rejects_short_explicit_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv123456",
+            "FAKE_HOSTNAME": "srv123456",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "requires the full srv<digits>.hstgr.cloud hostname" in result.stderr
+
+
+def test_hostinger_passthrough_gateway_rejects_mismatched_explicit_traefik_host(
+    tmp_path: Path,
+) -> None:
+    result = _run_hostinger_gateway_entrypoint(
+        tmp_path,
+        {
+            "AI_MAP_HOSTINGER_EDGE_MODE": "traefik-passthrough",
+            "AI_MAP_HOSTINGER_TRAEFIK_HOST": "srv111111.hstgr.cloud",
+            "FAKE_HOSTNAME": "srv222222",
+            "AI_MAP_COMPOSE_PROJECT_NAME": "ai-multi-agent-platform",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "Caddyfile.hostinger-direct-setup-pending" in result.stdout
+    assert "does not match runtime host UTS hostname" in result.stderr
+
+
 def test_hostinger_shared_gateway_derives_temporary_hostname_from_traefik_host(
     tmp_path: Path,
 ) -> None:
@@ -743,7 +861,8 @@ def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None
     runbook = (DOCKER_DIR / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(runbook.split())
 
-    assert "main/deploy/docker/docker-compose.hostinger-zero-config.yml" in runbook
+    assert "main/deploy/docker/docker-compose.hostinger-managed.yml" in runbook
+    assert "docker-compose.hostinger-zero-config.yml" in runbook
     assert "docker-compose.hostinger-direct.yml" in runbook
     assert "docker-compose.hostinger.yml" in runbook
     assert "docker-compose.hostinger-shared-traefik.yml" in runbook
@@ -753,9 +872,9 @@ def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None
     assert "AI_MAP_TRAEFIK_NETWORK" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL" in runbook
     assert "traefik-proxy" in runbook
-    assert "srvNNNNNN.hstgr.cloud" in runbook
+    assert "srv123456.hstgr.cloud" in runbook
     assert "hostinger-gateway" in runbook
-    assert "fail-closed" in runbook
+    assert "fails closed" in runbook
     assert "NET_BIND_SERVICE" in runbook
     assert "ports 80 and 443" in normalized
     assert "Caddy" in runbook
@@ -796,10 +915,11 @@ def test_readme_exposes_hostinger_compose_url_directly() -> None:
     normalized = " ".join(readme.split())
     compose_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
-        "main/deploy/docker/docker-compose.hostinger-zero-config.yml"
+        "main/deploy/docker/docker-compose.hostinger-managed.yml"
     )
 
     assert compose_url in readme
-    assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
+    assert "Compose from URL" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in readme
-    assert "repository landing page itself is not the Compose URL" in normalized
+    assert "managed-host profile" in normalized
+    assert "TRAEFIK_HOST" in readme

@@ -7,9 +7,9 @@ traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
 project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 
 case "$edge_mode" in
-  direct|shared-traefik|traefik-passthrough) ;;
+  direct|shared-traefik|traefik-passthrough|traefik-managed) ;;
   *)
-    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, or traefik-passthrough." >&2
+    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, traefik-passthrough, or traefik-managed." >&2
     exit 64
     ;;
 esac
@@ -17,12 +17,13 @@ esac
 setup_pending() {
   cat >&2 <<'EOF'
 AI Multi-Agent Platform Hostinger ingress is in fail-closed setup-pending mode.
-The default zero-config path derives a managed Hostinger VPS hostname automatically.
-If that hostname is unavailable or has been customized, set AI_MAP_PUBLIC_DOMAIN to a
-public DNS hostname that points to this VPS and redeploy. Application traffic remains blocked.
+For the managed hPanel Open path, set TRAEFIK_HOST to this VPS hostname as shown in hPanel
+(for example srv123456.hstgr.cloud). For a custom public DNS name, use the explicit custom-domain
+profile with AI_MAP_PUBLIC_DOMAIN. Application traffic remains blocked until the hostname contract
+is valid.
 EOF
 
-  if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
+  if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ] || [ "$edge_mode" = "traefik-managed" ]; then
     exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct-setup-pending --adapter caddyfile
   fi
 
@@ -35,17 +36,17 @@ invalid_domain() {
   exit 64
 }
 
-derive_hostinger_domain() {
-  host_hostname="$(hostname 2>/dev/null || true)"
-  case "$host_hostname" in
+normalize_hostinger_hostname() {
+  candidate="$1"
+  case "$candidate" in
     srv*.hstgr.cloud)
-      vps_id="${host_hostname#srv}"
+      vps_id="${candidate#srv}"
       vps_id="${vps_id%.hstgr.cloud}"
-      managed_hostname="$host_hostname"
+      normalized_hostname="$candidate"
       ;;
     srv*)
-      vps_id="${host_hostname#srv}"
-      managed_hostname="$host_hostname.hstgr.cloud"
+      vps_id="${candidate#srv}"
+      normalized_hostname="$candidate.hstgr.cloud"
       ;;
     *)
       return 1
@@ -56,8 +57,44 @@ derive_hostinger_domain() {
     ""|*[!0-9]*) return 1 ;;
   esac
 
+  printf "%s\n" "$normalized_hostname"
+}
+
+derive_hostinger_domain() {
+  host_hostname="$(hostname 2>/dev/null || true)"
+  managed_hostname="$(normalize_hostinger_hostname "$host_hostname")" || return 1
   domain="$project_name.$managed_hostname"
   domain_source="Hostinger VPS hostname"
+  return 0
+}
+
+verify_traefik_host_matches_runtime() {
+  case "$traefik_host" in
+    srv*.hstgr.cloud) ;;
+    *)
+      echo "Invalid Hostinger TRAEFIK_HOST: managed hPanel Open requires the full srv<digits>.hstgr.cloud hostname." >&2
+      return 1
+      ;;
+  esac
+
+  supplied_hostname="$(normalize_hostinger_hostname "$traefik_host")" || {
+    echo "Invalid Hostinger TRAEFIK_HOST: managed hPanel Open requires the full srv<digits>.hstgr.cloud hostname." >&2
+    return 1
+  }
+
+  runtime_hostname="$(hostname 2>/dev/null || true)"
+  runtime_hostname="$(normalize_hostinger_hostname "$runtime_hostname")" || {
+    echo "Runtime host UTS hostname is not a validated Hostinger hostname." >&2
+    return 1
+  }
+
+  if [ "$supplied_hostname" != "$runtime_hostname" ]; then
+    echo "TRAEFIK_HOST ($supplied_hostname) does not match runtime host UTS hostname ($runtime_hostname)." >&2
+    return 1
+  fi
+
+  domain="$project_name.$runtime_hostname"
+  domain_source="verified Hostinger TRAEFIK_HOST"
   return 0
 }
 
@@ -67,6 +104,11 @@ if [ -n "$explicit_domain" ]; then
 elif [ "$edge_mode" = "shared-traefik" ] && [ -n "$traefik_host" ]; then
   domain="$project_name.$traefik_host"
   domain_source="Hostinger TRAEFIK_HOST"
+elif [ "$edge_mode" = "traefik-managed" ]; then
+  [ -n "$traefik_host" ] || setup_pending
+  verify_traefik_host_matches_runtime || setup_pending
+elif [ "$edge_mode" = "traefik-passthrough" ] && [ -n "$traefik_host" ]; then
+  verify_traefik_host_matches_runtime || setup_pending
 elif { [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; }   && derive_hostinger_domain; then
   :
 else
@@ -110,7 +152,7 @@ done
 export AI_MAP_PUBLIC_DOMAIN="$domain"
 echo "Starting Hostinger ingress gateway for $domain (source: $domain_source, mode: $edge_mode)" >&2
 
-if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
+if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ] || [ "$edge_mode" = "traefik-managed" ]; then
   exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct --adapter caddyfile
 fi
 

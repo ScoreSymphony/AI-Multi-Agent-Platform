@@ -65,37 +65,32 @@ The root profile publishes only ports 80/443 through the repository-owned Caddy 
 Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
 Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
 
-For a **new** Hostinger Docker Manager deployment, use this zero-configuration Compose-file URL:
+For a **new** Hostinger Docker Manager deployment that should expose hPanel's **Open** action,
+use the explicit managed-host profile:
 
 ```text
-https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-zero-config.yml
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
 ```
 
-Copy that URL into Hostinger's **Compose from URL** field. The repository landing page itself is not
-the Compose URL. The zero-config Hostinger path assumes Hostinger's Traefik project is already
-running and owns ports 80/443. On current Hostinger deployments Traefik may itself use Docker
-`host` networking and therefore does not require a shared `traefik-proxy` network. The platform
-does **not** bind 80/443 itself and does not require an external Docker network. The dedicated
-gateway stays on the private platform bridge and reads the VPS hostname through the host UTS
-namespace. Hostinger may expose that kernel hostname as either `srvNNNNNN` or
-`srvNNNNNN.hstgr.cloud`; the numeric short form is normalized to the managed
-`srvNNNNNN.hstgr.cloud` DNS hostname before deriving
-`${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud`. The gateway is then discovered through Traefik's
-Docker provider labels. Web and Control Plane remain private.
+Deploy the URL once with the desired project name. The initial deployment is intentionally
+setup-pending and advertises no public hostname. Then open **Manage → Environment variables
+(.env)**, add `TRAEFIK_HOST` with the full VPS hostname shown by hPanel (for example
+`srv123456.hstgr.cloud`), and choose **Save and deploy**. The configured deployment renders an
+exact `Host(...)` / `HostSNI(...)` route for `<project>.<TRAEFIK_HOST>`, keeps Web and Control
+Plane private, publishes no application host ports, and leaves Hostinger Traefik as the sole owner
+of ports 80/443.
 
-No `TRAEFIK_HOST`, `AI_MAP_PUBLIC_DOMAIN`, `AI_MAP_TRAEFIK_NETWORK`, or
-`AI_MAP_TRAEFIK_EXTERNAL` value is required for this zero-config profile. The platform publishes
-no host port of its own: public access is exclusively through Hostinger Traefik on ports 80/443,
-so no additional firewall rule for an arbitrary high port is required. The zero-config profile
-advertises no fake exact fallback hostname; Hostinger's normal **Open** action is expected to use
-the managed `<project>.srvNNNNNN.hstgr.cloud` route directly.
+This one explicit value is required because a real Hostinger **Compose from URL** probe showed that
+the generic import environment does **not** provide `HOSTNAME` or an equivalent VPS hostname at
+Compose interpolation time. The gateway can still discover and validate the VPS hostname later via
+`uts: host`, but that happens too late for hPanel to construct its **Open** URL. The managed-host
+profile therefore verifies the configured `TRAEFIK_HOST` against the independently discovered host
+UTS hostname and fails closed on a mismatch.
 
-For backward compatibility, an existing zero-config deployment may continue to set
-`AI_MAP_PUBLIC_DOMAIN=<your-hostname>`. That optional override is routed through literal,
-case-insensitive HostRegexp/HostSNIRegexp compatibility rules. When the override is absent those
-compatibility routers render an impossible matcher, so they neither match empty SNI nor
-reintroduce a concrete `setup.invalid` host. For new custom-domain deployments, the explicit
-`docker-compose.hostinger-custom-domain.yml` profile remains the clearer strict configuration.
+The older `docker-compose.hostinger-zero-config.yml` profile remains migration-compatible for
+existing deployments and can still derive the managed hostname at runtime, but it cannot promise a
+hPanel **Open** link for a fresh generic Compose-from-URL import because its managed route is only
+known after container start. It is no longer the documented new-install default.
 
 Existing installations already tracking
 `deploy/docker/docker-compose.hostinger.yml` or
