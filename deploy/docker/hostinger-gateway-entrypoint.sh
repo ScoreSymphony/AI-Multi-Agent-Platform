@@ -7,9 +7,9 @@ traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
 project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 
 case "$edge_mode" in
-  direct|shared-traefik|traefik-passthrough) ;;
+  direct|shared-traefik|traefik-passthrough|traefik-managed) ;;
   *)
-    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, or traefik-passthrough." >&2
+    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, traefik-passthrough, or traefik-managed." >&2
     exit 64
     ;;
 esac
@@ -23,7 +23,7 @@ profile with AI_MAP_PUBLIC_DOMAIN. Application traffic remains blocked until the
 is valid.
 EOF
 
-  if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
+  if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ] || [ "$edge_mode" = "traefik-managed" ]; then
     exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct-setup-pending --adapter caddyfile
   fi
 
@@ -104,6 +104,9 @@ if [ -n "$explicit_domain" ]; then
 elif [ "$edge_mode" = "shared-traefik" ] && [ -n "$traefik_host" ]; then
   domain="$project_name.$traefik_host"
   domain_source="Hostinger TRAEFIK_HOST"
+elif [ "$edge_mode" = "traefik-managed" ]; then
+  [ -n "$traefik_host" ] || setup_pending
+  verify_traefik_host_matches_runtime || setup_pending
 elif [ "$edge_mode" = "traefik-passthrough" ] && [ -n "$traefik_host" ]; then
   verify_traefik_host_matches_runtime || setup_pending
 elif { [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; }   && derive_hostinger_domain; then
@@ -149,7 +152,7 @@ done
 export AI_MAP_PUBLIC_DOMAIN="$domain"
 echo "Starting Hostinger ingress gateway for $domain (source: $domain_source, mode: $edge_mode)" >&2
 
-if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ]; then
+if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ] || [ "$edge_mode" = "traefik-managed" ]; then
   exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct --adapter caddyfile
 fi
 
