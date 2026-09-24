@@ -72,11 +72,13 @@ use the explicit managed-host profile:
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
 ```
 
-Before deploying it, set the Hostinger project environment variable `TRAEFIK_HOST` to the VPS
-hostname shown by hPanel, for example `srv123456.hstgr.cloud`. Then deploy the Compose URL.
-The profile renders an exact `Host(...)` / `HostSNI(...)` route for
-`<project>.<TRAEFIK_HOST>`, keeps Web and Control Plane private, publishes no application host
-ports, and leaves Hostinger Traefik as the sole owner of ports 80/443.
+Deploy the URL once with the desired project name. The initial deployment is intentionally
+setup-pending and advertises no public hostname. Then open **Manage → Environment variables
+(.env)**, add `TRAEFIK_HOST` with the full VPS hostname shown by hPanel (for example
+`srv123456.hstgr.cloud`), and choose **Save and deploy**. The configured deployment renders an
+exact `Host(...)` / `HostSNI(...)` route for `<project>.<TRAEFIK_HOST>`, keeps Web and Control
+Plane private, publishes no application host ports, and leaves Hostinger Traefik as the sole owner
+of ports 80/443.
 
 This one explicit value is required because a real Hostinger **Compose from URL** probe showed that
 the generic import environment does **not** provide `HOSTNAME` or an equivalent VPS hostname at
