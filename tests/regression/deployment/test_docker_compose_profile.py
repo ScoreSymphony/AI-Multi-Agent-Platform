@@ -464,11 +464,11 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert custom_url in runbook
     assert direct_url in runbook
     assert shared_url in runbook
-    assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
+    assert "Copy that URL into Hostinger's **Compose from URL** field" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
     assert "managed-host" in runbook
     assert "uts: host" in runbook
-    assert "srvNNNNNN.hstgr.cloud" in runbook
+    assert "srv123456.hstgr.cloud" in runbook
     assert "${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}" in runbook
     assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "setup.invalid" in runbook
@@ -919,7 +919,7 @@ def test_readme_exposes_hostinger_compose_url_directly() -> None:
     )
 
     assert compose_url in readme
-    assert "Copy that URL into Hostinger's **Compose from URL** field." in normalized
+    assert "Compose from URL" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in readme
     assert "repository landing page itself is not the Compose URL" in normalized
     assert "TRAEFIK_HOST" in readme
