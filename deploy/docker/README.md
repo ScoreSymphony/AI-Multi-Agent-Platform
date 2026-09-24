@@ -189,79 +189,63 @@ Do not disable Secure cookies to make public HTTP work.
 ## Hostinger Docker Manager
 
 Hostinger Docker Manager's **Compose from URL** flow expects the direct URL of a Docker Compose
-file. For a **new installation**, use this maintained zero-configuration Compose URL:
+file. For a **new installation** that should expose hPanel's **Open** action, use this maintained
+managed-host Compose URL:
 
 ```text
-https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-zero-config.yml
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
 ```
 
-Copy that URL into Hostinger's **Compose from URL** field. The GitHub repository page itself is the
-project source, not the Compose-file URL for this flow.
-
-The historical `docker-compose.hostinger.yml` and `docker-compose.hostinger-https.yml` URLs are
-kept migration-safe for existing deployments that already follow the shared-Traefik-compatible
-topology. They intentionally do not start binding host ports 80/443 during an ordinary redeploy.
-
-### Zero-configuration HTTPS on Hostinger
-
-The maintained zero-config profile is designed for the currently observed Hostinger
-multi-project topology: Hostinger's Traefik project already owns host ports 80 and 443 and runs
-with Docker `host` networking. In that topology there is no external `traefik-proxy` network.
-The platform does **not** compete for 80/443 and does not require any external Docker network.
-
-The dedicated `hostinger-gateway` stays on the private platform bridge only. Host-network
-Traefik can reach that bridge address directly and discovers the gateway through Docker provider
-labels. The gateway joins only the host UTS namespace with `uts: host`. Hostinger currently
-exposes the kernel hostname either as the short form `srvNNNNNN` or as the fully-qualified
-`srvNNNNNN.hstgr.cloud`. Both forms are accepted only when the server-id portion is numeric; the
-short form is normalized to `srvNNNNNN.hstgr.cloud` before the application hostname is derived:
+Copy that URL into Hostinger's **Compose from URL** field and set one project environment variable
+before deployment:
 
 ```text
-${COMPOSE_PROJECT_NAME}.srvNNNNNN.hstgr.cloud
+TRAEFIK_HOST=srv123456.hstgr.cloud
 ```
 
-No `TRAEFIK_HOST`, `AI_MAP_PUBLIC_DOMAIN`, `AI_MAP_TRAEFIK_NETWORK`, or
-`AI_MAP_TRAEFIK_EXTERNAL` value is required. The zero-config profile intentionally contains no
-exact fake `Host(...)` / `HostSNI(...)` fallback such as `setup.invalid`; that would cause
-Hostinger hPanel to choose the wrong URL for **Open**. The managed Hostinger route uses
-project-scoped `HostRegexp` and `HostSNIRegexp` rules. For migration compatibility, the profile
-also accepts an optional existing `AI_MAP_PUBLIC_DOMAIN` override through anchored
-case-insensitive `HostRegexp` / `HostSNIRegexp` rules that wrap the configured hostname in
-Go-regexp `\Q...\E` literal quoting. With no override, those compatibility expressions render
-to an intentionally impossible regex rather than an empty-host/SNI match, so they stay inert and
-do not advertise a concrete fallback hostname:
+Use the VPS hostname shown by hPanel for your server. A real Hostinger Compose-from-URL probe showed
+that generic URL imports do **not** expose `HOSTNAME` or an equivalent VPS hostname to Compose
+interpolation, so the exact hPanel **Open** target cannot be constructed safely from the URL alone.
+Hostinger's own multi-project Traefik guidance likewise uses an explicit `TRAEFIK_HOST` value.
 
-- HTTP on Traefik's `web` entrypoint is forwarded to Caddy port 80 so ACME HTTP-01 and redirects
-  work;
-- HTTPS on Traefik's `websecure` entrypoint uses **TLS passthrough** only for the platform's
-  `<project>.srv<digits>.hstgr.cloud` SNI pattern, so Caddy terminates TLS for the exact derived
-  hostname;
-- there is no catch-all TLS router, so unrelated HTTPS projects remain untouched.
+The managed-host profile is designed for the currently observed Hostinger multi-project topology:
+Hostinger Traefik already owns host ports 80 and 443 and runs with Docker `host` networking. The
+platform does not bind those host ports and does not require a shared `traefik-proxy` network.
+Instead, the dedicated `hostinger-gateway` remains on the private platform bridge, while Traefik
+discovers it through Docker provider labels.
 
-The zero-config profile publishes **no application host port**. This is deliberate: a real
-Hostinger VPS may allow only the standard web ports through its firewall, so relying on an
-arbitrary high port such as 18080 makes an otherwise healthy deployment unreachable. Hostinger
-Traefik is therefore the only public ingress path.
+The configured hostname is used to render exact project-scoped `Host(...)` and `HostSNI(...)`
+rules, so hPanel has a concrete URL to expose. HTTPS is passed through to Caddy, which terminates
+TLS for `<project>.<TRAEFIK_HOST>`. Web and Control Plane remain private.
 
-The normal flow is therefore:
+The gateway also joins only the host UTS namespace with `uts: host`. At runtime it independently
+reads the VPS hostname, accepts only `srv<digits>` or `srv<digits>.hstgr.cloud`, normalizes the
+short form, and verifies that it matches the configured `TRAEFIK_HOST`. A typo or hostname from
+another VPS therefore fails closed instead of serving under a mismatched public route.
 
-1. deploy Hostinger's Traefik project if it is not already running;
-2. paste the zero-config Compose URL above;
-3. click **Deploy**;
-4. wait for the three platform containers to become healthy/running;
-5. click Hostinger's **Open** action; hPanel should use the managed
-   `https://<project>.srvNNNNNN.hstgr.cloud` route directly.
+The managed profile publishes **no application host port**. This avoids the real Hostinger failure
+mode where hPanel selected a high bootstrap port that the VPS firewall did not expose. Hostinger
+Traefik remains the sole public ingress on 80/443.
 
-No additional firewall rule for a platform-specific high port is required.
+The supported flow is:
+
+1. ensure Hostinger's Traefik project is running;
+2. read the VPS hostname shown in hPanel, such as `srv123456.hstgr.cloud`;
+3. create/update the project with `TRAEFIK_HOST` set to that exact hostname;
+4. paste the managed Compose URL above and deploy;
+5. wait for all three platform containers to become healthy/running;
+6. use Hostinger's **Open** action.
+
+The older `docker-compose.hostinger-zero-config.yml` profile remains available for migration
+compatibility. It can derive the managed hostname after container startup through `uts: host` and
+keeps the same private-service/security boundaries, but a fresh generic Compose-from-URL import
+cannot promise an hPanel **Open** link because Hostinger does not provide the VPS hostname early
+enough for Compose to render an exact route.
 
 The gateway does **not** receive the host network namespace, Docker socket, host filesystem mounts,
-privileged mode, or an external IP/hostname discovery service. It runs read-only, drops all
-capabilities and receives only `NET_BIND_SERVICE` so Caddy can listen on internal ports 80/443.
-TLS state is stored in dedicated named volumes.
-
-If the host hostname is neither an exact `srvNNNNNN` short hostname nor an exact
-`srvNNNNNN.hstgr.cloud` hostname and no explicit public domain is configured, the gateway remains
-fail-closed and serves only setup guidance.
+privileged mode, Hostinger API credentials, or an external IP/hostname discovery service. It runs
+read-only, drops all capabilities and receives only `NET_BIND_SERVICE` so Caddy can listen on
+internal ports 80/443. TLS state is stored in dedicated named volumes.
 
 ### Explicit custom domain on host-network Traefik
 
@@ -319,15 +303,18 @@ retained in `hostinger-gateway-data` and `hostinger-gateway-config`. Do not use
 
 ## Configuration
 
-The checked-in zero-configuration Hostinger profile contains no credentials. Supported deployment
-overrides are intentionally small:
+The checked-in Hostinger profiles contain no credentials. For the new-install managed-host profile,
+set `TRAEFIK_HOST` to the VPS hostname shown by hPanel, for example
+`srv123456.hstgr.cloud`. The profile verifies that value against the runtime host UTS hostname.
+
+Shared runtime overrides remain intentionally small:
 
 - `AI_MAP_LOG_LEVEL` — Control Plane log level, default `info`;
 - `AI_MAP_SHUTDOWN_TIMEOUT_SECONDS` — platform drain budget, default `30`, supported range
   `1–3600` seconds.
 
-`AI_MAP_PUBLIC_DOMAIN` is optional on the zero-config profile for backward compatibility with
-existing deployments. New custom-domain installs should prefer
+`AI_MAP_PUBLIC_DOMAIN` remains optional on the legacy zero-config profile for backward
+compatibility. New custom-domain installs should prefer
 `docker-compose.hostinger-custom-domain.yml`, where the variable is required.
 
 The following variables are only for the explicit
