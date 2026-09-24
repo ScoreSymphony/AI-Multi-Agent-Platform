@@ -476,7 +476,7 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert "migration" in runbook
     assert "generic Compose-from-URL" in runbook
     assert "Docker `host` networking" in runbook
-    assert "does not require any external Docker network" in runbook
+    assert "does not require a shared `traefik-proxy` network" in runbook
     assert "traefik-proxy" in runbook
     assert "Host(...)" in runbook
     assert "HostSNI(...)" in runbook
@@ -491,7 +491,7 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK=traefik-proxy" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL=true" in runbook
-    assert "fail-closed" in runbook
+    assert "fails closed" in runbook
 
 
 def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes() -> None:
