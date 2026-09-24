@@ -84,19 +84,19 @@ services:
         condition: service_healthy
     uts: host
     environment:
-      AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough
-      AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:?set TRAEFIK_HOST to the VPS hostname shown in hPanel, for example srv123456.hstgr.cloud}
+      AI_MAP_HOSTINGER_EDGE_MODE: traefik-managed
+      AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}
       AI_MAP_COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}
     expose:
       - "80"
       - "443"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=Host(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST:?set TRAEFIK_HOST to the VPS hostname shown in hPanel, for example srv123456.hstgr.cloud}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=${TRAEFIK_HOST:+Host(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)}${TRAEFIK_HOST:-HostRegexp(`a^`)}"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.loadbalancer.server.port=80"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.rule=HostSNI(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST:?set TRAEFIK_HOST to the VPS hostname shown in hPanel, for example srv123456.hstgr.cloud}`)"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.rule=${TRAEFIK_HOST:+HostSNI(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)}${TRAEFIK_HOST:-HostSNIRegexp(`a^`)}"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.entrypoints=websecure"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.tls.passthrough=true"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls"
