@@ -480,7 +480,7 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert "traefik-proxy" in runbook
     assert "Host(...)" in runbook
     assert "HostSNI(...)" in runbook
-    assert "TLS passthrough" in runbook
+    assert "HTTPS is passed through to Caddy" in runbook
     assert "publishes **no application host port**" in runbook
     assert "no arbitrary high-port firewall" in normalized
     assert "NET_BIND_SERVICE" in runbook
@@ -874,7 +874,7 @@ def test_hostinger_runbook_documents_direct_shared_and_alternate_edges() -> None
     assert "traefik-proxy" in runbook
     assert "srv123456.hstgr.cloud" in runbook
     assert "hostinger-gateway" in runbook
-    assert "fail-closed" in runbook
+    assert "fails closed" in runbook
     assert "NET_BIND_SERVICE" in runbook
     assert "ports 80 and 443" in normalized
     assert "Caddy" in runbook
