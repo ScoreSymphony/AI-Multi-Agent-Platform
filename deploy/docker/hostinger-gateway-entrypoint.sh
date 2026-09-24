@@ -69,8 +69,16 @@ derive_hostinger_domain() {
 }
 
 verify_traefik_host_matches_runtime() {
+  case "$traefik_host" in
+    srv*.hstgr.cloud) ;;
+    *)
+      echo "Invalid Hostinger TRAEFIK_HOST: managed hPanel Open requires the full srv<digits>.hstgr.cloud hostname." >&2
+      return 1
+      ;;
+  esac
+
   supplied_hostname="$(normalize_hostinger_hostname "$traefik_host")" || {
-    echo "Invalid Hostinger TRAEFIK_HOST: expected srv<digits> or srv<digits>.hstgr.cloud." >&2
+    echo "Invalid Hostinger TRAEFIK_HOST: managed hPanel Open requires the full srv<digits>.hstgr.cloud hostname." >&2
     return 1
   }
 
