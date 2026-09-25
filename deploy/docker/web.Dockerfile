@@ -23,7 +23,7 @@ RUN apk add --no-cache libcap \
     && setcap -r /usr/bin/caddy \
     && apk del libcap
 
-COPY deploy/docker/Caddyfile /etc/caddy/Caddyfile
+COPY deploy/docker/caddy/web.Caddyfile /etc/caddy/Caddyfile
 COPY --from=builder /app/dist /srv/frontend
 
 EXPOSE 8080
