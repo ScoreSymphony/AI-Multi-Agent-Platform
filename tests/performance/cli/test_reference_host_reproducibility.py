@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import shutil
@@ -10,7 +9,6 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from ai_multi_agent_platform.benchmarking.reference_host_campaign import (
-    ReferenceHostCampaignRunner,
     reference_host_campaign_profile,
 )
 from ai_multi_agent_platform.benchmarking.reference_host_reproducibility import (
@@ -45,31 +43,162 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-async def _run_campaign(root: Path, name: str) -> Path:
+def _canonical_sha256(payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_campaign_template(root: Path, name: str, *, variant: int) -> Path:
+    """Write minimal schema-valid evidence for analyzer/CLI contract tests.
+
+    Real campaign execution is covered separately by
+    tests/performance/evaluation/test_reference_host_campaign.py and
+    tests/performance/test_reference_host_storage.py. These fixtures intentionally
+    exercise only the reproducibility analyzer's persisted-evidence contract.
+    """
+
     output_dir = root / name
-    runner = ReferenceHostCampaignRunner(
-        output_dir=output_dir,
-        work_dir=root / f"{name}-work",
-        host_label="reference-a",
-        platform_commit=COMMIT,
-        work_dir_mode="explicit",
-    )
-    await runner.run(reference_host_campaign_profile("smoke"))
+    output_dir.mkdir()
+    sweep_dir = output_dir / "sweep"
+    sweep_dir.mkdir()
+
+    configuration = reference_host_campaign_profile("smoke").to_dict()
+    environment: dict[str, object] = {
+        "system": "Linux",
+        "release": "test",
+        "machine": "x86_64",
+        "python_implementation": "CPython",
+        "python_version": "3.12.0",
+        "python_major_minor": "3.12",
+    }
+    environment_sha = _canonical_sha256(environment)
+
+    sweep_summary = sweep_dir / "summary.json"
+    soak_report = output_dir / "soak.json"
+    _write_json(sweep_summary, {"variant": variant})
+    _write_json(soak_report, {"variant": variant})
+
+    concurrency_envelope: list[dict[str, object]] = []
+    for concurrency in (1, 2):
+        throughput = 100.0 * concurrency + variant
+        latency = 2.0 * concurrency + variant * 0.1
+        concurrency_envelope.append(
+            {
+                "concurrency": concurrency,
+                "sample_count": 1,
+                "throughput_min_operations_per_second": throughput,
+                "throughput_median_operations_per_second": throughput,
+                "throughput_max_operations_per_second": throughput,
+                "p95_latency_min_ms": latency,
+                "p95_latency_median_ms": latency,
+                "p95_latency_max_ms": latency,
+                "duration_median_seconds": 0.1,
+                "completed_operations_min": 2,
+                "storage_growth_median_bytes": 10 + variant,
+                "correctness_passed": True,
+            }
+        )
+
+    generated_at = f"2026-09-10T12:00:0{variant}+00:00"
+    envelope: dict[str, object] = {
+        "schema_version": "1.0",
+        "benchmark_id": "single-node.reference.operating-envelope.analysis",
+        "benchmark_version": "1.0",
+        "platform_version": "0.0.1",
+        "platform_commit": COMMIT,
+        "generated_at": generated_at,
+        "deployment_profile": "single-node-reference",
+        "persistence_profile": "sqlite-reference",
+        "workload_distribution": "deterministic-task-lifecycle",
+        "environment": environment,
+        "environment_fingerprint_sha256": environment_sha,
+        "sweep_configuration": {
+            "operation_count_per_point": 2,
+            "warmup_operations": 0,
+            "timeout_seconds": 10.0,
+            "concurrency_levels": [1, 2],
+        },
+        "sweep_sources": ["sweep/summary.json"],
+        "endurance_sources": ["soak.json"],
+        "concurrency_envelope": concurrency_envelope,
+        "highest_verified_concurrency": 2,
+        "endurance_evidence": [
+            {
+                "source": "soak.json",
+                "duration_seconds": 0.25,
+                "concurrency": 1,
+                "max_operations": 4,
+                "completed_operations": 4,
+                "throughput_operations_per_second": 16.0 + variant,
+                "p95_latency_ms": 3.0 + variant * 0.1,
+                "resource_snapshot_count": 2,
+                "traced_memory_growth_bytes": 100 + variant,
+                "peak_rss_growth_bytes": 200 + variant,
+                "open_file_descriptor_growth": 0,
+                "storage_growth_bytes": 20 + variant,
+                "latency_drift_ratio": 1.0 + variant * 0.01,
+                "stop_reason": "max-operations",
+                "correctness_passed": True,
+            }
+        ],
+        "longest_verified_endurance_seconds": 0.25,
+        "claim_semantics": "tested-envelope-only",
+        "budget_status": "not-established",
+        "correctness_passed": True,
+    }
+    envelope_path = output_dir / "operating-envelope.json"
+    _write_json(envelope_path, envelope)
+
+    campaign: dict[str, object] = {
+        "schema_version": "1.0",
+        "campaign_id": "single-node.reference.host-campaign",
+        "campaign_version": "1.0",
+        "profile": "smoke",
+        "host_label": "reference-a",
+        "platform_version": "0.0.1",
+        "platform_commit": COMMIT,
+        "started_at": generated_at,
+        "completed_at": f"2026-09-10T12:00:1{variant}+00:00",
+        "duration_seconds": 0.5,
+        "work_dir_mode": "explicit",
+        "configuration": configuration,
+        "configuration_sha256": _canonical_sha256(configuration),
+        "environment": environment,
+        "environment_fingerprint_sha256": environment_sha,
+        "sweep_summary": {
+            "path": "sweep/summary.json",
+            "sha256": _sha256(sweep_summary),
+        },
+        "soak_report": {
+            "path": "soak.json",
+            "sha256": _sha256(soak_report),
+        },
+        "operating_envelope": {
+            "path": "operating-envelope.json",
+            "sha256": _sha256(envelope_path),
+        },
+        "claim_semantics": "single-host-tested-evidence-only",
+        "budget_status": "not-established",
+        "correctness_passed": True,
+    }
+    _write_json(output_dir / "campaign.json", campaign)
     return output_dir
 
 
 @pytest.fixture(scope="module")
 def campaign_templates(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
-    """Generate the expensive independent campaign evidence once for this module."""
+    """Create fast persisted-evidence fixtures for reproducibility-only tests."""
 
     root = tmp_path_factory.mktemp("reference-host-reproducibility")
-
-    async def generate() -> tuple[Path, Path]:
-        first = await _run_campaign(root, "template-1")
-        second = await _run_campaign(root, "template-2")
-        return first, second
-
-    return asyncio.run(generate())
+    return (
+        _write_campaign_template(root, "template-1", variant=1),
+        _write_campaign_template(root, "template-2", variant=2),
+    )
 
 
 def _campaign_copy(
