@@ -58,7 +58,10 @@ def test_runtime_image_workflow_preserves_immutable_source_identity() -> None:
     assert "tag event source mismatch" in workflow
     assert "immutable SHA tag already exists" in workflow
     assert "release tag already exists and will not be rewritten" in workflow
-    assert "org.opencontainers.image.source=https://github.com/ScoreSymphony/AI-Multi-Agent-Platform" in workflow
+    assert (
+        "org.opencontainers.image.source=https://github.com/ScoreSymphony/AI-Multi-Agent-Platform"
+        in workflow
+    )
     assert "org.opencontainers.image.revision=${{ needs.prepare.outputs.source_sha }}" in workflow
     assert "org.opencontainers.image.licenses=MIT" in workflow
     assert "sbom: true" in workflow
