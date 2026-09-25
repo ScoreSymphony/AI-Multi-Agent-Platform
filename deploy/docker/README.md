@@ -4,6 +4,36 @@ This directory provides a replaceable Docker Compose deployment of the maintaine
 topology. Docker container IDs, service names, networks, image tags and host
 ports are deployment metadata only; they do not become canonical platform identity.
 
+## Directory layout
+
+The public Compose entry points intentionally stay directly under `deploy/docker/`. Some of those
+files are consumed through stable raw GitHub URLs, so moving them into nested folders would break
+existing Hostinger and operator workflows.
+
+Implementation-only assets are grouped separately:
+
+```text
+deploy/docker/
+├── README.md
+├── *.Dockerfile
+├── docker-compose.*.yml        # stable deployment entry points
+├── caddy/
+│   ├── web.Caddyfile
+│   ├── public-https.Caddyfile
+│   ├── setup-pending.Caddyfile
+│   └── hostinger/
+│       ├── gateway.Caddyfile
+│       ├── setup-pending.Caddyfile
+│       ├── direct.Caddyfile
+│       └── direct-setup-pending.Caddyfile
+└── scripts/
+    ├── https-edge-entrypoint.sh
+    └── hostinger-gateway-entrypoint.sh
+```
+
+Keep operator-facing Compose URLs stable. New Caddy snippets and container entrypoint helpers belong
+under `caddy/` and `scripts/` rather than expanding the deployment-directory root.
+
 The repository-root `docker-compose.yml` is the secure production/self-hosting default. It
 defines the Control Plane, Web service, repository-owned Caddy HTTPS edge, and an operations-only
 backup helper:
