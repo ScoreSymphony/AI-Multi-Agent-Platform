@@ -68,8 +68,8 @@ Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:
 For Hostinger, the zero-input product target is the native **One Click Deploy / Docker
 Catalog** path. Real provider tests established that generic **Compose from URL** cannot obtain the
 VPS hostname early enough to make hPanel **Open** point directly at the generated HTTPS
-`*.hstgr.cloud` application URL. The repository is preparing the catalog packaging under
-`deploy/docker/docker-compose.hostinger-catalog.yml`; it is not a user-facing install path until
+`*.hstgr.cloud` application URL. The repository is preparing a catalog packaging **candidate** under
+`deploy/docker/docker-compose.hostinger-catalog-candidate.yml`; it is not a supported user-facing install path until
 Hostinger confirms and publishes the catalog entry. See
 [`docs/operations/HOSTINGER_ONE_CLICK.md`](docs/operations/HOSTINGER_ONE_CLICK.md) for the provider
 evidence and catalog-readiness status.
