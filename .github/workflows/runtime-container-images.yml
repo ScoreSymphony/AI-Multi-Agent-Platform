@@ -3,10 +3,9 @@ name: Runtime container images
 on:
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: Exact source commit/ref to publish (prefer a full commit SHA)
+      source_sha:
+        description: Exact 40-character source commit SHA to publish
         required: true
-        default: main
         type: string
   push:
     tags:
@@ -32,17 +31,30 @@ jobs:
       - name: Checkout exact source
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.ref }}
           persist-credentials: false
 
       - name: Resolve publication identity
         id: identity
         shell: bash
+        env:
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
           source_sha="$(git rev-parse HEAD)"
           sha_tag="sha-${source_sha}"
           release_tag=""
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ ! "${REQUESTED_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "workflow_dispatch requires an exact 40-character lowercase commit SHA" >&2
+              exit 1
+            fi
+            if [[ "${source_sha}" != "${REQUESTED_SOURCE_SHA}" ]]; then
+              echo "manual source mismatch: ${source_sha} != ${REQUESTED_SOURCE_SHA}" >&2
+              exit 1
+            fi
+          fi
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             if [[ "${source_sha}" != "${GITHUB_SHA}" ]]; then
