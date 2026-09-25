@@ -84,6 +84,10 @@ The expected provider-owned catalog environment supplies:
 - `COMPOSE_PROJECT_NAME`;
 - `TRAEFIK_HOST`.
 
+The catalog Compose intentionally has no top-level `name:` field. Hostinger must remain free to
+assign its catalog project identity (including any uniqueness suffix) because that identity is part
+of the generated temporary hostname contract.
+
 The gateway renders exact project-scoped Host/HostSNI rules from those values. The application
 stack publishes no arbitrary host port:
 
