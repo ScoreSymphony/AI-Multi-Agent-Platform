@@ -245,12 +245,11 @@ jobs:
           - control-plane
           - web
           - hostinger-gateway
-    env:
-      DOCKER_CONFIG: ${{ runner.temp }}/docker-anonymous
     steps:
       - name: Verify immutable image is anonymously pullable
         shell: bash
         env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-anonymous
           IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
           SHA_TAG: ${{ needs.prepare.outputs.sha_tag }}
         run: |
