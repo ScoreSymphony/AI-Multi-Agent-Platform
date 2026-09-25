@@ -1,6 +1,6 @@
 services:
   control-plane:
-    image: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:${AI_MAP_IMAGE_TAG:-latest}
+    image: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:${AI_MAP_IMAGE_TAG:-edge}
     restart: unless-stopped
     init: true
     environment:
@@ -37,7 +37,7 @@ services:
       - platform
 
   web:
-    image: ghcr.io/scoresymphony/ai-multi-agent-platform-web:${AI_MAP_IMAGE_TAG:-latest}
+    image: ghcr.io/scoresymphony/ai-multi-agent-platform-web:${AI_MAP_IMAGE_TAG:-edge}
     restart: unless-stopped
     depends_on:
       control-plane:
@@ -69,7 +69,7 @@ services:
       - platform
 
   hostinger-gateway:
-    image: ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway:${AI_MAP_IMAGE_TAG:-latest}
+    image: ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway:${AI_MAP_IMAGE_TAG:-edge}
     restart: unless-stopped
     depends_on:
       web:
