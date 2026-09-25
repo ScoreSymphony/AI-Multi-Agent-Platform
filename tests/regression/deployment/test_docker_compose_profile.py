@@ -358,15 +358,15 @@ def test_hostinger_catalog_profile_pulls_versioned_images_without_public_app_por
     assert "build:" not in compose
     assert (
         "image: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:"
-        "${AI_MAP_IMAGE_TAG:-latest}" in control_plane
+        "${AI_MAP_IMAGE_TAG:-edge}" in control_plane
     )
     assert (
         "image: ghcr.io/scoresymphony/ai-multi-agent-platform-web:"
-        "${AI_MAP_IMAGE_TAG:-latest}" in web
+        "${AI_MAP_IMAGE_TAG:-edge}" in web
     )
     assert (
         "image: ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway:"
-        "${AI_MAP_IMAGE_TAG:-latest}" in gateway
+        "${AI_MAP_IMAGE_TAG:-edge}" in gateway
     )
     assert "ports:" not in control_plane
     assert "ports:" not in web
