@@ -319,6 +319,28 @@ jobs:
             echo "managed Hostinger profile regressed its private/exact-host contract" >&2
             exit 1
           fi
+          COMPOSE_PROJECT_NAME=ai-multi-agent-platform \
+            TRAEFIK_HOST=srv123456.hstgr.cloud AI_MAP_IMAGE_TAG=0.0.1 docker compose \
+            -f deploy/docker/docker-compose.hostinger-catalog-candidate.yml \
+            config > /tmp/hostinger-catalog.yml
+          grep -F 'ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:0.0.1' \
+            /tmp/hostinger-catalog.yml
+          grep -F 'ghcr.io/scoresymphony/ai-multi-agent-platform-web:0.0.1' \
+            /tmp/hostinger-catalog.yml
+          grep -F 'ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway:0.0.1' \
+            /tmp/hostinger-catalog.yml
+          grep -F 'Host(`ai-multi-agent-platform.srv123456.hstgr.cloud`)' \
+            /tmp/hostinger-catalog.yml
+          grep -F 'HostSNI(`ai-multi-agent-platform.srv123456.hstgr.cloud`)' \
+            /tmp/hostinger-catalog.yml
+          grep -F 'AI_MAP_SECURE_COOKIE: "true"' /tmp/hostinger-catalog.yml
+          if grep -F 'build:' /tmp/hostinger-catalog.yml \
+            || grep -F 'published:' /tmp/hostinger-catalog.yml \
+            || grep -F 'setup.invalid' /tmp/hostinger-catalog.yml \
+            || grep -F '/var/run/docker.sock' /tmp/hostinger-catalog.yml; then
+            echo "Hostinger catalog profile regressed its image-only/private contract" >&2
+            exit 1
+          fi
           AI_MAP_PUBLIC_DOMAIN=agents.example.test AI_MAP_SOURCE_CONTEXT=../.. docker compose \
             -f deploy/docker/docker-compose.hostinger-custom-domain.yml \
             config > /tmp/hostinger-custom-domain.yml

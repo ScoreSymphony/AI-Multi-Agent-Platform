@@ -17,6 +17,7 @@ HOSTINGER_COMPOSE = DOCKER_DIR / "docker-compose.hostinger.yml"
 HOSTINGER_HTTPS_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-https.yml"
 HOSTINGER_ZERO_CONFIG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-zero-config.yml"
 HOSTINGER_MANAGED_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-managed.yml"
+HOSTINGER_CATALOG_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-catalog-candidate.yml"
 HOSTINGER_CUSTOM_DOMAIN_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-custom-domain.yml"
 HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
@@ -345,6 +346,51 @@ def test_hostinger_managed_profile_requires_exact_hostinger_hostname() -> None:
     assert "setup.invalid" not in gateway
     assert "traefik.docker.network" not in gateway
     assert "/var/run/docker.sock" not in gateway
+
+
+def test_hostinger_catalog_profile_pulls_versioned_images_without_public_app_ports() -> None:
+    compose = HOSTINGER_CATALOG_COMPOSE.read_text(encoding="utf-8")
+    control_plane = _control_plane_block(compose)
+    web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
+    gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
+
+    assert not compose.startswith("name:")
+    assert "build:" not in compose
+    assert (
+        "image: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:"
+        "${AI_MAP_IMAGE_TAG:-edge}" in control_plane
+    )
+    assert (
+        "image: ghcr.io/scoresymphony/ai-multi-agent-platform-web:${AI_MAP_IMAGE_TAG:-edge}" in web
+    )
+    assert (
+        "image: ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway:"
+        "${AI_MAP_IMAGE_TAG:-edge}" in gateway
+    )
+    assert "ports:" not in control_plane
+    assert "ports:" not in web
+    assert "ports:" not in gateway
+    assert 'AI_MAP_SECURE_COOKIE: "true"' in control_plane
+    assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-managed" in gateway
+    assert (
+        "AI_MAP_HOSTINGER_TRAEFIK_HOST: "
+        "${TRAEFIK_HOST:?Hostinger One Click must inject TRAEFIK_HOST}" in gateway
+    )
+    assert (
+        "rule=Host(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)" in gateway
+    )
+    assert (
+        "rule=HostSNI(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)"
+        in gateway
+    )
+    assert ".tls.passthrough=true" in gateway
+    assert ".loadbalancer.server.port=80" in gateway
+    assert ".loadbalancer.server.port=443" in gateway
+    assert "setup.invalid" not in gateway
+    assert "/var/run/docker.sock" not in gateway
+    assert "platform-data:/var/lib/ai-multi-agent-platform" in control_plane
+    assert "hostinger-gateway-data:/data" in gateway
+    assert "hostinger-gateway-config:/config" in gateway
 
 
 def test_hostinger_custom_domain_profile_requires_exact_domain() -> None:

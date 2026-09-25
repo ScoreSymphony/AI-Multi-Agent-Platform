@@ -65,32 +65,31 @@ The root profile publishes only ports 80/443 through the repository-owned Caddy 
 Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
 Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
 
-For a **new** Hostinger Docker Manager deployment that should expose hPanel's **Open** action,
-use the explicit managed-host profile:
+For Hostinger, the zero-input product target is the native **One Click Deploy / Docker
+Catalog** path. Real provider tests established that generic **Compose from URL** cannot obtain the
+VPS hostname early enough to make hPanel **Open** point directly at the generated HTTPS
+`*.hstgr.cloud` application URL. The repository is preparing a catalog packaging **candidate** under
+`deploy/docker/docker-compose.hostinger-catalog-candidate.yml`; it is not a supported user-facing install path until
+Hostinger confirms and publishes the catalog entry. See
+[`docs/operations/HOSTINGER_ONE_CLICK.md`](docs/operations/HOSTINGER_ONE_CLICK.md) for the provider
+evidence and catalog-readiness status.
+
+Until that provider-controlled catalog onboarding is complete, the explicit managed-host profile
+remains an advanced/operator fallback:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
 ```
 
-Deploy the URL once with the desired project name. The initial deployment is intentionally
-setup-pending and advertises no public hostname. Then open **Manage → Environment variables
-(.env)**, add `TRAEFIK_HOST` with the full VPS hostname shown by hPanel (for example
-`srv123456.hstgr.cloud`), and choose **Save and deploy**. The configured deployment renders an
-exact `Host(...)` / `HostSNI(...)` route for `<project>.<TRAEFIK_HOST>`, keeps Web and Control
-Plane private, publishes no application host ports, and leaves Hostinger Traefik as the sole owner
-of ports 80/443.
-
-This one explicit value is required because a real Hostinger **Compose from URL** probe showed that
-the generic import environment does **not** provide `HOSTNAME` or an equivalent VPS hostname at
-Compose interpolation time. The gateway can still discover and validate the VPS hostname later via
-`uts: host`, but that happens too late for hPanel to construct its **Open** URL. The managed-host
-profile therefore verifies the configured `TRAEFIK_HOST` against the independently discovered host
-UTS hostname and fails closed on a mismatch.
+That fallback requires the full Hostinger VPS hostname through `TRAEFIK_HOST` and must not be
+described as equivalent to the intended zero-input One Click experience. It renders exact
+`Host(...)` / `HostSNI(...)` routing, keeps Web and Control Plane private, publishes no
+application host ports, and verifies the configured hostname against the independently discovered
+host UTS identity.
 
 The older `docker-compose.hostinger-zero-config.yml` profile remains migration-compatible for
 existing deployments and can still derive the managed hostname at runtime, but it cannot promise a
-hPanel **Open** link for a fresh generic Compose-from-URL import because its managed route is only
-known after container start. It is no longer the documented new-install default.
+secure hPanel **Open** link for a fresh generic Compose-from-URL import.
 
 Existing installations already tracking
 `deploy/docker/docker-compose.hostinger.yml` or
