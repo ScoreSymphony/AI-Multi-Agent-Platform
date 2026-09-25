@@ -2,14 +2,16 @@
 
 ## Status
 
-The repository is **catalog-ready, not catalog-listed**.
+The repository has a **catalog packaging candidate; it is not yet provider-validated or catalog-listed**.
 
 The generic Hostinger Docker Manager **Compose from URL** path was tested on a real VPS and cannot
 provide the required zero-input HTTPS/Open experience. The primary Hostinger product path therefore
 targets Hostinger's native **One Click Deploy / Docker Catalog** provisioning surface.
 
-Repository-side packaging can be prepared independently. Actual inclusion in Hostinger's public
-Docker Catalog remains a provider-controlled step.
+Repository-side image publication and a candidate Compose input can be prepared independently.
+The candidate must not be treated as Hostinger's final catalog format until #1476 obtains the
+provider's actual onboarding/schema contract. Actual inclusion in Hostinger's public Docker Catalog
+remains a provider-controlled step.
 
 ## Provider evidence
 
@@ -74,8 +76,9 @@ GitHub account.
 
 ## Catalog Compose input
 
-`deploy/docker/docker-compose.hostinger-catalog.yml` is the repository-owned catalog packaging
-input.
+`deploy/docker/docker-compose.hostinger-catalog-candidate.yml` is the repository-owned **candidate**
+catalog packaging input. Its image/network/persistence boundaries are intentional, but the
+provider-specific shape remains provisional until Hostinger confirms the catalog contract.
 
 Unlike the generic Hostinger Compose profiles, it contains **no Git build contexts**. All services
 pull prebuilt GHCR images. This avoids cloning/building the complete repository during One Click
@@ -114,7 +117,7 @@ When Hostinger confirms its catalog submission path, provide at minimum:
    `https://github.com/ScoreSymphony/AI-Multi-Agent-Platform`;
 3. license: MIT;
 4. catalog Compose input:
-   `deploy/docker/docker-compose.hostinger-catalog.yml`;
+   `deploy/docker/docker-compose.hostinger-catalog-candidate.yml`;
 5. the three public GHCR image coordinates above;
 6. internal application entrypoint: Hostinger gateway, ports 80/443;
 7. persistent volumes:
