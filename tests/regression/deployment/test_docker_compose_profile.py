@@ -22,11 +22,11 @@ HOSTINGER_DIRECT_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-direct.yml"
 HOSTINGER_SHARED_TRAEFIK_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-shared-traefik.yml"
 HOSTINGER_EXTERNAL_EDGE_COMPOSE = DOCKER_DIR / "docker-compose.hostinger-external-edge.yml"
 HOSTINGER_GATEWAY_DOCKERFILE = DOCKER_DIR / "hostinger-gateway.Dockerfile"
-HOSTINGER_GATEWAY_CADDY = DOCKER_DIR / "Caddyfile.hostinger-gateway"
-HOSTINGER_GATEWAY_PENDING_CADDY = DOCKER_DIR / "Caddyfile.hostinger-setup-pending"
-HOSTINGER_DIRECT_CADDY = DOCKER_DIR / "Caddyfile.hostinger-direct"
-HOSTINGER_DIRECT_PENDING_CADDY = DOCKER_DIR / "Caddyfile.hostinger-direct-setup-pending"
-HOSTINGER_GATEWAY_ENTRYPOINT = DOCKER_DIR / "hostinger-gateway-entrypoint.sh"
+HOSTINGER_GATEWAY_CADDY = DOCKER_DIR / "caddy/hostinger/gateway.Caddyfile"
+HOSTINGER_GATEWAY_PENDING_CADDY = DOCKER_DIR / "caddy/hostinger/setup-pending.Caddyfile"
+HOSTINGER_DIRECT_CADDY = DOCKER_DIR / "caddy/hostinger/direct.Caddyfile"
+HOSTINGER_DIRECT_PENDING_CADDY = DOCKER_DIR / "caddy/hostinger/direct-setup-pending.Caddyfile"
+HOSTINGER_GATEWAY_ENTRYPOINT = DOCKER_DIR / "scripts/hostinger-gateway-entrypoint.sh"
 RECOVERY_COMPOSE = DOCKER_DIR / "docker-compose.recovery.yml"
 
 _STOP_GRACE_RE = re.compile(r"^\s*stop_grace_period:\s*(\d+)s\s*$", re.MULTILINE)
@@ -839,16 +839,16 @@ def test_hostinger_shared_gateway_without_hostname_stays_setup_pending(
 
 def test_generic_https_edge_remains_pinned_for_non_hostinger_root_profile() -> None:
     dockerfile = (DOCKER_DIR / "https-edge.Dockerfile").read_text(encoding="utf-8")
-    caddy = (DOCKER_DIR / "Caddyfile.public-https").read_text(encoding="utf-8")
-    entrypoint = (DOCKER_DIR / "https-edge-entrypoint.sh").read_text(encoding="utf-8")
+    caddy = (DOCKER_DIR / "caddy/public-https.Caddyfile").read_text(encoding="utf-8")
+    entrypoint = (DOCKER_DIR / "scripts/https-edge-entrypoint.sh").read_text(encoding="utf-8")
 
     assert "FROM caddy:2.11.4-alpine" in dockerfile
-    assert "COPY deploy/docker/Caddyfile.public-https /etc/caddy/Caddyfile" in dockerfile
+    assert "COPY deploy/docker/caddy/public-https.Caddyfile /etc/caddy/Caddyfile" in dockerfile
     assert (
-        "COPY deploy/docker/Caddyfile.setup-pending /etc/caddy/Caddyfile.setup-pending"
+        "COPY deploy/docker/caddy/setup-pending.Caddyfile /etc/caddy/Caddyfile.setup-pending"
         in dockerfile
     )
-    assert "COPY deploy/docker/https-edge-entrypoint.sh" in dockerfile
+    assert "COPY deploy/docker/scripts/https-edge-entrypoint.sh" in dockerfile
     assert 'ENTRYPOINT ["/usr/local/bin/ai-map-https-edge-entrypoint"]' in dockerfile
     assert "EXPOSE 80 443" in dockerfile
     assert "{$AI_MAP_PUBLIC_DOMAIN}" in caddy
