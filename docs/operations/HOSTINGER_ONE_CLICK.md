@@ -57,11 +57,13 @@ Main publishes:
 - `sha-<full commit SHA>`;
 - `edge`.
 
-A version tag such as `v1.0.0` additionally publishes:
+A stable version tag such as `v1.0.0` additionally publishes:
 
 - `1.0.0`;
 - `1.0`;
 - `latest`.
+
+Pre-release SemVer tags publish their version tags but do not advance `latest`.
 
 Images are built with SBOM and provenance output enabled. Catalog production definitions should pin
 a released semantic version or immutable digest rather than `edge`.
