@@ -321,7 +321,7 @@ jobs:
           fi
           COMPOSE_PROJECT_NAME=ai-multi-agent-platform \
             TRAEFIK_HOST=srv123456.hstgr.cloud AI_MAP_IMAGE_TAG=0.0.1 docker compose \
-            -f deploy/docker/docker-compose.hostinger-catalog.yml \
+            -f deploy/docker/docker-compose.hostinger-catalog-candidate.yml \
             config > /tmp/hostinger-catalog.yml
           grep -F 'ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:0.0.1' \
             /tmp/hostinger-catalog.yml
