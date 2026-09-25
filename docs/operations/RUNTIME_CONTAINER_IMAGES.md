@@ -32,8 +32,8 @@ The workflow also adds OCI source, revision, title and MIT-license labels.
 
 It supports:
 
-- manual `workflow_dispatch` for an exact source commit/ref, primarily for Hostinger Catalog
-  validation candidates;
+- manual `workflow_dispatch` for an exact 40-character source commit SHA, primarily for Hostinger
+  Catalog validation candidates;
 - semantic-version tag pushes matching `v*.*.*`.
 
 The workflow never runs on pull requests and uses only GitHub's scoped `GITHUB_TOKEN` with
@@ -52,13 +52,33 @@ No moving `latest` tag is published by this workflow.
 ## Manual Hostinger Catalog candidate
 
 After this workflow is merged to the default branch, open **Actions → Runtime container images →
-Run workflow** and set `source_ref` to the exact candidate commit SHA.
+Run workflow** and set `source_sha` to the exact 40-character candidate commit SHA.
 
 The resulting image references are shown in the workflow summary together with their pushed
 digests. Hostinger Catalog packaging should consume the immutable SHA-tagged refs during provider
 validation.
 
 Do not use a pull-request head from an untrusted fork as a publication source.
+
+## Package visibility
+
+GitHub Container Registry creates newly published organization packages as private by default.
+Hostinger must be able to pull Catalog runtime images without GitHub credentials, so each of the
+three repository-owned GHCR packages must be made **Public** once after its first publication:
+
+1. open the ScoreSymphony organization on GitHub;
+2. open **Packages** and select the runtime package;
+3. open **Package settings**;
+4. under **Danger Zone → Change visibility**, choose **Public**;
+5. repeat for the Control Plane, Web and Hostinger Gateway packages.
+
+GitHub does not allow a public package to be made private again, so perform this one-time action only
+for these intended public runtime artifacts. Before a Hostinger Catalog candidate is submitted,
+verify an unauthenticated `docker manifest inspect` or `docker pull` succeeds for every immutable
+SHA-tagged image.
+
+This visibility step is repository/release administration, not an end-user Hostinger installation
+step and does not add a paid service.
 
 ## Architecture and cost
 
