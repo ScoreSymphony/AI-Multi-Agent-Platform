@@ -227,3 +227,46 @@ jobs:
               echo "- release ref: \`${IMAGE}:${RELEASE_VERSION}\`"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
+
+
+  verify-public:
+    name: verify-public-${{ matrix.component }}
+    needs:
+      - prepare
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: none
+      packages: none
+    strategy:
+      fail-fast: true
+      matrix:
+        component:
+          - control-plane
+          - web
+          - hostinger-gateway
+    env:
+      DOCKER_CONFIG: ${{ runner.temp }}/docker-anonymous
+    steps:
+      - name: Verify immutable image is anonymously pullable
+        shell: bash
+        env:
+          IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
+          SHA_TAG: ${{ needs.prepare.outputs.sha_tag }}
+        run: |
+          set -euo pipefail
+          rm -rf "${DOCKER_CONFIG}"
+          mkdir -p "${DOCKER_CONFIG}"
+          if [[ -e "${DOCKER_CONFIG}/config.json" ]]; then
+            echo "anonymous GHCR verification unexpectedly has Docker credentials" >&2
+            exit 1
+          fi
+          docker manifest inspect "${IMAGE}:${SHA_TAG}" > /tmp/manifest.json
+          test -s /tmp/manifest.json
+          {
+            echo "## Anonymous GHCR verification"
+            echo
+            echo "- component: \`${{ matrix.component }}\`"
+            echo "- immutable ref: \`${IMAGE}:${SHA_TAG}\`"
+            echo "- credentials: none"
+          } >> "${GITHUB_STEP_SUMMARY}"
