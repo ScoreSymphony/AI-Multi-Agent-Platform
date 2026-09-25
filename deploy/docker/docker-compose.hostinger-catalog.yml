@@ -1,5 +1,3 @@
-name: ai-multi-agent-platform
-
 services:
   control-plane:
     image: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:${AI_MAP_IMAGE_TAG:-latest}
