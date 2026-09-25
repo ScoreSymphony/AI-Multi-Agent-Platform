@@ -11,8 +11,6 @@ on:
 permissions:
   contents: read
   packages: write
-  attestations: write
-  id-token: write
 
 concurrency:
   group: publish-container-images-${{ github.ref }}
