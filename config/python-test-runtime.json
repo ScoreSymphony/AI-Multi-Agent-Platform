@@ -84,8 +84,7 @@
     "notes": [
       "Step durations are measured from completed successful GitHub Actions runs immediately preceding the sharding change.",
       "The wide non-unit range demonstrates runner/load variance, so initial wall budgets guard major regressions rather than normal hosted-runner jitter.",
-      "Per-test and per-module thresholds are initial major-regression guards and are tightened only from retained timing artifacts.",
-      "The system-regression reference-host reproducibility node has a 20s targeted override because its module-scoped fixture generates two independent smoke campaigns once; retained hosted-runner evidence measured that setup at 11.50s and 16.678s while the suite remained functionally green. The 15s default remains unchanged for every other node."
+      "Per-test and per-module thresholds are initial major-regression guards and are tightened only from retained timing artifacts."
     ],
     "post_sharding_evidence": {
       "integration": [
@@ -178,10 +177,7 @@
     "system-regression": {
       "wall_seconds": 240,
       "slow_test_seconds": 15,
-      "slow_module_seconds": 20,
-      "slow_test_overrides": {
-        "tests.performance.cli.test_reference_host_reproducibility::test_reproducibility_analyzer_observes_same_host_variability": 20
-      }
+      "slow_module_seconds": 20
     },
     "full-local": {
       "wall_seconds": 480,
