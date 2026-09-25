@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = ROOT / ".github" / "workflows" / "publish-container-images.yml"
+PUBLIC_SMOKE_WORKFLOW = ROOT / ".github" / "workflows" / "ghcr-public-smoke.yml"
 LEGACY_WORKFLOW = ROOT / ".github" / "workflows" / "runtime-container-images.yml"
 CATALOG_COMPOSE = ROOT / "deploy" / "docker" / "docker-compose.hostinger-catalog-candidate.yml"
 RUNBOOK = ROOT / "docs" / "operations" / "HOSTINGER_ONE_CLICK.md"
@@ -11,6 +12,7 @@ RUNBOOK = ROOT / "docs" / "operations" / "HOSTINGER_ONE_CLICK.md"
 
 def test_runtime_image_publication_has_one_maintained_workflow() -> None:
     assert WORKFLOW.is_file()
+    assert PUBLIC_SMOKE_WORKFLOW.is_file()
     assert not LEGACY_WORKFLOW.exists()
 
 
@@ -78,6 +80,36 @@ def test_runtime_image_workflow_records_refs_and_digests() -> None:
     assert "release ref:" in workflow
 
 
+def test_runtime_image_workflow_verifies_exact_sha_anonymously_after_publish() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    verify = workflow.split("\n  verify-public:", 1)[1]
+
+    assert "      - prepare" in verify
+    assert "      - publish" in verify
+    assert "packages: none" in verify
+    assert "contents: none" in verify
+    assert "DOCKER_CONFIG:" in verify
+    assert "docker manifest inspect" in verify
+    assert "needs.prepare.outputs.sha_tag" in verify
+    assert "docker/login-action" not in verify
+    assert "credentials: none" in verify
+
+
+def test_public_registry_smoke_is_anonymous_and_non_publishing() -> None:
+    workflow = PUBLIC_SMOKE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "pull_request:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "packages: none" in workflow
+    assert "contents: none" in workflow
+    assert "DOCKER_CONFIG:" in workflow
+    assert "docker manifest inspect" in workflow
+    assert '":edge"' in workflow
+    assert "docker/login-action" not in workflow
+    assert "docker/build-push-action" not in workflow
+    assert "secrets.GITHUB_TOKEN" not in workflow
+
+
 def test_catalog_candidate_uses_maintained_ghcr_image_family() -> None:
     compose = CATALOG_COMPOSE.read_text(encoding="utf-8")
 
@@ -99,4 +131,6 @@ def test_hostinger_runbook_documents_exact_candidate_publication_and_visibility_
     assert "workflow summary" in runbook
     assert "publicly pullable without credentials" in runbook
     assert "docker manifest inspect" in runbook
+    assert "verify-public" in runbook
+    assert "GHCR public smoke" in runbook
     assert "single maintained publication workflow" in runbook
