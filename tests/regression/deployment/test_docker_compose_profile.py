@@ -333,11 +333,13 @@ def test_hostinger_managed_profile_is_zero_input_and_hpanel_discoverable() -> No
     assert "ports:" not in web
     assert "uts: host" in gateway
     assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-passthrough" in gateway
+    assert "AI_MAP_HOSTINGER_TRAEFIK_HOST: ${TRAEFIK_HOST:-}" in gateway
     assert "AI_MAP_PUBLIC_DOMAIN: ${AI_MAP_PUBLIC_DOMAIN:-}" in gateway
-    assert "TRAEFIK_HOST" not in gateway
     assert '      - "8080:8080"' in gateway
-    assert "HostRegexp(" in gateway
-    assert "HostSNIRegexp(" in gateway
+    assert "${TRAEFIK_HOST:+Host(" in gateway
+    assert "${TRAEFIK_HOST:-HostRegexp(" in gateway
+    assert "${TRAEFIK_HOST:+HostSNI(" in gateway
+    assert "${TRAEFIK_HOST:-HostSNIRegexp(" in gateway
     assert "srv[0-9]+" in gateway
     assert ".tls.passthrough=true" in gateway
     assert ".loadbalancer.server.port=80" in gateway
