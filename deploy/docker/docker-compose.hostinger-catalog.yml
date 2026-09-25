@@ -86,11 +86,11 @@ services:
       - "443"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=Host(\`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}\`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.rule=Host(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-http.loadbalancer.server.port=80"
-      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.rule=HostSNI(\`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}\`)"
+      - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.rule=HostSNI(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.entrypoints=websecure"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.tls.passthrough=true"
       - "traefik.tcp.routers.${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls.service=${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}-hostinger-tls"
