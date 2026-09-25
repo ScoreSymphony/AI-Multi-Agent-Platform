@@ -1,5 +1,6 @@
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = ROOT / ".github" / "workflows" / "runtime-container-images.yml"
@@ -28,12 +29,17 @@ def test_runtime_image_workflow_is_publish_only_and_least_privilege() -> None:
 def test_runtime_image_workflow_builds_all_platform_runtime_images() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    expected = {
-        "ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane": "deploy/docker/control-plane.Dockerfile",
-        "ghcr.io/scoresymphony/ai-multi-agent-platform-web": "deploy/docker/web.Dockerfile",
-        "ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway": "deploy/docker/hostinger-gateway.Dockerfile",
-    }
-    for image, dockerfile in expected.items():
+    images = (
+        "ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane",
+        "ghcr.io/scoresymphony/ai-multi-agent-platform-web",
+        "ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway",
+    )
+    dockerfiles = (
+        "deploy/docker/control-plane.Dockerfile",
+        "deploy/docker/web.Dockerfile",
+        "deploy/docker/hostinger-gateway.Dockerfile",
+    )
+    for image, dockerfile in zip(images, dockerfiles, strict=True):
         assert image in workflow
         assert dockerfile in workflow
 
