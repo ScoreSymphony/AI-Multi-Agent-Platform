@@ -110,23 +110,13 @@ def budget_violations(report: dict[str, Any]) -> list[str]:
         )
 
     test_budget = budget.get("slow_test_seconds")
-    test_overrides = budget.get("slow_test_overrides", {})
-    if not isinstance(test_overrides, dict):
-        raise ValueError("slow_test_overrides must be an object mapping test nodes to seconds")
-    for candidate in report["slowest_tests"]:
-        node = str(candidate["node"])
-        override_budget = test_overrides.get(node)
-        applicable_budget = override_budget if override_budget is not None else test_budget
-        if applicable_budget is None:
-            continue
-        if float(candidate["seconds"]) > float(applicable_budget):
-            source = "node override" if override_budget is not None else "lane default"
+    if test_budget is not None and report["slowest_tests"]:
+        slowest = report["slowest_tests"][0]
+        if slowest["seconds"] > test_budget:
             violations.append(
-                f"slowest test over applicable budget {node} took "
-                f"{float(candidate['seconds']):.3f}s "
-                f"(budget {float(applicable_budget):.3f}s, {source})"
+                f"slowest test {slowest['node']} took {slowest['seconds']:.3f}s "
+                f"(budget {float(test_budget):.3f}s)"
             )
-            break
 
     module_budget = budget.get("slow_module_seconds")
     if module_budget is not None and report["slowest_modules"]:
