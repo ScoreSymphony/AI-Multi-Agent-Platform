@@ -100,9 +100,10 @@ stack publishes no arbitrary host port:
 - Secure cookies stay enabled;
 - no Docker socket, Hostinger API key, fake hostname, or host filesystem mount is added.
 
-The catalog Compose currently accepts `AI_MAP_IMAGE_TAG` for packaging/testing. A final catalog
-listing should pin this to the provider-approved release tag or digest rather than expose image-tag
-selection to normal users.
+The catalog Compose currently accepts `AI_MAP_IMAGE_TAG` for packaging/testing and defaults to
+`edge`, because `edge` is published immediately after the repository preparation reaches
+`main`. A final public catalog listing must pin this to the provider-approved stable release tag
+or immutable digest rather than expose image-tag selection to normal users.
 
 ## Provider onboarding packet
 
