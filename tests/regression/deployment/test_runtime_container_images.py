@@ -29,12 +29,9 @@ def test_runtime_image_workflow_builds_all_platform_runtime_images() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     expected = {
-        "ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane":
-            "deploy/docker/control-plane.Dockerfile",
-        "ghcr.io/scoresymphony/ai-multi-agent-platform-web":
-            "deploy/docker/web.Dockerfile",
-        "ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway":
-            "deploy/docker/hostinger-gateway.Dockerfile",
+        "ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane": "deploy/docker/control-plane.Dockerfile",
+        "ghcr.io/scoresymphony/ai-multi-agent-platform-web": "deploy/docker/web.Dockerfile",
+        "ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway": "deploy/docker/hostinger-gateway.Dockerfile",
     }
     for image, dockerfile in expected.items():
         assert image in workflow
