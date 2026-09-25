@@ -361,8 +361,7 @@ def test_hostinger_catalog_profile_pulls_versioned_images_without_public_app_por
         "${AI_MAP_IMAGE_TAG:-edge}" in control_plane
     )
     assert (
-        "image: ghcr.io/scoresymphony/ai-multi-agent-platform-web:"
-        "${AI_MAP_IMAGE_TAG:-edge}" in web
+        "image: ghcr.io/scoresymphony/ai-multi-agent-platform-web:${AI_MAP_IMAGE_TAG:-edge}" in web
     )
     assert (
         "image: ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway:"
@@ -377,7 +376,9 @@ def test_hostinger_catalog_profile_pulls_versioned_images_without_public_app_por
         "AI_MAP_HOSTINGER_TRAEFIK_HOST: "
         "${TRAEFIK_HOST:?Hostinger One Click must inject TRAEFIK_HOST}" in gateway
     )
-    assert "rule=Host(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)" in gateway
+    assert (
+        "rule=Host(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)" in gateway
+    )
     assert (
         "rule=HostSNI(`${COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}.${TRAEFIK_HOST}`)"
         in gateway
