@@ -86,17 +86,27 @@ The publication contract is intentionally strict:
 The moving `edge`, major/minor convenience tags and `latest` are never sufficient provenance for
 Hostinger catalog acceptance; the immutable SHA ref/digest remains the candidate identity.
 
-After the first publication, make only these intended runtime packages public in GitHub Packages.
-Then verify that all three are **publicly pullable without credentials**. For example:
+The three runtime packages must be **publicly pullable without credentials**. Package visibility is
+an explicit publication prerequisite; Hostinger's catalog must never depend on credentials from the
+user's GitHub account.
+
+The publication workflow enforces this after every successful publish through the
+`verify-public` matrix. Each verification job runs on a fresh runner with `packages: none`, an
+empty isolated `DOCKER_CONFIG`, no registry login, and executes:
 
 ```bash
 docker manifest inspect \
   ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:sha-<40-character-source-commit>
 ```
 
-Repeat the unauthenticated `docker manifest inspect` (or `docker pull`) check for Web and
-Hostinger Gateway. Hostinger's catalog must not depend on credentials from the user's GitHub
-account.
+The same exact-SHA anonymous check runs for Web and Hostinger Gateway. If any package is private or
+otherwise not anonymously readable, the publication workflow fails instead of recording the source
+revision as catalog-ready.
+
+In addition, the non-publishing **GHCR public smoke** workflow checks the current `edge` manifest
+for all three packages from pull requests that modify the publication/catalog contract. That gives
+PR-time evidence of package-level public visibility before a new publisher change can reach
+`main`.
 
 ## Catalog Compose input
 
