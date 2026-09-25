@@ -65,27 +65,30 @@ The root profile publishes only ports 80/443 through the repository-owned Caddy 
 Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
 Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
 
-For a **new** Hostinger Docker Manager deployment that should expose hPanel's **Open** action,
-use the explicit managed-host profile:
+For a **new** Hostinger Docker Manager deployment, use the maintained managed profile:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
 ```
 
-Deploy the URL once with the desired project name. The initial deployment is intentionally
-setup-pending and advertises no public hostname. Then open **Manage → Environment variables
-(.env)**, add `TRAEFIK_HOST` with the full VPS hostname shown by hPanel (for example
-`srv123456.hstgr.cloud`), and choose **Save and deploy**. The configured deployment renders an
-exact `Host(...)` / `HostSNI(...)` route for `<project>.<TRAEFIK_HOST>`, keeps Web and Control
-Plane private, publishes no application host ports, and leaves Hostinger Traefik as the sole owner
-of ports 80/443.
+Paste that URL into **Compose from URL**, choose the project name, and deploy. The normal path does
+not require copying the VPS hostname into project environment variables.
 
-This one explicit value is required because a real Hostinger **Compose from URL** probe showed that
-the generic import environment does **not** provide `HOSTNAME` or an equivalent VPS hostname at
-Compose interpolation time. The gateway can still discover and validate the VPS hostname later via
-`uts: host`, but that happens too late for hPanel to construct its **Open** URL. The managed-host
-profile therefore verifies the configured `TRAEFIK_HOST` against the independently discovered host
-UTS hostname and fails closed on a mismatch.
+The managed profile keeps Web and Control Plane private and exposes only gateway port `8080` as an
+hPanel discovery/bootstrap endpoint. hPanel uses that published port to surface **Open**. The
+gateway independently derives the Hostinger VPS hostname through `uts: host` and redirects the
+bootstrap request to the canonical HTTPS application hostname. Public application traffic itself
+continues through Hostinger Traefik and Caddy rather than exposing Web or Control Plane directly.
+
+If Hostinger provides `TRAEFIK_HOST` to Compose automatically, the profile prefers it to render
+exact project-scoped `Host(...)` / `HostSNI(...)` rules. If it is absent, the profile retains the
+strict project-scoped Hostinger `HostRegexp(...)` / `HostSNIRegexp(...)` fallback and the gateway
+validates the runtime Hostinger hostname before serving the application. A manually supplied
+`TRAEFIK_HOST` remains an operator recovery/fallback path, not a normal installation step.
+
+The profile does not use the Docker socket, Hostinger API credentials, a host filesystem mount, or
+a fake `setup.invalid` hostname. Secure cookies remain enabled and HTTPS is passed through to
+Caddy for the generated Hostinger hostname.
 
 The older `docker-compose.hostinger-zero-config.yml` profile remains migration-compatible for
 existing deployments and can still derive the managed hostname at runtime, but it cannot promise a
