@@ -469,31 +469,31 @@ def test_hostinger_runbook_documents_managed_host_default_and_shared_edge() -> N
     assert "Copy that URL into Hostinger's **Compose from URL** field" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in runbook
     assert "managed-host" in runbook
+    assert "normal installation path is zero-input" in normalized
     assert "uts: host" in runbook
     assert "srv123456.hstgr.cloud" in runbook
-    assert "<project>.<TRAEFIK_HOST>" in runbook
-    assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
+    assert "TRAEFIK_HOST" in runbook
+    assert "operator recovery path" in runbook
     assert "setup.invalid" in runbook
     assert "docker-compose.hostinger-custom-domain.yml" in runbook
     assert "migration" in runbook
-    assert "generic Compose-from-URL" in runbook
     assert "Docker `host` networking" in runbook
-    assert "does not require a shared `traefik-proxy` network" in runbook
     assert "traefik-proxy" in runbook
     assert "Host(...)" in runbook
     assert "HostSNI(...)" in runbook
-    assert "HTTPS is passed through to Caddy" in runbook
-    assert "publishes **no application host port**" in runbook
-    assert "high bootstrap port" in normalized
+    assert "HostRegexp(...)" in runbook
+    assert "HostSNIRegexp(...)" in runbook
+    assert "HTTPS is passed through from Hostinger Traefik to Caddy" in runbook
+    assert "`8080:8080`" in runbook
+    assert "discovery/bootstrap endpoint" in runbook
+    assert "Web and Control Plane do not publish host ports" in runbook
     assert "NET_BIND_SERVICE" in runbook
     assert "hostinger-gateway-data" in runbook
     assert "hostinger-gateway-config" in runbook
     assert "docker-compose.hostinger-direct.yml" in runbook
     assert "docker-compose.hostinger-shared-traefik.yml" in runbook
-    assert "TRAEFIK_HOST=srv123456.hstgr.cloud" in runbook
     assert "AI_MAP_TRAEFIK_NETWORK=traefik-proxy" in runbook
     assert "AI_MAP_TRAEFIK_EXTERNAL=true" in runbook
-    assert "fails closed" in runbook
 
 
 def test_hostinger_gateway_supports_direct_passthrough_and_shared_traefik_modes() -> None:
