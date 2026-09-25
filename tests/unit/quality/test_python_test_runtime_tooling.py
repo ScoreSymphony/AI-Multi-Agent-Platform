@@ -89,7 +89,89 @@ def test_runtime_budget_detects_lane_test_and_module_regressions(tmp_path: Path)
     assert len(violations) == 3
     assert "wall time" in violations[0]
     assert "slowest test" in violations[1]
+    assert "lane default" in violations[1]
     assert "slowest module" in violations[2]
+
+
+def test_runtime_budget_accepts_targeted_slow_test_override(tmp_path: Path) -> None:
+    junit = tmp_path / "lane.xml"
+    junit.write_text(
+        """<testsuite>
+  <testcase classname="tests.performance.alpha" name="test_fixture_heavy" time="18.0" />
+  <testcase classname="tests.performance.alpha" name="test_regular" time="14.0" />
+</testsuite>""",
+        encoding="utf-8",
+    )
+    node = "tests.performance.alpha::test_fixture_heavy"
+    report = build_report(
+        lane="system-regression",
+        wall_seconds=40.0,
+        junit_path=junit,
+        budget={
+            "wall_seconds": 240,
+            "slow_test_seconds": 15,
+            "slow_test_overrides": {node: 20},
+            "slow_module_seconds": 40,
+        },
+        exit_code=0,
+    )
+
+    assert budget_violations(report) == []
+
+
+def test_runtime_budget_override_does_not_mask_other_slow_test(tmp_path: Path) -> None:
+    junit = tmp_path / "lane.xml"
+    junit.write_text(
+        """<testsuite>
+  <testcase classname="tests.performance.alpha" name="test_fixture_heavy" time="18.0" />
+  <testcase classname="tests.performance.beta" name="test_unexpectedly_slow" time="16.0" />
+</testsuite>""",
+        encoding="utf-8",
+    )
+    node = "tests.performance.alpha::test_fixture_heavy"
+    report = build_report(
+        lane="system-regression",
+        wall_seconds=40.0,
+        junit_path=junit,
+        budget={
+            "wall_seconds": 240,
+            "slow_test_seconds": 15,
+            "slow_test_overrides": {node: 20},
+            "slow_module_seconds": 40,
+        },
+        exit_code=0,
+    )
+
+    violations = budget_violations(report)
+
+    assert len(violations) == 1
+    assert "tests.performance.beta::test_unexpectedly_slow" in violations[0]
+    assert "budget 15.000s, lane default" in violations[0]
+
+
+def test_runtime_budget_rejects_invalid_slow_test_overrides_shape(tmp_path: Path) -> None:
+    junit = tmp_path / "lane.xml"
+    junit.write_text(
+        """<testsuite>
+  <testcase classname="tests.performance.alpha" name="test_fast" time="1.0" />
+</testsuite>""",
+        encoding="utf-8",
+    )
+    report = build_report(
+        lane="system-regression",
+        wall_seconds=2.0,
+        junit_path=junit,
+        budget={
+            "wall_seconds": 240,
+            "slow_test_seconds": 15,
+            "slow_test_overrides": [],
+            "slow_module_seconds": 40,
+        },
+        exit_code=0,
+    )
+
+    with pytest.raises(ValueError, match="slow_test_overrides must be an object"):
+        budget_violations(report)
 
 
 def test_shard_collection_comparison_detects_missing_unexpected_and_duplicates() -> None:
