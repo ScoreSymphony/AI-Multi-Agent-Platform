@@ -1,0 +1,177 @@
+name: Runtime container images
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact source commit/ref to publish (prefer a full commit SHA)
+        required: true
+        default: main
+        type: string
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: runtime-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CONTROL_PLANE_IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane
+      WEB_IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-web
+      HOSTINGER_GATEWAY_IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_ref || github.ref }}
+          persist-credentials: false
+
+      - name: Resolve publication identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          sha_tag="sha-${source_sha}"
+          release_tag=""
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            if [[ "${source_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "tag event source mismatch: ${source_sha} != ${GITHUB_SHA}" >&2
+              exit 1
+            fi
+            release_tag="${GITHUB_REF_NAME}"
+            if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "unsupported release tag: ${release_tag}" >&2
+              exit 1
+            fi
+          fi
+
+          echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+          echo "sha_tag=${sha_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build all runtime images before publication
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.identity.outputs.source_sha }}
+          SHA_TAG: ${{ steps.identity.outputs.sha_tag }}
+        run: |
+          set -euo pipefail
+          source_url="https://github.com/ScoreSymphony/AI-Multi-Agent-Platform"
+
+          docker build \
+            --label "org.opencontainers.image.source=${source_url}" \
+            --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
+            --label "org.opencontainers.image.title=AI Multi-Agent Platform Control Plane" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            --tag "${CONTROL_PLANE_IMAGE}:${SHA_TAG}" \
+            --file deploy/docker/control-plane.Dockerfile \
+            .
+
+          docker build \
+            --label "org.opencontainers.image.source=${source_url}" \
+            --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
+            --label "org.opencontainers.image.title=AI Multi-Agent Platform Web" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            --tag "${WEB_IMAGE}:${SHA_TAG}" \
+            --file deploy/docker/web.Dockerfile \
+            .
+
+          docker build \
+            --label "org.opencontainers.image.source=${source_url}" \
+            --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
+            --label "org.opencontainers.image.title=AI Multi-Agent Platform Hostinger Gateway" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            --tag "${HOSTINGER_GATEWAY_IMAGE}:${SHA_TAG}" \
+            --file deploy/docker/hostinger-gateway.Dockerfile \
+            .
+
+      - name: Authenticate to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Reject pre-existing immutable/publication tags
+        shell: bash
+        env:
+          SHA_TAG: ${{ steps.identity.outputs.sha_tag }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          images=("${CONTROL_PLANE_IMAGE}" "${WEB_IMAGE}" "${HOSTINGER_GATEWAY_IMAGE}")
+          for image in "${images[@]}"; do
+            if docker manifest inspect "${image}:${SHA_TAG}" >/dev/null 2>&1; then
+              echo "immutable SHA tag already exists: ${image}:${SHA_TAG}" >&2
+              exit 1
+            fi
+            if [[ -n "${RELEASE_TAG}" ]] && docker manifest inspect "${image}:${RELEASE_TAG}" >/dev/null 2>&1; then
+              echo "release tag already exists and will not be rewritten: ${image}:${RELEASE_TAG}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish SHA-tagged images and optional release tags
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.identity.outputs.source_sha }}
+          SHA_TAG: ${{ steps.identity.outputs.sha_tag }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          push_ref() {
+            local ref="$1"
+            local output digest
+            output="$(docker push "${ref}" 2>&1)"
+            printf '%s\n' "${output}"
+            digest="$(printf '%s\n' "${output}" | awk '/digest: sha256:/{for(i=1;i<=NF;i++) if($i=="digest:"){print $(i+1); exit}}')"
+            if [[ -z "${digest}" ]]; then
+              echo "could not determine pushed digest for ${ref}" >&2
+              exit 1
+            fi
+            printf '%s' "${digest}"
+          }
+
+          images=("${CONTROL_PLANE_IMAGE}" "${WEB_IMAGE}" "${HOSTINGER_GATEWAY_IMAGE}")
+          {
+            echo "## Runtime container publication"
+            echo
+            echo "Source commit: \`${SOURCE_SHA}\`"
+            echo
+            echo "| Image | Immutable ref | Digest |"
+            echo "| --- | --- | --- |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          for image in "${images[@]}"; do
+            sha_ref="${image}:${SHA_TAG}"
+            digest="$(push_ref "${sha_ref}")"
+            echo "| \`${image}\` | \`${sha_ref}\` | \`${digest}\` |" >> "${GITHUB_STEP_SUMMARY}"
+
+            if [[ -n "${RELEASE_TAG}" ]]; then
+              release_ref="${image}:${RELEASE_TAG}"
+              docker tag "${sha_ref}" "${release_ref}"
+              release_digest="$(push_ref "${release_ref}")"
+              if [[ "${release_digest}" != "${digest}" ]]; then
+                echo "release/SHA digest mismatch for ${image}" >&2
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Logout from GHCR
+        if: always()
+        shell: bash
+        run: docker logout ghcr.io || true
