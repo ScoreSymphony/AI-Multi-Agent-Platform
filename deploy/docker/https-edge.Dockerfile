@@ -2,9 +2,9 @@
 
 FROM caddy:2.11.4-alpine
 
-COPY deploy/docker/Caddyfile.public-https /etc/caddy/Caddyfile
-COPY deploy/docker/Caddyfile.setup-pending /etc/caddy/Caddyfile.setup-pending
-COPY deploy/docker/https-edge-entrypoint.sh /usr/local/bin/ai-map-https-edge-entrypoint
+COPY deploy/docker/caddy/public-https.Caddyfile /etc/caddy/Caddyfile
+COPY deploy/docker/caddy/setup-pending.Caddyfile /etc/caddy/Caddyfile.setup-pending
+COPY deploy/docker/scripts/https-edge-entrypoint.sh /usr/local/bin/ai-map-https-edge-entrypoint
 
 RUN chmod 0755 /usr/local/bin/ai-map-https-edge-entrypoint
 
