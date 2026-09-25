@@ -5,34 +5,146 @@ on:
     branches:
       - main
     tags:
-      - "v*"
+      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact 40-character source commit SHA to publish
+        required: true
+        type: string
 
 permissions:
   contents: read
   packages: write
 
 concurrency:
-  group: publish-container-images-${{ github.ref }}
+  group: publish-container-images-${{ github.ref }}-${{ inputs.source_sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: publish-${{ matrix.component }}
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.identity.outputs.source_sha }}
+      sha_tag: ${{ steps.identity.outputs.sha_tag }}
+      release_version: ${{ steps.identity.outputs.release_version }}
+      publish_edge: ${{ steps.identity.outputs.publish_edge }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve publication identity
+        id: identity
+        shell: bash
+        env:
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          sha_tag="sha-${source_sha}"
+          release_version=""
+          publish_edge="false"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ ! "${REQUESTED_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "workflow_dispatch requires an exact 40-character lowercase commit SHA" >&2
+              exit 1
+            fi
+            if [[ "${source_sha}" != "${REQUESTED_SOURCE_SHA}" ]]; then
+              echo "manual source mismatch: ${source_sha} != ${REQUESTED_SOURCE_SHA}" >&2
+              exit 1
+            fi
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            if [[ "${source_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "main publication source mismatch: ${source_sha} != ${GITHUB_SHA}" >&2
+              exit 1
+            fi
+            publish_edge="true"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            if [[ "${source_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "tag event source mismatch: ${source_sha} != ${GITHUB_SHA}" >&2
+              exit 1
+            fi
+            if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "unsupported release tag: ${GITHUB_REF_NAME}" >&2
+              exit 1
+            fi
+            release_version="${GITHUB_REF_NAME#v}"
+          else
+            echo "unsupported publication event/ref: ${GITHUB_EVENT_NAME} ${GITHUB_REF}" >&2
+            exit 1
+          fi
+
+          echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+          echo "sha_tag=${sha_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_version=${release_version}" >> "${GITHUB_OUTPUT}"
+          echo "publish_edge=${publish_edge}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: build-${{ matrix.component }}
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - component: control-plane
             dockerfile: deploy/docker/control-plane.Dockerfile
+            title: AI Multi-Agent Platform Control Plane
           - component: web
             dockerfile: deploy/docker/web.Dockerfile
+            title: AI Multi-Agent Platform Web
           - component: hostinger-gateway
             dockerfile: deploy/docker/hostinger-gateway.Dockerfile
+            title: AI Multi-Agent Platform Hostinger Gateway
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prebuild runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  publish:
+    name: publish-${{ matrix.component }}
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - component: control-plane
+            dockerfile: deploy/docker/control-plane.Dockerfile
+            title: AI Multi-Agent Platform Control Plane
+          - component: web
+            dockerfile: deploy/docker/web.Dockerfile
+            title: AI Multi-Agent Platform Web
+          - component: hostinger-gateway
+            dockerfile: deploy/docker/hostinger-gateway.Dockerfile
+            title: AI Multi-Agent Platform Hostinger Gateway
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -44,20 +156,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Reject immutable tag rewrites
+        shell: bash
+        env:
+          IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
+          SHA_TAG: ${{ needs.prepare.outputs.sha_tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          if docker manifest inspect "${IMAGE}:${SHA_TAG}" >/dev/null 2>&1; then
+            echo "immutable SHA tag already exists: ${IMAGE}:${SHA_TAG}" >&2
+            exit 1
+          fi
+          if [[ -n "${RELEASE_VERSION}" ]] && docker manifest inspect "${IMAGE}:${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "release tag already exists and will not be rewritten: ${IMAGE}:${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
           tags: |
-            type=sha,format=long
-            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ needs.prepare.outputs.sha_tag }}
+            type=raw,value=edge,enable=${{ needs.prepare.outputs.publish_edge == 'true' }}
+            type=semver,pattern={{version}},enable=${{ needs.prepare.outputs.release_version != '' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.prepare.outputs.release_version != '' }}
           flavor: |
             latest=auto
+          labels: |
+            org.opencontainers.image.source=https://github.com/ScoreSymphony/AI-Multi-Agent-Platform
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.source_sha }}
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.licenses=MIT
 
       - name: Build and publish image
+        id: publish
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -70,3 +205,25 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
           sbom: true
           provenance: mode=max
+
+      - name: Record publication evidence
+        shell: bash
+        env:
+          IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
+          SHA_TAG: ${{ needs.prepare.outputs.sha_tag }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Published runtime image"
+            echo
+            echo "- component: \`${{ matrix.component }}\`"
+            echo "- source commit: \`${SOURCE_SHA}\`"
+            echo "- immutable ref: \`${IMAGE}:${SHA_TAG}\`"
+            echo "- digest: \`${DIGEST}\`"
+            if [[ -n "${RELEASE_VERSION}" ]]; then
+              echo "- release ref: \`${IMAGE}:${RELEASE_VERSION}\`"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
