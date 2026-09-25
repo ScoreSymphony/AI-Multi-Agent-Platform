@@ -65,15 +65,18 @@ jobs:
         env:
           SOURCE_SHA: ${{ steps.identity.outputs.source_sha }}
           SHA_TAG: ${{ steps.identity.outputs.sha_tag }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
         run: |
           set -euo pipefail
           source_url="https://github.com/ScoreSymphony/AI-Multi-Agent-Platform"
+          version="${RELEASE_TAG:-${SHA_TAG}}"
 
           docker build \
             --label "org.opencontainers.image.source=${source_url}" \
             --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
             --label "org.opencontainers.image.title=AI Multi-Agent Platform Control Plane" \
             --label "org.opencontainers.image.licenses=MIT" \
+            --label "org.opencontainers.image.version=${version}" \
             --tag "${CONTROL_PLANE_IMAGE}:${SHA_TAG}" \
             --file deploy/docker/control-plane.Dockerfile \
             .
@@ -83,6 +86,7 @@ jobs:
             --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
             --label "org.opencontainers.image.title=AI Multi-Agent Platform Web" \
             --label "org.opencontainers.image.licenses=MIT" \
+            --label "org.opencontainers.image.version=${version}" \
             --tag "${WEB_IMAGE}:${SHA_TAG}" \
             --file deploy/docker/web.Dockerfile \
             .
@@ -92,6 +96,7 @@ jobs:
             --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
             --label "org.opencontainers.image.title=AI Multi-Agent Platform Hostinger Gateway" \
             --label "org.opencontainers.image.licenses=MIT" \
+            --label "org.opencontainers.image.version=${version}" \
             --tag "${HOSTINGER_GATEWAY_IMAGE}:${SHA_TAG}" \
             --file deploy/docker/hostinger-gateway.Dockerfile \
             .
