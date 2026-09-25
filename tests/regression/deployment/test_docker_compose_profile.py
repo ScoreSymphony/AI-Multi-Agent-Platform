@@ -354,6 +354,7 @@ def test_hostinger_catalog_profile_pulls_versioned_images_without_public_app_por
     web = compose.split("\n  web:", 1)[1].split("\n  hostinger-gateway:", 1)[0]
     gateway = compose.split("\n  hostinger-gateway:", 1)[1].split("\nvolumes:", 1)[0]
 
+    assert not compose.startswith("name:")
     assert "build:" not in compose
     assert (
         "image: ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:"
