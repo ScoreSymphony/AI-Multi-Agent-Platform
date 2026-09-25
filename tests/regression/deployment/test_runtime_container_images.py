@@ -10,6 +10,9 @@ def test_runtime_image_workflow_is_publish_only_and_least_privilege() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "workflow_dispatch:" in workflow
+    assert "source_sha:" in workflow
+    assert "exact 40-character source commit SHA" in workflow
+    assert "workflow_dispatch requires an exact 40-character lowercase commit SHA" in workflow
     assert "push:" in workflow
     assert '      - "v*.*.*"' in workflow
     assert "pull_request:" not in workflow
@@ -59,6 +62,9 @@ def test_runtime_image_documentation_preserves_source_build_and_catalog_boundari
 
     assert "source-build Docker Compose profiles remain supported" in doc
     assert "No moving `latest` tag" in doc
-    assert "exact candidate commit SHA" in doc
+    assert "exact 40-character candidate commit SHA" in doc
+    assert "creates newly published organization packages as private by default" in doc
+    assert "Change visibility" in doc
+    assert "unauthenticated `docker manifest inspect`" in doc
     assert "Hostinger Catalog/One Click integration is tracked separately in #1473" in doc
     assert "does not imply that Hostinger has accepted the project into its Catalog" in doc
