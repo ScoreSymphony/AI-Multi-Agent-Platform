@@ -48,31 +48,55 @@ instructions before #1473 can be considered complete.
 
 ## Published images
 
-`.github/workflows/publish-container-images.yml` publishes three Linux/amd64 OCI images to GHCR:
+`.github/workflows/publish-container-images.yml` is the **single maintained publication workflow**
+for the three Linux/amd64 GHCR runtime images:
 
 - `ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane`
 - `ghcr.io/scoresymphony/ai-multi-agent-platform-web`
 - `ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway`
 
-Main publishes:
+Every publication is bound to one exact source revision and includes the immutable SHA tag:
 
-- `sha-<full commit SHA>`;
-- `edge`.
+```text
+sha-<full 40-character source commit SHA>
+```
 
-A stable version tag such as `v1.0.0` additionally publishes:
+Main additionally publishes the moving `edge` convenience tag. Stable semantic-version Git tags
+publish their version/major-minor metadata and may advance `latest` according to the release
+metadata policy. Hostinger production catalog definitions must pin a stable semantic version or an
+immutable digest rather than `edge` alone.
 
-- `1.0.0`;
-- `1.0`;
-- `latest`.
+For provider validation before a release exists, run **Actions → Publish container images → Run
+workflow** and enter the **exact 40-character source commit SHA**. The workflow checks out that
+revision rather than the workflow-dispatch branch head.
 
-Pre-release SemVer tags publish their version tags but do not advance `latest`.
+The publication contract is intentionally strict:
 
-Images are built with SBOM and provenance output enabled. Catalog production definitions should pin
-a released semantic version or immutable digest rather than `edge`.
+- all three runtime images are prebuilt successfully before any publish job can start;
+- the immutable SHA tag will not overwrite an existing tag;
+- an exact semantic release-version tag will not overwrite an existing tag;
+- source/ref mismatches fail before publication;
+- OCI source, revision, component title and MIT-license metadata are attached;
+- SBOM and provenance output remain enabled;
+- each publish job records the source commit, immutable image ref and resulting registry digest in
+  the workflow summary;
+- pull-request events cannot publish packages;
+- GitHub's scoped `GITHUB_TOKEN` is the only registry credential.
 
-After the first publication, verify in GitHub Packages that all three packages are publicly
-pullable without credentials. Hostinger's catalog should not depend on credentials from the user's
-GitHub account.
+The moving `edge`, major/minor convenience tags and `latest` are never sufficient provenance for
+Hostinger catalog acceptance; the immutable SHA ref/digest remains the candidate identity.
+
+After the first publication, make only these intended runtime packages public in GitHub Packages.
+Then verify that all three are **publicly pullable without credentials**. For example:
+
+```bash
+docker manifest inspect \
+  ghcr.io/scoresymphony/ai-multi-agent-platform-control-plane:sha-<40-character-source-commit>
+```
+
+Repeat the unauthenticated `docker manifest inspect` (or `docker pull`) check for Web and
+Hostinger Gateway. Hostinger's catalog must not depend on credentials from the user's GitHub
+account.
 
 ## Catalog Compose input
 
