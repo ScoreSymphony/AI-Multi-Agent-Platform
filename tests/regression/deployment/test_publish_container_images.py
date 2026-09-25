@@ -104,7 +104,7 @@ def test_public_registry_smoke_is_anonymous_and_non_publishing() -> None:
     assert "contents: none" in workflow
     assert "DOCKER_CONFIG:" in workflow
     assert "docker manifest inspect" in workflow
-    assert '":edge"' in workflow
+    assert '"${IMAGE}:edge"' in workflow
     assert "docker/login-action" not in workflow
     assert "docker/build-push-action" not in workflow
     assert "secrets.GITHUB_TOKEN" not in workflow
