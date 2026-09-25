@@ -25,12 +25,11 @@ jobs:
           - control-plane
           - web
           - hostinger-gateway
-    env:
-      DOCKER_CONFIG: ${{ runner.temp }}/docker-anonymous
     steps:
       - name: Verify edge manifest without credentials
         shell: bash
         env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-anonymous
           IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
         run: |
           set -euo pipefail
