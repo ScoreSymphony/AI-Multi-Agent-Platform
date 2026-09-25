@@ -41,6 +41,7 @@ def test_runtime_image_workflow_builds_all_platform_runtime_images() -> None:
     assert "org.opencontainers.image.source=" in workflow
     assert "org.opencontainers.image.revision=" in workflow
     assert "org.opencontainers.image.licenses=MIT" in workflow
+    assert "org.opencontainers.image.version=" in workflow
     assert "latest" not in workflow
 
 
