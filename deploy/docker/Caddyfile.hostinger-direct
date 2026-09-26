@@ -10,6 +10,11 @@ http:// {
     redir https://{$AI_MAP_PUBLIC_DOMAIN}{uri} 308
 }
 
+:8081 {
+    respond /health "ready" 200
+    respond 404
+}
+
 {$AI_MAP_PUBLIC_DOMAIN} {
     reverse_proxy web:8080
 
