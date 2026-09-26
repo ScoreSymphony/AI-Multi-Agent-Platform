@@ -13,6 +13,7 @@ from ai_multi_agent_platform.distribution import (
     DistributionRoute,
     DistributionService,
     RegistryItemType,
+    RegistryMaturity,
     RegistryQuery,
     TrustStatus,
     derive_technical_metadata,
@@ -49,6 +50,7 @@ def test_starter_registry_exposes_truthful_hermes_adapter_package() -> None:
     assert item.name == "Hermes adapter"
     assert item.route is DistributionRoute.KIND_HANDLER
     assert item.trust_status is TrustStatus.REVIEWED
+    assert item.maturity is RegistryMaturity.BETA
     assert item.source.repository == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform"
     assert "does not install or start Hermes itself" in item.description
     assert "configured and enabled in Plugins" in item.description
@@ -79,6 +81,7 @@ def test_starter_registry_exposes_local_reference_capability_provider() -> None:
     assert item.name == "Reference echo capability provider"
     assert item.route is DistributionRoute.KIND_HANDLER
     assert item.trust_status is TrustStatus.REVIEWED
+    assert item.maturity is RegistryMaturity.BETA
     assert item.source.repository == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform"
     assert item.categories == frozenset({"tools"})
     assert "no external service" in item.description
