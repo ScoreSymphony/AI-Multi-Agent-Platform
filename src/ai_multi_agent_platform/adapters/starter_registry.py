@@ -20,6 +20,7 @@ from ai_multi_agent_platform.distribution import (
     RegistryItem,
     RegistryItemType,
     RegistryManifestReference,
+    RegistryMaturity,
     RegistrySource,
     TrustStatus,
     VersionRange,
@@ -87,6 +88,7 @@ def build_starter_registry_provider() -> LocalRegistryProvider:
             }
         ),
         categories=frozenset({"agent-framework"}),
+        maturity=RegistryMaturity.BETA,
         trust_status=TrustStatus.REVIEWED,
         integrity=ArtifactIntegrity(sha256=sha256(hermes_artifact).hexdigest()),
         changelog="Bundled reviewed Hermes adapter package for the default starter Registry.",
@@ -123,6 +125,7 @@ def build_starter_registry_provider() -> LocalRegistryProvider:
         supported_platform=_platform_range(reference_manifest_value),
         tags=frozenset({"local-first", "offline", "deterministic", "configuration:optional"}),
         categories=frozenset({"tools"}),
+        maturity=RegistryMaturity.BETA,
         trust_status=TrustStatus.REVIEWED,
         integrity=ArtifactIntegrity(sha256=sha256(reference_artifact).hexdigest()),
         changelog=(
