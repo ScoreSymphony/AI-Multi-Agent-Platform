@@ -91,7 +91,10 @@ def test_candidate_has_no_provider_specific_inputs_or_host_access() -> None:
     ):
         assert forbidden not in text
     assert not re.search(r"srv\d+", text)
-    assert set(re.findall(r"b(?:d{1,3}.){3}d{1,3}b", text)) <= {"0.0.0.0", "127.0.0.1"}
+    assert set(re.findall(r"[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}", text)) <= {
+        "0.0.0.0",
+        "127.0.0.1",
+    }
     assert not re.search(r"^name:", text, re.MULTILINE)
 
 
