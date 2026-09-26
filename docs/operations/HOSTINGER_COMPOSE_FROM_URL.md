@@ -110,3 +110,27 @@ shared-edge profiles and retain their behavior. `docker-compose.hostinger-zero-c
 explicit-domain compatibility. `docker-compose.hostinger-managed.yml` remains the manual
 TRAEFIK_HOST operator fallback. None is the new-install zero-input standard. Catalog packaging
 remains separate optional work and does not replace Compose-from-URL acceptance.
+
+## Additional real-provider result, 2026-09-26
+
+The candidate at Compose revision `f3b621dca85571f3b1f497a8cfa6664c720ab3cc` was imported through
+exactly Compose from URL and deployed once as `test-platform`. Runtime builds used pinned source
+`1b117c8bee2da5ce08827b382c64de3343e66734`. No environment, DNS or firewall edits were made.
+All three containers were Running, the gateway logged the expected derived project hostname,
+and Control Plane readiness returned 200. hPanel Access still offered only Terminal, not Open.
+Running alone does not prove all three Docker health states or end-to-end HTTPS readiness.
+
+Direct public HTTPS navigation returned `ERR_SSL_PROTOCOL_ERROR`. Caddy's certificate logs showed
+HTTP-01 authorization failing with HTTP 404 and TLS-ALPN-01 validation failing with a connection
+timeout. DNS comparison found identical A/AAAA answers for the project name, working Open reference
+and base VPS name. This rules out a missing project DNS record as the observed explanation.
+The precise certificate-path root cause remains unproved; no shared provider config was changed.
+
+The inspected provider Traefik uses host networking, Docker discovery, web/websecure 80/443 and
+its own HTTP-01 ACME resolver. [Traefik's entrypoint documentation](https://doc.traefik.io/traefik/reference/install-configuration/entrypoints/#allowacmebypass)
+describes internal challenge routing and the static `allowACMEByPass` option for custom challenge
+handlers. That setting belongs to the provider's edge; app-container labels cannot set it. The
+observed 404 is consistent with interception, but is not proof by itself. ALPN timeout also needs
+independent reachability diagnosis. A provider-supported certificate/challenge path is an additional
+prerequisite alongside Open discovery. Neither arbitrary host-port publishing nor manual provider
+Traefik changes is added to the normal installation contract.
