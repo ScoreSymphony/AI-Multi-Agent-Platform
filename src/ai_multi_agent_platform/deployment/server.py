@@ -118,6 +118,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Read the password from one line on stdin instead of an interactive prompt",
     )
+    reset_password = subcommands.add_parser(
+        "reset-admin-password",
+        help="Reset the existing single-node administrator password from the local operator shell",
+    )
+    reset_password.add_argument("--username", required=True)
+    reset_password.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="Read the new password from one line on stdin instead of an interactive prompt",
+    )
     return parser
 
 
@@ -207,6 +217,15 @@ def main(
         password = _read_password(password_stdin=bool(args.password_stdin))
         account = deployment.bootstrap_admin(str(args.username), password)
         print(f"bootstrapped administrator identity: {account.user_id}")
+        return 0
+
+    if args.command == "reset-admin-password":
+        password = _read_password(
+            password_stdin=bool(args.password_stdin),
+            prompt="New administrator password: ",
+        )
+        account = deployment.reset_admin_password(str(args.username), password)
+        print(f"reset administrator password: {account.user_id}; existing sessions invalidated")
         return 0
 
     if args.command == "smoke":
@@ -545,13 +564,13 @@ def _print_startup_recovery(recovery: SingleNodeStartupRecoveryResult) -> None:
     )
 
 
-def _read_password(*, password_stdin: bool) -> str:
+def _read_password(*, password_stdin: bool, prompt: str = "Initial administrator password: ") -> str:
     if password_stdin:
         password = sys.stdin.readline().rstrip("\r\n")
         if not password:
             raise ValueError("password stdin was empty")
         return password
-    return getpass.getpass("Initial administrator password: ")
+    return getpass.getpass(prompt)
 
 
 if __name__ == "__main__":  # pragma: no cover
