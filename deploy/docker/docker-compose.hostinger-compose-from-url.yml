@@ -96,6 +96,10 @@ services:
       start_period: 20s
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=HostRegexp(`^${COMPOSE_PROJECT_NAME}[.]srv[0-9]+[.]hstgr[.]cloud$`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.service=${COMPOSE_PROJECT_NAME}-hostinger-http"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-hostinger-http.rule=HostRegexp(`^${COMPOSE_PROJECT_NAME}[.]srv[0-9]+[.]hstgr[.]cloud$`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-hostinger-http.entrypoints=web"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-hostinger-http.service=${COMPOSE_PROJECT_NAME}-hostinger-http"
