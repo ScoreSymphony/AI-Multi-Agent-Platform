@@ -85,6 +85,8 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Platform Extensions");
     expect(html).toContain("Content");
     expect(html).toContain("Component kind");
+    expect(html).toContain("<details><summary>Filters</summary>");
+    expect(html).not.toContain("<details open");
     expect(html).toContain("All trust states");
     expect(html).toContain("All maturity levels");
     expect(html).toContain("Marketplace source");
