@@ -206,3 +206,18 @@ needs concrete domains from `Host`/`HostSNI` or `tls.domains`; adding a resolver
 cannot infer the runtime VPS hostname. Automatic hostname injection before Compose interpolation
 remains the smallest documented-contract extension that would allow the working native exact-Host
 pattern to be used by generic URL imports. No provider changes were made in this investigation.
+
+### Bounded secure-router discovery experiment
+
+The next candidate adds a project-named HTTP router on `websecure` with the native
+`letsencrypt` resolver label and the same anchored project regex. Existing scoped TCP passthrough
+remains the actual application TLS path. This tests whether hPanel recognizes the native secure
+HTTP metadata independently of a literal Host rule; no provider documentation promises that
+heuristic. Regex domains do not instruct Traefik to issue a concrete certificate. The added HTTP
+router is not a trusted-certificate fallback if the TCP route fails. Acceptance still requires
+observing both the generated Open URL and a verified application certificate on the real provider.
+
+Read-only inspection also found that this test VPS has a custom active firewall accepting TCP443
+only from one user source address, while TCP80 accepts all sources. Public TLS-ALPN validation
+cannot use that restricted rule. The user was asked separately about an explicit test-environment
+exception; no firewall change is assumed or included in the Compose installation contract.

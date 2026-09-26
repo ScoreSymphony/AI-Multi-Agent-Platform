@@ -63,6 +63,10 @@ def test_compose_without_provider_environment(project: str) -> None:
     labels = gateway["labels"]
     pattern = labels[f"traefik.http.routers.{project}-hostinger-http.rule"].split("`")[1]
     assert labels[f"traefik.tcp.routers.{project}-hostinger-tls.rule"].split("`")[1] == pattern
+    assert labels[f"traefik.http.routers.{project}.rule"].split("`")[1] == pattern
+    assert labels[f"traefik.http.routers.{project}.entrypoints"] == "websecure"
+    assert labels[f"traefik.http.routers.{project}.tls.certresolver"] == "letsencrypt"
+    assert labels[f"traefik.http.routers.{project}.service"] == f"{project}-hostinger-http"
     assert re.fullmatch(pattern, f"{project}.srv123456.hstgr.cloud")
     for foreign in (
         "example.com",
