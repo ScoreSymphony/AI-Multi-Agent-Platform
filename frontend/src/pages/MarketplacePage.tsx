@@ -511,7 +511,9 @@ export function MarketplacePage({
       </Card>
 
       <Card title="Discover">
-        <form className="toolbar" onSubmit={resetFilters}>
+        <details>
+          <summary>Filters{filtersActive ? " (active)" : ""}</summary>
+          <form className="toolbar" onSubmit={resetFilters}>
           <label>
             Component kind
             <input
@@ -690,7 +692,8 @@ export function MarketplacePage({
             Updates only
           </label>
           <button type="submit">Reset filters</button>
-        </form>
+          </form>
+        </details>
         <div className="button-row">
           <button type="button" onClick={() => void load(cursor)}>Refresh Marketplace</button>
         </div>

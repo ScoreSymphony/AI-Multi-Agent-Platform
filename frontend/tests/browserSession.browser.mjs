@@ -157,6 +157,7 @@ try {
   await page.getByRole("status").filter({ hasText: "Component installed." }).waitFor();
 
   await page.getByRole("button", { name: "All", exact: true }).click();
+  await page.getByText(/^Filters(?: \(active\))?$/).click();
   const searchInput = page.getByRole("searchbox", { name: "Search" });
   before = await page.evaluate(() => window.__marketplaceCalls.length);
   await searchInput.fill("GitHub Connector");
