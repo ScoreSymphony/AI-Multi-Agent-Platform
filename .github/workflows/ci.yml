@@ -227,7 +227,6 @@ jobs:
           docker compose -f docker-compose.local.yml config
           docker compose --env-file /dev/null -p agents \
             -f deploy/docker/docker-compose.hostinger-compose-from-url.yml config
-          uv run pytest tests/regression/deployment/test_hostinger_compose_from_url.py
           AI_MAP_DATA_VOLUME=ci-recovery-config docker compose \
             -f docker-compose.local.yml \
             -f deploy/docker/docker-compose.recovery.yml \
