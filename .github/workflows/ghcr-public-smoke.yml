@@ -1,0 +1,43 @@
+name: GHCR public smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/publish-container-images.yml"
+      - ".github/workflows/ghcr-public-smoke.yml"
+      - "deploy/docker/docker-compose.hostinger-catalog-candidate.yml"
+      - "tests/regression/deployment/test_publish_container_images.py"
+      - "docs/operations/HOSTINGER_ONE_CLICK.md"
+  workflow_dispatch:
+
+permissions:
+  contents: none
+  packages: none
+
+jobs:
+  anonymous-manifest:
+    name: anonymous-manifest-${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        component:
+          - control-plane
+          - web
+          - hostinger-gateway
+    steps:
+      - name: Verify edge manifest without credentials
+        shell: bash
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-anonymous
+          IMAGE: ghcr.io/scoresymphony/ai-multi-agent-platform-${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          rm -rf "${DOCKER_CONFIG}"
+          mkdir -p "${DOCKER_CONFIG}"
+          if [[ -e "${DOCKER_CONFIG}/config.json" ]]; then
+            echo "anonymous GHCR smoke unexpectedly has Docker credentials" >&2
+            exit 1
+          fi
+          docker manifest inspect "${IMAGE}:edge" > /tmp/manifest.json
+          test -s /tmp/manifest.json
