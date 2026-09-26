@@ -5,8 +5,8 @@
 The repository has a **catalog packaging candidate; it is not yet provider-validated or catalog-listed**.
 
 The generic Hostinger Docker Manager **Compose from URL** path was tested on a real VPS and cannot
-provide the required zero-input HTTPS/Open experience. The primary Hostinger product path therefore
-targets Hostinger's native **One Click Deploy / Docker Catalog** provisioning surface.
+provide the required zero-input HTTPS/Open experience. Catalog packaging is optional; the primary installation contract remains generic Compose from URL.
+See [the Compose-from-URL runbook](HOSTINGER_COMPOSE_FROM_URL.md) for its separate acceptance gate.
 
 Repository-side image publication and a candidate Compose input can be prepared independently.
 The candidate must not be treated as Hostinger's final catalog format until #1476 obtains the

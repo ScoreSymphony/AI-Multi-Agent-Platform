@@ -65,42 +65,25 @@ The root profile publishes only ports 80/443 through the repository-owned Caddy 
 Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
 Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
 
-For Hostinger, the zero-input product target is the native **One Click Deploy / Docker
-Catalog** path. Real provider tests established that generic **Compose from URL** cannot obtain the
-VPS hostname early enough to make hPanel **Open** point directly at the generated HTTPS
-`*.hstgr.cloud` application URL. The repository is preparing a catalog packaging **candidate** under
-`deploy/docker/docker-compose.hostinger-catalog-candidate.yml`; it is not a supported user-facing install path until
-Hostinger confirms and publishes the catalog entry. See
-[`docs/operations/HOSTINGER_ONE_CLICK.md`](docs/operations/HOSTINGER_ONE_CLICK.md) for the provider
-evidence and catalog-readiness status.
-
-Until that provider-controlled catalog onboarding is complete, the explicit managed-host profile
-remains an advanced/operator fallback:
+For new Hostinger installations, the primary product contract is Docker Manager → Compose →
+**Compose from URL**, a raw URL, any DNS-compatible project name, and Deploy once:
 
 ```text
-https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-compose-from-url.yml
 ```
 
-That fallback requires the full Hostinger VPS hostname through `TRAEFIK_HOST` and must not be
-described as equivalent to the intended zero-input One Click experience. It renders exact
-`Host(...)` / `HostSNI(...)` routing, keeps Web and Control Plane private, publishes no
-application host ports, and verifies the configured hostname against the independently discovered
-host UTS identity.
+This is the sole new-install **candidate**, pending real-provider acceptance. It automatically
+normalizes the host UTS identity, uses the chosen project name, routes HTTPS through existing
+Hostinger Traefik, and publishes no application/bootstrap host ports. Automatic hPanel **Open**
+remains a measured provider blocker; do not claim a completed zero-input installation or merge
+until the exact smoke passes. Catalog/One Click does not replace this installation contract.
+See [the Compose-from-URL runbook](docs/operations/HOSTINGER_COMPOSE_FROM_URL.md) for evidence,
+security boundaries, missing provider metadata and the exact real-provider test.
 
-The older `docker-compose.hostinger-zero-config.yml` profile remains migration-compatible for
-existing deployments and can still derive the managed hostname at runtime, but it cannot promise a
-secure hPanel **Open** link for a fresh generic Compose-from-URL import.
-
-Existing installations already tracking
-`deploy/docker/docker-compose.hostinger.yml` or
-`deploy/docker/docker-compose.hostinger-https.yml` keep their previous migration-safe topology.
-For a custom DNS hostname on the same host-network Traefik topology, use the explicit
-[`docker-compose.hostinger-custom-domain.yml`](deploy/docker/docker-compose.hostinger-custom-domain.yml)
-profile and set `AI_MAP_PUBLIC_DOMAIN`. If the VPS does **not** run Hostinger Traefik and ports
-80/443 are free, use
-[`docker-compose.hostinger-direct.yml`](deploy/docker/docker-compose.hostinger-direct.yml)
-instead. Detailed Hostinger, backup/restore and alternate-edge guidance lives in
-[`deploy/docker/README.md`](deploy/docker/README.md).
+The explicit `docker-compose.hostinger-managed.yml` profile is an operator fallback requiring
+`TRAEFIK_HOST`; other historical profiles remain migration-compatible. Existing installations
+must retain their volumes and edge topology. Catalog packaging is separate optional work.
+Detailed deployment and migration guidance lives in [deploy/docker/README.md](deploy/docker/README.md).
 
 ### Linux/macOS
 
