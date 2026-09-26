@@ -514,184 +514,184 @@ export function MarketplacePage({
         <details>
           <summary>Filters{filtersActive ? " (active)" : ""}</summary>
           <form className="toolbar" onSubmit={resetFilters}>
-          <label>
-            Component kind
-            <input
-              value={kindFilter}
-              placeholder="tool or future_kind"
-              onChange={(event) => setKindFilter(event.target.value)}
-            />
-          </label>
-          <label>
-            Search
-            <input
-              type="search"
-              value={queryText}
-              placeholder="Name, capability, publisher…"
-              onChange={(event) => setQueryText(event.target.value)}
-            />
-          </label>
-          <label>
-            Trust
-            <select
-              value={trustStatus}
-              onChange={(event) => setTrustStatus(event.target.value as RegistryTrustStatus | "")}
-            >
-              <option value="">All trust states</option>
-              {TRUST_STATES.map((status) => (
-                <option key={status} value={status}>{status}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Maturity
-            <select
-              value={maturity}
-              onChange={(event) => setMaturity(event.target.value as RegistryMaturity | "")}
-            >
-              <option value="">All maturity levels</option>
-              {MATURITY_STATES.map((value) => (
-                <option key={value} value={value}>{value}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Installed state
-            <select
-              value={installedFilter}
-              onChange={(event) => setInstalledFilter(event.target.value as "" | "true" | "false")}
-            >
-              <option value="">All install states</option>
-              <option value="true">Installed</option>
-              <option value="false">Not installed</option>
-            </select>
-          </label>
-          <label>
-            Compatibility
-            <select
-              value={compatibilityFilter}
-              onChange={(event) =>
-                setCompatibilityFilter(event.target.value as "" | "true" | "false")
-              }
-            >
-              <option value="">All compatibility states</option>
-              <option value="true">Compatible</option>
-              <option value="false">Incompatible</option>
-            </select>
-          </label>
-          <label>
-            Deprecated state
-            <select
-              value={deprecatedFilter}
-              onChange={(event) =>
-                setDeprecatedFilter(event.target.value as "" | "true" | "false")
-              }
-            >
-              <option value="">Active catalog default</option>
-              <option value="true">Deprecated</option>
-              <option value="false">Not deprecated</option>
-            </select>
-          </label>
-          <label>
-            Yanked state
-            <select
-              value={yankedFilter}
-              onChange={(event) =>
-                setYankedFilter(event.target.value as "" | "true" | "false")
-              }
-            >
-              <option value="">Active catalog default</option>
-              <option value="true">Yanked</option>
-              <option value="false">Not yanked</option>
-            </select>
-          </label>
-          <label>
-            Tags
-            <input value={tag} placeholder="tag" onChange={(event) => setTag(event.target.value)} />
-          </label>
-          <label>
-            Category
-            <input
-              value={category}
-              placeholder="category"
-              onChange={(event) => setCategory(event.target.value)}
-            />
-          </label>
-          <label>
-            License
-            <input value={license} placeholder="MIT" onChange={(event) => setLicense(event.target.value)} />
-          </label>
-          <label>
-            Publisher
-            <input
-              value={publisher}
-              placeholder="publisher ID"
-              onChange={(event) => setPublisher(event.target.value)}
-            />
-          </label>
-          <label>
-            Marketplace source
-            <input
-              value={sourceRegistry}
-              placeholder="official or private"
-              onChange={(event) => setSourceRegistry(event.target.value)}
-            />
-          </label>
-          <label>
-            Required capability
-            <input
-              value={requiredCapability}
-              placeholder="capability.id"
-              onChange={(event) => setRequiredCapability(event.target.value)}
-            />
-          </label>
-          <label>
-            Platform version
-            <input
-              value={platformVersion}
-              placeholder="0.1.0"
-              onChange={(event) => setPlatformVersion(event.target.value)}
-            />
-          </label>
-          <label>
-            Sort
-            <select value={sort} onChange={(event) => setSort(event.target.value)}>
-              <option value="name">Name</option>
-              <option value="version">Version</option>
-              <option value="publisher">Publisher</option>
-              <option value="source_registry">Marketplace source</option>
-              <option value="released_at">Release date</option>
-              <option value="item_type">Kind</option>
-              <option value="maturity">Maturity</option>
-            </select>
-          </label>
-          <label>
-            Direction
-            <select
-              value={direction}
-              onChange={(event) => setDirection(event.target.value as "asc" | "desc")}
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={technicalOnly}
-              onChange={(event) => setTechnicalOnly(event.target.checked)}
-            />
-            Technical components only
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={updatesOnly}
-              onChange={(event) => setUpdatesOnly(event.target.checked)}
-            />
-            Updates only
-          </label>
-          <button type="submit">Reset filters</button>
+            <label>
+              Component kind
+              <input
+                value={kindFilter}
+                placeholder="tool or future_kind"
+                onChange={(event) => setKindFilter(event.target.value)}
+              />
+            </label>
+            <label>
+              Search
+              <input
+                type="search"
+                value={queryText}
+                placeholder="Name, capability, publisher…"
+                onChange={(event) => setQueryText(event.target.value)}
+              />
+            </label>
+            <label>
+              Trust
+              <select
+                value={trustStatus}
+                onChange={(event) => setTrustStatus(event.target.value as RegistryTrustStatus | "")}
+              >
+                <option value="">All trust states</option>
+                {TRUST_STATES.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Maturity
+              <select
+                value={maturity}
+                onChange={(event) => setMaturity(event.target.value as RegistryMaturity | "")}
+              >
+                <option value="">All maturity levels</option>
+                {MATURITY_STATES.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Installed state
+              <select
+                value={installedFilter}
+                onChange={(event) => setInstalledFilter(event.target.value as "" | "true" | "false")}
+              >
+                <option value="">All install states</option>
+                <option value="true">Installed</option>
+                <option value="false">Not installed</option>
+              </select>
+            </label>
+            <label>
+              Compatibility
+              <select
+                value={compatibilityFilter}
+                onChange={(event) =>
+                  setCompatibilityFilter(event.target.value as "" | "true" | "false")
+                }
+              >
+                <option value="">All compatibility states</option>
+                <option value="true">Compatible</option>
+                <option value="false">Incompatible</option>
+              </select>
+            </label>
+            <label>
+              Deprecated state
+              <select
+                value={deprecatedFilter}
+                onChange={(event) =>
+                  setDeprecatedFilter(event.target.value as "" | "true" | "false")
+                }
+              >
+                <option value="">Active catalog default</option>
+                <option value="true">Deprecated</option>
+                <option value="false">Not deprecated</option>
+              </select>
+            </label>
+            <label>
+              Yanked state
+              <select
+                value={yankedFilter}
+                onChange={(event) =>
+                  setYankedFilter(event.target.value as "" | "true" | "false")
+                }
+              >
+                <option value="">Active catalog default</option>
+                <option value="true">Yanked</option>
+                <option value="false">Not yanked</option>
+              </select>
+            </label>
+            <label>
+              Tags
+              <input value={tag} placeholder="tag" onChange={(event) => setTag(event.target.value)} />
+            </label>
+            <label>
+              Category
+              <input
+                value={category}
+                placeholder="category"
+                onChange={(event) => setCategory(event.target.value)}
+              />
+            </label>
+            <label>
+              License
+              <input value={license} placeholder="MIT" onChange={(event) => setLicense(event.target.value)} />
+            </label>
+            <label>
+              Publisher
+              <input
+                value={publisher}
+                placeholder="publisher ID"
+                onChange={(event) => setPublisher(event.target.value)}
+              />
+            </label>
+            <label>
+              Marketplace source
+              <input
+                value={sourceRegistry}
+                placeholder="official or private"
+                onChange={(event) => setSourceRegistry(event.target.value)}
+              />
+            </label>
+            <label>
+              Required capability
+              <input
+                value={requiredCapability}
+                placeholder="capability.id"
+                onChange={(event) => setRequiredCapability(event.target.value)}
+              />
+            </label>
+            <label>
+              Platform version
+              <input
+                value={platformVersion}
+                placeholder="0.1.0"
+                onChange={(event) => setPlatformVersion(event.target.value)}
+              />
+            </label>
+            <label>
+              Sort
+              <select value={sort} onChange={(event) => setSort(event.target.value)}>
+                <option value="name">Name</option>
+                <option value="version">Version</option>
+                <option value="publisher">Publisher</option>
+                <option value="source_registry">Marketplace source</option>
+                <option value="released_at">Release date</option>
+                <option value="item_type">Kind</option>
+                <option value="maturity">Maturity</option>
+              </select>
+            </label>
+            <label>
+              Direction
+              <select
+                value={direction}
+                onChange={(event) => setDirection(event.target.value as "asc" | "desc")}
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={technicalOnly}
+                onChange={(event) => setTechnicalOnly(event.target.checked)}
+              />
+              Technical components only
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={updatesOnly}
+                onChange={(event) => setUpdatesOnly(event.target.checked)}
+              />
+              Updates only
+            </label>
+            <button type="submit">Reset filters</button>
           </form>
         </details>
         <div className="button-row">
