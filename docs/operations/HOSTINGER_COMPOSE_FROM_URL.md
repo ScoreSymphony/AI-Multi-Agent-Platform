@@ -134,3 +134,41 @@ observed 404 is consistent with interception, but is not proof by itself. ALPN t
 independent reachability diagnosis. A provider-supported certificate/challenge path is an additional
 prerequisite alongside Open discovery. Neither arbitrary host-port publishing nor manual provider
 Traefik changes is added to the normal installation contract.
+
+## Working Hermes reference comparison
+
+At the user's request, `hermes-agent-ur8x` was inspected read-only through hPanel on the same VPS.
+Its Open action leads to the generated project HTTPS hostname; a public browser loaded the Hermes
+sign-in page with no certificate warning. No credentials were entered and no reference settings
+were saved or redeployed.
+
+The reference Compose has one service, image `ghcr.io/hostinger/hvps-hermes-agent:latest`, and
+`ports: ["4860"]`; Docker assigned a high public host port. Its relevant labels are the documented
+provider pattern, not an additional hPanel URL extension:
+
+```yaml
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`)
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=websecure
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}.tls.certresolver=letsencrypt
+  - traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=4860
+```
+
+Its project environment already contains the actual VPS FQDN as `TRAEFIK_HOST`. Only that
+non-secret hostname key was recorded; account keys/passwords were neither persisted nor published.
+The inspected Compose defines no additional network, custom Open label, or top-level metadata
+extension. There is no evidence that merely using its image or publishing its port causes hostname
+injection for arbitrary Compose-from-URL projects.
+
+This proves a working provider access/certificate path on the same VPS when an exact domain is
+available to Traefik. It does not prove that the native template's injected environment is supplied
+to generic URL imports; the previously recorded generic probes showed it absent. Nor does it prove
+the reference's high mapped port is publicly reachable. We therefore do not copy that port, image,
+VPS-specific hostname or catalog provisioning dependency into the platform's standard candidate.
+
+The closest supported provider contract is automatic VPS-hostname injection for generic URL
+imports plus the same exact Host rule and provider TLS resolver. It would address both hPanel URL
+discovery and delegate certificate handling to the already working edge. Runtime UTS discovery
+alone cannot retroactively supply that label. The reference comparison narrows the missing
+mechanism; it does not convert the failed platform smoke into a pass.
