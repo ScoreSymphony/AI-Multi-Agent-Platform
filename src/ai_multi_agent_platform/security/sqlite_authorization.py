@@ -47,6 +47,19 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
     def has_policy(self, principal_ref: str) -> bool:
         return principal_ref in self._policies
 
+    def has_administrator_policy(
+        self,
+        principal_ref: str,
+        *,
+        actor_type: ActorType,
+    ) -> bool:
+        policy = self._policies.get(principal_ref)
+        return (
+            policy is not None
+            and policy.administrator
+            and actor_type in policy.actor_types
+        )
+
     def globally_grantable_actions(
         self,
         principal_ref: str,
