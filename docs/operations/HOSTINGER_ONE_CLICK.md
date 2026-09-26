@@ -46,6 +46,9 @@ external open-source project can submit a catalog definition. Do not invent or d
 hPanel endpoints. Catalog onboarding therefore requires direct provider confirmation/submission
 instructions before #1473 can be considered complete.
 
+The ready-to-send provider questionnaire and repository onboarding packet are maintained in
+`docs/operations/HOSTINGER_CATALOG_PROVIDER_REQUEST.md`.
+
 ## Published images
 
 `.github/workflows/publish-container-images.yml` is the **single maintained publication workflow**
