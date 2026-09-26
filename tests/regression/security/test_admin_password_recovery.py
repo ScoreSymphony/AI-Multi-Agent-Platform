@@ -6,7 +6,6 @@ from ai_multi_agent_platform.deployment import build_single_node_deployment
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.security import AuthenticationError
 
-
 OLD_PASSWORD = "old-password-with-sufficient-length"
 NEW_PASSWORD = "new-password-with-sufficient-length"
 
