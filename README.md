@@ -70,7 +70,10 @@ Catalog** path. Real provider tests established that generic **Compose from URL*
 VPS hostname early enough to make hPanel **Open** point directly at the generated HTTPS
 `*.hstgr.cloud` application URL. The repository is preparing a catalog packaging **candidate** under
 `deploy/docker/docker-compose.hostinger-catalog-candidate.yml`; it is not a supported user-facing install path until
-Hostinger confirms and publishes the catalog entry. See
+Hostinger confirms and publishes the catalog entry. **Do not paste this candidate into Docker Manager's
+Compose from URL form.** It intentionally requires provider-owned Catalog metadata such as
+`TRAEFIK_HOST`, and a generic Compose-from-URL deployment will fail before a usable project is
+created because that metadata is not injected on the generic path. See
 [`docs/operations/HOSTINGER_ONE_CLICK.md`](docs/operations/HOSTINGER_ONE_CLICK.md) for the provider
 evidence and catalog-readiness status.
 
