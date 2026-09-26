@@ -221,3 +221,32 @@ Read-only inspection also found that this test VPS has a custom active firewall 
 only from one user source address, while TCP80 accepts all sources. Public TLS-ALPN validation
 cannot use that restricted rule. The user was asked separately about an explicit test-environment
 exception; no firewall change is assumed or included in the Compose installation contract.
+
+### Secure-router experiment result after the authorized firewall exception
+
+The user authorized deployment of immutable Compose revision
+`93385cd80daa8a0d103b17feb14bc1d532ed99d9` as `test-platform` and a separate
+change of the existing custom firewall's TCP443 source to Any. The rule was saved and
+synchronized through hPanel; TCP22 restrictions, public TCP80 and the final drop rule
+were preserved. This exception is test-environment preparation, not fulfillment of the
+no-firewall-edits installation requirement.
+
+The URL import created exactly three Running containers. The Control Plane continued
+returning readiness/health 200 responses. hPanel still showed only Terminal for the
+project, whereas the native Hermes reference retained its HTTPS Open link. Thus the
+additional native-shaped secure HTTP router metadata did not solve Open discovery.
+No literal VPS hostname, environment correction or second application deployment was used.
+
+Later gateway logs showed repeated failures through attempt 17: public IPv4 TLS-ALPN
+validation timed out, and IPv6 HTTP validation received 404. The hPanel firewall view
+continued to show TCP443 Accept/Any without a pending synchronization warning. That
+view does not prove the effective rules inside the guest or elsewhere in the network.
+The earlier source restriction therefore cannot be claimed as the complete cause of
+the continuing TLS failure. No certificate success was observed.
+
+An independent guest-side check is still needed to distinguish effective firewall
+filtering from the shared edge's forwarding path. The provider Web Terminal opened
+without a prompt and reported that the server was not responding; SSH authentication
+was unavailable. No reboot, certificate-validation bypass, shared-edge edit or
+additional public port was attempted. The candidate remains experimental and the PR
+must remain draft until trusted HTTPS and automatic Open pass the real smoke.
