@@ -23,6 +23,11 @@ from ai_multi_agent_platform.coordination import (
     coordination_command_handlers,
     coordination_resource_services,
 )
+from ai_multi_agent_platform.frontend_preferences import (
+    FrontendPreferenceService,
+    SqliteFrontendPreferenceRepository,
+    register_frontend_preference_control_plane,
+)
 from ai_multi_agent_platform.kernel import SqliteKernelRepository
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import (
@@ -378,6 +383,14 @@ def build_control_plane(
         repository_runtime,
         kernel,
         evaluation,
+    )
+    register_frontend_preference_control_plane(
+        control_plane,
+        FrontendPreferenceService(
+            SqliteFrontendPreferenceRepository(
+                config.database_dir / "frontend-preferences.sqlite3"
+            )
+        ),
     )
     _register_templates(control_plane, storage, security, runtime, platform_services)
     _register_verification_observability(

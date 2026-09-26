@@ -10,6 +10,7 @@ import { ComputeClient } from "../../api/compute";
 import { DecisionRecordClient } from "../../api/decisions";
 import { EvaluationClient } from "../../api/evaluations";
 import { FilesClient } from "../../api/files";
+import { FrontendPreferencesClient } from "../../api/frontendPreferences";
 import { GoalClient } from "../../api/goals";
 import { GovernanceClient } from "../../api/governance";
 import { IntegrationsClient } from "../../api/integrations";
@@ -44,6 +45,7 @@ export function useShellClients(baseUrl: string) {
   const decisionRecordClient = useMemo(() => new DecisionRecordClient({ transport }), [transport]);
   const evaluationClient = useMemo(() => new EvaluationClient({ transport }), [transport]);
   const filesClient = useMemo(() => new FilesClient({ transport }), [transport]);
+  const frontendPreferencesClient = useMemo(() => new FrontendPreferencesClient({ transport }), [transport]);
   const governanceClient = useMemo(() => new GovernanceClient({ transport }), [transport]);
   const integrationsClient = useMemo(() => new IntegrationsClient({ transport }), [transport]);
   const learningClient = useMemo(() => new LearningClient({ transport }), [transport]);
@@ -73,6 +75,7 @@ export function useShellClients(baseUrl: string) {
     decisionRecordClient,
     evaluationClient,
     filesClient,
+    frontendPreferencesClient,
     governanceClient,
     integrationsClient,
     learningClient,
