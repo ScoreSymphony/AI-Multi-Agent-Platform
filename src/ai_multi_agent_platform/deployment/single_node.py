@@ -222,9 +222,12 @@ class SingleNodeDeployment:
             raise ValueError(
                 "administrator password recovery requires the sole existing local user"
             )
-        if not self.authorization.has_policy(existing_account.user_id):
+        if not self.authorization.has_administrator_policy(
+            existing_account.user_id,
+            actor_type=ActorType.HUMAN,
+        ):
             raise ValueError(
-                "administrator password recovery requires an existing administrator policy"
+                "administrator password recovery requires an existing human administrator policy"
             )
         self.authentication.reset_local_password(
             existing_account.user_id,
