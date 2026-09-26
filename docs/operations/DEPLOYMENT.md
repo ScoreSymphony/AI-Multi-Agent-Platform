@@ -204,6 +204,21 @@ occurs after identity creation but before policy creation, re-running the comman
 missing policy instead of creating another user. After recovery bootstrap, start or restart the
 Control Plane normally and sign in through the browser or CLI.
 
+
+If the sole existing local administrator has forgotten the password, `bootstrap-admin` is not a
+password-reset operation: retrying it authenticates the supplied password against the existing
+account. Stop the Control Plane and use the trusted local operator recovery command against the
+same `AI_MAP_DATA_DIR` instead:
+
+```bash
+platform-server reset-admin-password --username admin
+```
+
+The new password is read from a hidden interactive prompt. `--password-stdin` is available for
+controlled automation. Recovery is deliberately limited to the sole existing local user with an
+existing administrator policy, is not exposed through unauthenticated HTTP, records the canonical
+`auth.password_reset` audit event, and invalidates all existing browser sessions for that user.
+
 ## Canonical Task/Run smoke test
 
 After the first administrator exists, run the built-in baseline smoke:
