@@ -3,6 +3,8 @@ import type { APImanifest } from "../../api/types";
 import brandIcon from "../../assets/brand-icon.png";
 import { OnboardingCallout } from "../../components/OnboardingCallout";
 import { ErrorState } from "../../components/States";
+import { useFrontendCustomization } from "../../customization/FrontendCustomizationProvider";
+import { resolveCustomizedNavigation } from "../../customization/model";
 import { PermissionHintsProvider } from "../../security/permissions";
 import { navigation, navigationItemForPath, navigationMaturity } from "../navigation";
 import { AppLink } from "../router";
@@ -30,7 +32,9 @@ export function ShellLayout({
   clients: ShellClients;
   content: ReactNode;
 }) {
-  const groups = Array.from(new Set(navigation.map((item) => item.group)));
+  const { draft } = useFrontendCustomization();
+  const customizedNavigation = resolveCustomizedNavigation(navigation, draft.navigation);
+  const groups = Array.from(new Set(customizedNavigation.map((item) => item.group)));
   const currentItem = navigationItemForPath(path);
   const apiReady = manifestState === "ready" && manifest !== null;
   const onboardingAvailable = manifest?.resources.includes("onboarding") ?? false;
@@ -38,13 +42,19 @@ export function ShellLayout({
   return (
     <PermissionHintsProvider>
       <a className="skip-link" href="#main">Skip to content</a>
-      <div className="app-shell">
+      <div
+        className={[
+          "app-shell",
+          draft.navigation.position === "right" ? "nav-right" : "",
+          draft.navigation.collapsed ? "nav-collapsed" : "",
+        ].filter(Boolean).join(" ")}
+      >
         <aside id="platform-navigation" className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
           <div className="brand">
-            <img className="brand-mark" src={brandIcon} alt="" aria-hidden="true" />
+            <img className="brand-mark" src={draft.branding.logoDataUrl ?? brandIcon} alt="" aria-hidden="true" />
             <div className="brand-copy">
-              <strong>Agent Platform</strong>
-              <small>Control Plane</small>
+              <strong>{draft.branding.appName}</strong>
+              <small>{draft.branding.subtitle}</small>
             </div>
           </div>
           <nav aria-label="Platform navigation" className="primary-navigation">
@@ -52,7 +62,7 @@ export function ShellLayout({
               <div className="nav-group" key={group}>
                 <span className="nav-group-label">{group}</span>
                 <div className="nav-group-links">
-                  {navigation.filter((item) => item.group === group).map((item) => {
+                  {customizedNavigation.filter((item) => item.group === group).map((item) => {
                     const active = item.path === currentItem?.path;
                     const maturity = navigationMaturity[item.path];
                     const maturityLabel = maturity === "experimental"
@@ -81,7 +91,7 @@ export function ShellLayout({
           <header className="topbar">
             <div className="topbar-leading">
               <button
-                className="menu-button"
+                className={draft.navigation.collapsed ? "menu-button menu-button-always" : "menu-button"}
                 aria-controls="platform-navigation"
                 aria-expanded={menuOpen}
                 aria-label="Toggle navigation"
@@ -91,7 +101,7 @@ export function ShellLayout({
               </button>
               <div className="page-context" aria-label="Current section">
                 <span>{currentItem?.group ?? "Platform"}</span>
-                <strong>{currentItem?.label ?? "Agent Platform"}</strong>
+                <strong>{currentItem?.label ?? draft.branding.appName}</strong>
               </div>
             </div>
             <div className="api-indicator" role="status" aria-live="polite">

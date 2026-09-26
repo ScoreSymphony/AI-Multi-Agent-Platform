@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "./app/router";
 import { Shell } from "./app/Shell";
+import { FrontendCustomizationProvider } from "./customization/FrontendCustomizationProvider";
 import "./styles.css";
 import "./configuration.css";
 import "./content.css";
@@ -22,8 +23,10 @@ if (!root) throw new Error("Missing #root element");
 
 createRoot(root).render(
   <StrictMode>
-    <RouterProvider>
-      <Shell />
-    </RouterProvider>
+    <FrontendCustomizationProvider>
+      <RouterProvider>
+        <Shell />
+      </RouterProvider>
+    </FrontendCustomizationProvider>
   </StrictMode>,
 );
