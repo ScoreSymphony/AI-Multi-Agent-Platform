@@ -172,3 +172,37 @@ imports plus the same exact Host rule and provider TLS resolver. It would addres
 discovery and delegate certificate handling to the already working edge. Runtime UTS discovery
 alone cannot retroactively supply that label. The reference comparison narrows the missing
 mechanism; it does not convert the failed platform smoke into a pass.
+
+### Official Hermes upstream review
+
+The separately governed NousResearch upstream was inspected as reference-only material at
+[`d0288be5b3330d2442e3907185b8e9d0958297bb`](https://github.com/NousResearch/hermes-agent/tree/d0288be5b3330d2442e3907185b8e9d0958297bb).
+Its [Compose file](https://github.com/NousResearch/hermes-agent/blob/d0288be5b3330d2442e3907185b8e9d0958297bb/docker-compose.yml)
+uses host networking with gateway/dashboard services and a loopback dashboard listener. Its
+[Docker guide](https://github.com/NousResearch/hermes-agent/blob/d0288be5b3330d2442e3907185b8e9d0958297bb/website/docs/user-guide/docker.md)
+describes ordinary container deployment and separately configured remote access. Neither supplies
+Hostinger hostname injection, Traefik routing labels or hPanel Open metadata. The reviewed revision
+has an MIT license; no upstream source was copied and the platform's approved Hermes adapter pin
+and compatibility policy were not changed. The Hostinger image is a distinct distribution; its
+source/provenance must not be inferred from the NousResearch repository name.
+
+### Provider-side HTTP challenge evidence
+
+A subsequent read-only inspection of the existing Traefik logs found four errors for the exact
+smoke-test project between 12:17:56 and 12:24:29 UTC on 2026-09-26. The provider ACME handler
+reported `Cannot retrieve the ACME challenge` for that project's domain. Challenge tokens and
+public addresses are omitted. This directly establishes that the provider's own ACME handler
+received the project's HTTP challenge requests and could not serve their tokens, consistent with
+Caddy's corresponding HTTP-01 404 failures. It strengthens the diagnosis beyond the browser error;
+it does not establish why the separate TLS-ALPN connection timed out.
+
+A repeat deployment of the unchanged candidate cannot repair that handler ownership. The
+[documented entrypoint option](https://doc.traefik.io/traefik/reference/install-configuration/entrypoints/#allowacmebypass)
+allows application challenge handlers, but belongs to provider static configuration. It cannot be
+set through the candidate's Docker labels. Changing that shared edge is neither part of the normal
+installation nor sufficient evidence that automatic hPanel Open would work. Alternatively,
+[Traefik's ACME resolver](https://doc.traefik.io/traefik/v3.5/reference/install-configuration/tls/certificate-resolvers/acme/#domain-definition)
+needs concrete domains from `Host`/`HostSNI` or `tls.domains`; adding a resolver to a regex rule
+cannot infer the runtime VPS hostname. Automatic hostname injection before Compose interpolation
+remains the smallest documented-contract extension that would allow the working native exact-Host
+pattern to be used by generic URL imports. No provider changes were made in this investigation.
