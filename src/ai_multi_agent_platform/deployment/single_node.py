@@ -214,6 +214,26 @@ class SingleNodeDeployment:
             )
         return account
 
+    def reset_admin_password(self, username: str, new_password: str) -> LocalUserAccount:
+        """Reset the sole local administrator password from the trusted operator boundary."""
+
+        existing_account = self.authentication.store.user_by_username(username)
+        if existing_account is None or len(self.authentication.store.users) != 1:
+            raise ValueError(
+                "administrator password recovery requires the sole existing local user"
+            )
+        if not self.authorization.has_policy(existing_account.user_id):
+            raise ValueError(
+                "administrator password recovery requires an existing administrator policy"
+            )
+        self.authentication.reset_local_password(
+            existing_account.user_id,
+            new_password,
+            operator_ref="service:local-password-recovery-operator",
+            invalidate_sessions=True,
+        )
+        return self.authentication.store.user_by_username(username) or existing_account
+
     async def run_reference_smoke(self) -> SingleNodeSmokeResult:
         """Run one retry-safe canonical Task/Run through the local reference execution path."""
 
