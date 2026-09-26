@@ -20,7 +20,7 @@ The single-node source must contain the durable `db/`, `files/`, and `workspaces
 - `db/automation.sqlite3`
 - `db/notifications.sqlite3`
 
-Lazy JSON stores remain inside the durable `db/` scope and are included whenever present. The authoritative inventory includes Agent, Conversation, model/provider, onboarding-command and Template repositories; in particular `db/templates.json` is durable platform state rather than an incidental file. A path that merely exists but does not have the required deployment layout is rejected rather than producing a formally valid but incomplete backup.
+Optional stores such as `db/frontend-preferences.sqlite3` and lazy JSON stores remain inside the durable `db/` scope and are included whenever present. The authoritative inventory includes Agent, Conversation, model/provider, onboarding-command and Template repositories; in particular `db/templates.json` is durable platform state rather than an incidental file. A path that merely exists but does not have the required deployment layout is rejected rather than producing a formally valid but incomplete backup.
 
 ## V1 scope
 
@@ -29,6 +29,7 @@ Included:
 - all SQLite state under `data_dir/db`, including canonical kernel/event history and the other configured single-node stores;
 - non-SQLite durable state under `data_dir/db`, including Agent, Conversation, model, onboarding and Template stores when present;
 - durable Notification inbox/preferences/delivery/projection state in `db/notifications.sqlite3`;
+- personal frontend customization in `db/frontend-preferences.sqlite3` whenever that optional store is present;
 - durable files under `data_dir/files`;
 - durable workspace data under `data_dir/workspaces`;
 - non-secret deployment metadata needed to identify the deployment profile;
