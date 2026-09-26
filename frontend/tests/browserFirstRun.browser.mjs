@@ -512,6 +512,55 @@ try {
   if (new URL(page.url()).pathname !== "/marketplace") {
     throw new Error(`Incomplete setup unexpectedly redirected Marketplace back to ${page.url()}`);
   }
+
+  // #1489: the actual Marketplace surface, not only the setup projection, must expose multiple
+  // real starter kinds and the owner-management handoff for a clean default installation.
+  const marketplaceHermesCard = page
+    .locator("article.card")
+    .filter({ hasText: "Hermes adapter" });
+  await marketplaceHermesCard.waitFor();
+  requireText(
+    await marketplaceHermesCard.innerText(),
+    "Orchestrator",
+    "Marketplace Hermes semantic kind",
+  );
+
+  const marketplaceReferenceCard = page
+    .locator("article.card")
+    .filter({ hasText: "Reference echo capability provider" });
+  await marketplaceReferenceCard.waitFor();
+  const marketplaceReferenceCardText = await marketplaceReferenceCard.innerText();
+  requireText(
+    marketplaceReferenceCardText,
+    "Capability Provider",
+    "Marketplace reference provider semantic kind",
+  );
+  requireText(
+    marketplaceReferenceCardText,
+    "beta",
+    "Marketplace reference provider maturity",
+  );
+
+  await marketplaceReferenceCard.getByRole("link", { name: "Inspect", exact: true }).click();
+  await page.waitForURL("**/marketplace/items/**");
+  await page
+    .getByRole("heading", {
+      name: "Reference echo capability provider 1.0.0",
+      exact: true,
+    })
+    .waitFor();
+  const marketplaceReferenceDetail = await page.locator("main").innerText();
+  requireText(
+    marketplaceReferenceDetail,
+    "requires no external service",
+    "Marketplace reference provider external requirements",
+  );
+  await page
+    .getByRole("link", { name: "Open Capability Provider management", exact: true })
+    .waitFor();
+  await page.getByRole("link", { name: "Back to Marketplace", exact: true }).click();
+  await page.waitForURL("**/marketplace");
+
   await page.getByRole("link", { name: "Continue first-run onboarding", exact: true }).click();
   await page.waitForURL("**/onboarding");
   await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
