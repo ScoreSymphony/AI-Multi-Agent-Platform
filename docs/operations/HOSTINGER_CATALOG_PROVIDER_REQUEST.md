@@ -86,6 +86,11 @@ ghcr.io/scoresymphony/ai-multi-agent-platform-web
 ghcr.io/scoresymphony/ai-multi-agent-platform-hostinger-gateway
 ```
 
+All three package families are publicly readable without registry credentials. The protected
+`main` publication workflow verifies the exact source-SHA manifests after publishing through
+credential-free `verify-public-control-plane`, `verify-public-web`, and
+`verify-public-hostinger-gateway` gates.
+
 Properties already enforced by repository tests:
 
 - linux/amd64 runtime images;
