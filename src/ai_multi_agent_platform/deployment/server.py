@@ -564,7 +564,9 @@ def _print_startup_recovery(recovery: SingleNodeStartupRecoveryResult) -> None:
     )
 
 
-def _read_password(\n    *, password_stdin: bool, prompt: str = "Initial administrator password: "\n) -> str:
+def _read_password(
+    *, password_stdin: bool, prompt: str = "Initial administrator password: "
+) -> str:
     if password_stdin:
         password = sys.stdin.readline().rstrip("\r\n")
         if not password:
