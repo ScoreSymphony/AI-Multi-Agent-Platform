@@ -961,11 +961,11 @@ def test_readme_exposes_hostinger_compose_url_directly() -> None:
     normalized = " ".join(readme.split())
     compose_url = (
         "https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/"
-        "main/deploy/docker/docker-compose.hostinger-managed.yml"
+        "main/deploy/docker/docker-compose.hostinger-compose-from-url.yml"
     )
 
     assert compose_url in readme
     assert "Compose from URL" in normalized
     assert "https://assets.hostinger.com/vps/deploy.svg" not in readme
-    assert "managed-host profile" in normalized
+    assert "new-install **candidate**" in normalized
     assert "TRAEFIK_HOST" in readme
