@@ -4,7 +4,12 @@ import pytest
 
 from ai_multi_agent_platform.deployment import build_single_node_deployment
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
-from ai_multi_agent_platform.security import AuthenticationError
+from ai_multi_agent_platform.security import (
+    ActorType,
+    AuthenticationError,
+    AuthorizationAction,
+    LocalPrincipalPolicy,
+)
 
 OLD_PASSWORD = "old-password-with-sufficient-length"
 NEW_PASSWORD = "new-password-with-sufficient-length"
@@ -33,7 +38,45 @@ def test_reset_admin_password_requires_existing_admin_policy(tmp_path) -> None:
     )
     account = deployment.authentication.bootstrap_first_admin("admin", OLD_PASSWORD)
 
-    with pytest.raises(ValueError, match="existing administrator policy"):
+    with pytest.raises(ValueError, match="existing human administrator policy"):
+        deployment.reset_admin_password("admin", NEW_PASSWORD)
+
+    deployment.authentication.authenticate_password(account.username, OLD_PASSWORD)
+
+
+def test_reset_admin_password_rejects_non_administrator_policy(tmp_path) -> None:
+    deployment = build_single_node_deployment(
+        SingleNodeConfig(data_dir=tmp_path / "single-node", secure_cookie=False)
+    )
+    account = deployment.authentication.bootstrap_first_admin("admin", OLD_PASSWORD)
+    deployment.authorization.register(
+        LocalPrincipalPolicy(
+            principal_ref=account.user_id,
+            actor_types=frozenset({ActorType.HUMAN}),
+            allowed_actions=frozenset({AuthorizationAction.VIEW}),
+        )
+    )
+
+    with pytest.raises(ValueError, match="existing human administrator policy"):
+        deployment.reset_admin_password("admin", NEW_PASSWORD)
+
+    deployment.authentication.authenticate_password(account.username, OLD_PASSWORD)
+
+
+def test_reset_admin_password_rejects_non_human_administrator_policy(tmp_path) -> None:
+    deployment = build_single_node_deployment(
+        SingleNodeConfig(data_dir=tmp_path / "single-node", secure_cookie=False)
+    )
+    account = deployment.authentication.bootstrap_first_admin("admin", OLD_PASSWORD)
+    deployment.authorization.register(
+        LocalPrincipalPolicy(
+            principal_ref=account.user_id,
+            actor_types=frozenset({ActorType.SERVICE}),
+            administrator=True,
+        )
+    )
+
+    with pytest.raises(ValueError, match="existing human administrator policy"):
         deployment.reset_admin_password("admin", NEW_PASSWORD)
 
     deployment.authentication.authenticate_password(account.username, OLD_PASSWORD)
