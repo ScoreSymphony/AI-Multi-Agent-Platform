@@ -65,20 +65,20 @@ The root profile publishes only ports 80/443 through the repository-owned Caddy 
 Control Plane private, retains Secure cookies, and keeps canonical state in `platform-data`.
 Missing `AI_MAP_PUBLIC_DOMAIN` fails closed instead of exposing a public HTTP `:8080` UI.
 
-For Hostinger, the zero-input product target is the native **One Click Deploy / Docker
-Catalog** path. Real provider tests established that generic **Compose from URL** cannot obtain the
-VPS hostname early enough to make hPanel **Open** point directly at the generated HTTPS
-`*.hstgr.cloud` application URL. The repository is preparing a catalog packaging **candidate** under
-`deploy/docker/docker-compose.hostinger-catalog-candidate.yml`; it is not a supported user-facing install path until
-Hostinger confirms and publishes the catalog entry. **Do not paste this candidate into Docker Manager's
-Compose from URL form.** It intentionally requires provider-owned Catalog metadata such as
-`TRAEFIK_HOST`, and a generic Compose-from-URL deployment will fail before a usable project is
-created because that metadata is not injected on the generic path. See
-[`docs/operations/HOSTINGER_ONE_CLICK.md`](docs/operations/HOSTINGER_ONE_CLICK.md) for the provider
-evidence and catalog-readiness status.
+For Hostinger, the required normal product path is Docker Manager **Compose from URL**: paste one
+maintained raw Compose URL, choose the project name, deploy, and do not copy VPS hostname metadata
+manually. Real-provider investigation for that zero-input path is tracked in #1446 / #1466.
 
-Until that provider-controlled catalog onboarding is complete, the explicit managed-host profile
-remains an advanced/operator fallback:
+The Docker Catalog / One Click work is secondary provider research, not a replacement for the
+Compose-from-URL acceptance contract. The repository contains
+`deploy/docker/docker-compose.hostinger-catalog-candidate.yml` only as provider-onboarding input.
+**Do not paste that candidate into Docker Manager's Compose from URL form.** It intentionally
+requires Catalog-owned metadata such as `TRAEFIK_HOST`, which the generic URL-import path does not
+inject. See [`docs/operations/HOSTINGER_ONE_CLICK.md`](docs/operations/HOSTINGER_ONE_CLICK.md) for
+that optional provider research.
+
+The explicit managed-host profile remains an advanced/operator fallback while the zero-input
+Compose-from-URL path is being completed:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
