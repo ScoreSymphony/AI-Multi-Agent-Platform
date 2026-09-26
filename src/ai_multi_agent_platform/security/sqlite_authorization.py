@@ -54,11 +54,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
         actor_type: ActorType,
     ) -> bool:
         policy = self._policies.get(principal_ref)
-        return (
-            policy is not None
-            and policy.administrator
-            and actor_type in policy.actor_types
-        )
+        return policy is not None and policy.administrator and actor_type in policy.actor_types
 
     def globally_grantable_actions(
         self,
