@@ -1,0 +1,55 @@
+services:
+  hostname:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-hostname-${HOSTNAME:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  traefik-host:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-traefik-host-${TRAEFIK_HOST:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  vps-hostname:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-vps-hostname-${VPS_HOSTNAME:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  server-hostname:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-server-hostname-${SERVER_HOSTNAME:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  hostinger-hostname:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-hostinger-hostname-${HOSTINGER_HOSTNAME:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  hostinger-vps-hostname:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-hostinger-vps-hostname-${HOSTINGER_VPS_HOSTNAME:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  vps-ip:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-vps-ip-${VPS_IP:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  public-ip:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-public-ip-${PUBLIC_IP:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  vps-id:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-vps-id-${VPS_ID:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  server-id:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-server-id-${SERVER_ID:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
+
+  public-port:
+    image: alpine:3.22.1
+    container_name: ai-map-meta-public-port-${PUBLIC_PORT:-missing}
+    command: ["sh", "-c", "while :; do sleep 3600; done"]
