@@ -19,6 +19,8 @@ from ai_multi_agent_platform.distribution import (
     REGISTRY_PREVIEW_COMMAND,
     REGISTRY_UNPIN_COMMAND,
 )
+from ai_multi_agent_platform.plugins import ReferenceCapabilityPlugin, reference_manifest
+from ai_multi_agent_platform.plugins.reference import REFERENCE_PLUGIN_ID
 
 
 def test_default_single_node_exposes_curated_starter_registry(tmp_path) -> None:
@@ -31,7 +33,14 @@ def test_default_single_node_exposes_curated_starter_registry(tmp_path) -> None:
     assert deployment.control_plane.plugin_registry is not None
     assert deployment.control_plane.plugin_catalog is not None
     candidates = deployment.control_plane.plugin_catalog.refresh()
-    assert tuple(candidate.manifest for candidate in candidates) == (hermes_plugin_manifest(),)
+    assert tuple(candidate.manifest for candidate in candidates) == (
+        hermes_plugin_manifest(),
+        reference_manifest(),
+    )
+    assert isinstance(
+        deployment.control_plane.plugin_catalog.create_runtime(REFERENCE_PLUGIN_ID),
+        ReferenceCapabilityPlugin,
+    )
 
 
 def test_single_node_can_explicitly_disable_registry_and_plugin_runtime(tmp_path) -> None:
@@ -77,7 +86,10 @@ def test_configured_single_node_shares_registry_plugins_with_canonical_plugin_li
     assert deployment.control_plane.plugin_registry is not None
     assert deployment.control_plane.plugin_catalog is not None
     candidates = deployment.control_plane.plugin_catalog.refresh()
-    assert tuple(candidate.manifest for candidate in candidates) == (hermes_plugin_manifest(),)
+    assert tuple(candidate.manifest for candidate in candidates) == (
+        hermes_plugin_manifest(),
+        reference_manifest(),
+    )
     assert {
         REGISTRY_PREVIEW_COMMAND,
         REGISTRY_ACTIVATE_COMMAND,
