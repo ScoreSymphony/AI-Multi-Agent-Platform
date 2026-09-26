@@ -250,3 +250,54 @@ without a prompt and reported that the server was not responding; SSH authentica
 was unavailable. No reboot, certificate-validation bypass, shared-edge edit or
 additional public port was attempted. The candidate remains experimental and the PR
 must remain draft until trusted HTTPS and automatic Open pass the real smoke.
+
+### Effective guest firewall evidence
+
+The provider Web Terminal subsequently became responsive. Read-only guest inspection
+confirmed an active UFW firewall with default incoming deny, public TCP80, and TCP443
+allowed only from one user source address. There was no public IPv6 TCP443 allowance.
+Traefik owned both listening ports; all three application containers were now directly
+verified Healthy. The private gateway health listener returned `ready` from the host.
+A local SNI TLS connection reached the listener but received an internal-error alert,
+consistent with the gateway not yet having a certificate.
+
+The synchronized hPanel firewall and the guest UFW firewall are separate controls.
+The user explicitly authorized an additional guest-only rule:
+
+```sh
+ufw allow 443/tcp comment 'Traefik public HTTPS'
+```
+
+UFW confirmed public TCP443 allowances for both IPv4 and IPv6. Existing source-restricted
+rules and SSH access remained intact. This is an explicit exception for the custom test
+VPS; the Compose does not execute firewall changes, and it is not part of the installation
+contract. The original gateway process was left running so its automatic certificate
+retry could be tested without a second deployment or restart.
+
+### Trusted HTTPS verified after the guest exception
+
+At approximately 18:14 UTC on 2026-09-26, the unchanged gateway's next automatic attempt
+served the TLS-ALPN authentication certificate, finalized authorization, downloaded its
+certificate chain and logged `certificate obtained successfully`. No second deployment,
+container restart, hostname/environment edit or shared Traefik change was required.
+This isolates the custom guest firewall as the effective public TLS-validation blocker;
+the separate provider HTTP-challenge interception remained present but did not prevent
+successful TLS-ALPN validation.
+
+An external certificate-verified IPv4 request returned HTTP200 for the frontend, and
+`/api/v1/health` returned `status: healthy`, `alive: true`, `ready: true`. The browser loaded
+the initial administrator-account setup page without a certificate warning. Initial
+credentials must be chosen by the operator; none were entered or recorded by the agent.
+This establishes working application HTTPS after explicit preparation of this customized
+VPS. It does not establish automatic hPanel Open or installation on every standard VPS,
+and the two firewall exceptions remain outside the normal Compose installation contract.
+
+After certificate issuance, a fresh hPanel project-list load still showed Terminal only
+for the platform, while the native Hermes reference retained Open. This rules out a
+pending application certificate as the explanation for the missing action. The remaining
+access-discovery contract must be supplied by Hostinger: validated hostname injection
+before generic import, recognition of the project-scoped regex using hPanel's known VPS
+identity, or a documented runtime access-URL mechanism. A static Compose label file is
+also read before container creation and cannot consume the gateway's later UTS result.
+The candidate's HTTPS success therefore does not satisfy the full automatic-Open smoke
+or permit this PR to merge.
