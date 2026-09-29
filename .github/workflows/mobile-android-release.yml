@@ -144,7 +144,7 @@ jobs:
           java-version: "17"
 
       - name: Download unsigned APK
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: mobile-android-unsigned-${{ github.sha }}
           path: .artifacts/mobile
@@ -216,7 +216,7 @@ jobs:
           java-version: "17"
 
       - name: Download exact unsigned APK
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: mobile-android-unsigned-${{ github.sha }}
           path: .artifacts/mobile
