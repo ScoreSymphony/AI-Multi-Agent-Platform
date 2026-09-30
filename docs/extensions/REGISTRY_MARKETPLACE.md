@@ -168,14 +168,16 @@ selection remains the configuration-driven orchestrator concern, so canonical Ag
 stay orchestrator-independent and can be reused with any compatible registered implementation.
 
 Executable plugin code is also not discovered from a Marketplace manifest entrypoint. The shipped
-single-node composition supplies Hermes as an explicit trusted `PluginSource` candidate with a
-platform-owned runtime factory. A Marketplace-installed Hermes package can therefore be configured
-and enabled through the normal Plugin Control Plane only when its manifest exactly matches that
-composed candidate. Its declared `network_access` and `secret_consumption` permissions are granted
-by the server-side single-node policy only for that exact governed manifest. A different or
-third-party Marketplace plugin may still be installed as package evidence, but activation fails
-closed unless platform composition separately supplies a trusted runtime candidate and permission
-policy; Marketplace installation never turns manifest metadata into executable code.
+single-node composition supplies the Hermes adapter and the bundled Reference capability provider
+as explicit trusted `PluginSource` candidates with platform-owned runtime factories. A
+Marketplace-installed package can therefore be configured and enabled through the normal Plugin
+Control Plane only when its manifest exactly matches one of those composed candidates. The
+server-side permission policy grants only the permissions declared by those exact governed
+manifests: Hermes receives its declared `network_access` and `secret_consumption` permissions,
+while the Reference provider receives only `capability_registration`. A different or third-party
+Marketplace plugin may still be installed as package evidence, but activation fails closed unless
+platform composition separately supplies a trusted runtime candidate and permission policy;
+Marketplace installation never turns manifest metadata into executable code.
 
 Application runtime selection also remains inside the Application domain.  `ApplicationRuntimeRegistry` selects only
 when exactly one registered runtime can satisfy the manifest; an unavailable or ambiguous runtime
@@ -190,6 +192,31 @@ parallel error types.
 ## Production composition
 
 The shipped single-node entrypoint enables a small reviewed starter Registry by default so the browser-first setup can offer optional installable packages on a clean deployment without an operator-side catalog step. An explicitly configured `registry_catalog` replaces that starter source with the operator-managed filesystem catalog.
+
+The default `platform-starter` source is deliberately curated by lifecycle truth, not by filling
+every graphical category. It currently contains:
+
+| Marketplace kind | Starter package | Install/runtime semantics |
+|---|---|---|
+| Orchestrator | **Hermes adapter** | Installs the governed Plugin package only. A separately managed self-hosted Hermes API server remains required; configuration and enablement stay in the Plugins owner surface. |
+| Capability Provider | **Reference echo capability provider** | Installs the bundled deterministic Plugin package locally/offline. It needs no external service, network access, credential, paid provider or extra system runtime; configuration/enablement stay explicit in Plugins and activation registers `plugin.echo`. |
+
+The catalog intentionally does **not** manufacture entries for kinds that lack a reviewed,
+distribution-safe owner handoff. In particular:
+
+- standard Agents and Agent Teams use the existing standard-agent bootstrap/clone lifecycle; they
+  are not duplicated as Marketplace-owned identities;
+- current model onboarding/adapters are configuration surfaces, not automatically distributable
+  Plugin packages, so no Model Provider starter is invented;
+- no reviewed bundled Skill or Application artifact is promoted solely to populate those filters;
+- Template/Workflow and legacy portable Tool/Connector routes remain fail-closed for first-class
+  Marketplace lifecycle until their portability owner can prove restart-safe identical-import
+  reconciliation;
+- research/experimental adapters remain in their documented evaluation state and are not promoted
+  to supported starter packages merely for catalog breadth.
+
+This keeps the kind taxonomy extensible and visible while making an empty category a truthful
+statement about the shipped source rather than a placeholder product promise.
 
 Registry connectivity remains optional at the deployment boundary. Set `AI_MAP_REGISTRY_ENABLED=false` (or `SingleNodeConfig.registry_enabled=False`) for an explicit no-Registry topology; in that mode no `registry-items` collection, Registry/Marketplace mutation commands or Plugin Registry runtime are attached, and ordinary non-Registry platform operation remains independent.
 
