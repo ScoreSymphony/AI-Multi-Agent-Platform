@@ -188,9 +188,24 @@ Do not disable Secure cookies to make public HTTP work.
 
 ## Hostinger Docker Manager
 
+The sole new-install Compose-from-URL candidate is:
+
+```text
+https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-compose-from-url.yml
+```
+
+Copy that URL into Hostinger's **Compose from URL** field, choose a DNS-compatible project name,
+and deploy once. No provider environment variables are needed. The candidate uses `uts: host`,
+static scoped routing and Caddy TLS passthrough on existing Traefik 80/443; it publishes no host
+ports. Automatic hPanel **Open** is still provider-blocked, so this is not release-approved.
+Catalog/One Click cannot replace this acceptance criterion. See
+[HOSTINGER_COMPOSE_FROM_URL.md](../../docs/operations/HOSTINGER_COMPOSE_FROM_URL.md) for the exact
+smoke, real evidence and provider mechanisms still missing. Do not merge before that smoke passes.
+
+### Historical managed-host operator fallback
+
 Hostinger Docker Manager's **Compose from URL** flow expects the direct URL of a Docker Compose
-file. For a **new installation** that should expose hPanel's **Open** action, use this maintained
-managed-host Compose URL:
+file. For an explicit operator fallback, use this historical managed-host Compose URL:
 
 ```text
 https://raw.githubusercontent.com/ScoreSymphony/AI-Multi-Agent-Platform/main/deploy/docker/docker-compose.hostinger-managed.yml
@@ -228,7 +243,7 @@ The managed profile publishes **no application host port**. This avoids the real
 mode where hPanel selected a high bootstrap port that the VPS firewall did not expose. Hostinger
 Traefik remains the sole public ingress on 80/443.
 
-The supported flow is:
+The manual fallback flow is:
 
 1. ensure Hostinger's Traefik project is running;
 2. paste the managed Compose URL above, choose the project name, and deploy once;
