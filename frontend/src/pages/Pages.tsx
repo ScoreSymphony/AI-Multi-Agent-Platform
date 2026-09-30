@@ -11,6 +11,8 @@ import type {
   TimelineItem,
 } from "../api/types";
 import { AppLink, useRouter } from "../app/router";
+import { useFrontendCustomization } from "../customization/FrontendCustomizationProvider";
+import { resolveDashboardWidgets } from "../customization/model";
 import {
   CanonicalId,
   Card,
@@ -28,6 +30,8 @@ export function OverviewPage({ client }: { client: ControlPlaneClient }) {
   const [tasks, setTasks] = useState<Page<CanonicalTask> | null>(null);
   const [runs, setRuns] = useState<Page<CanonicalRun> | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
+  const { draft } = useFrontendCustomization();
+  const dashboardWidgets = resolveDashboardWidgets(draft.dashboard);
 
   useEffect(() => {
     let active = true;
@@ -65,15 +69,26 @@ export function OverviewPage({ client }: { client: ControlPlaneClient }) {
           detail={`Unavailable sections: ${failures.join(", ")}. Other Control Plane data remains usable.`}
         />
       )}
-      <div className="metrics">
-        <Metric label="Readiness" value={health ? (health.ready ? "ready" : "degraded") : "unknown"} />
-        <Metric label="Tasks" value={tasks?.total ?? "—"} />
-        <Metric label="Runs" value={runs?.total ?? "—"} />
-        <Metric label="Active runs" value={runs?.items.filter((run) => ["queued", "starting", "running"].includes(run.status)).length ?? "—"} />
-      </div>
-      <div className="grid-two">
-        <Card title="Recent tasks"><TaskTable tasks={tasks?.items ?? []} compact /></Card>
-        <Card title="Recent runs"><RunTable runs={runs?.items ?? []} compact /></Card>
+      <div className="dashboard-widgets">
+        {dashboardWidgets.map((widget) => {
+          if (widget === "metrics") {
+            return (
+              <div className="metrics dashboard-widget-wide" key={widget}>
+                <Metric label="Readiness" value={health ? (health.ready ? "ready" : "degraded") : "unknown"} />
+                <Metric label="Tasks" value={tasks?.total ?? "—"} />
+                <Metric label="Runs" value={runs?.total ?? "—"} />
+                <Metric
+                  label="Active runs"
+                  value={runs?.items.filter((run) => ["queued", "starting", "running"].includes(run.status)).length ?? "—"}
+                />
+              </div>
+            );
+          }
+          if (widget === "recent-tasks") {
+            return <Card key={widget} title="Recent tasks"><TaskTable tasks={tasks?.items ?? []} compact /></Card>;
+          }
+          return <Card key={widget} title="Recent runs"><RunTable runs={runs?.items ?? []} compact /></Card>;
+        })}
       </div>
     </div>
   );

@@ -9,11 +9,13 @@ import {
   type ReleaseOperatorStatus,
 } from "../api/browserSession";
 import { ControlPlaneError } from "../api/client";
+import { FrontendPreferencesClient } from "../api/frontendPreferences";
 import { OnboardingClient } from "../api/onboarding";
 import { SetupClient } from "../api/setup";
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
 import { ComponentSetupPanel } from "./onboarding/ComponentSetupPanel";
 import { SetupLifecyclePanel } from "./onboarding/SetupLifecyclePanel";
+import { AppearanceSettingsPanel } from "./settings/AppearanceSettingsPanel";
 
 export function SettingsPage({ session }: { session: BrowserSessionClient }) {
   const componentSetupClient = useMemo(
@@ -21,6 +23,10 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
     [session],
   );
   const setupClient = useMemo(() => new SetupClient({ transport: session.transport }), [session]);
+  const frontendPreferencesClient = useMemo(
+    () => new FrontendPreferencesClient({ transport: session.transport }),
+    [session],
+  );
   const [actor, setActor] = useState<AuthenticatedActor | null>(null);
   const [sessions, setSessions] = useState<BrowserSessionSummary[] | null>(null);
   const [mobileDevices, setMobileDevices] = useState<MobileDeviceSummary[] | null>(null);
@@ -546,6 +552,8 @@ export function SettingsPage({ session }: { session: BrowserSessionClient }) {
           </Card>
         </>
       )}
+
+      <AppearanceSettingsPanel preferencesClient={frontendPreferencesClient} />
     </div>
   );
 }

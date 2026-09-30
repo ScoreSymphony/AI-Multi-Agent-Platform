@@ -250,6 +250,15 @@ gate = "Disable notification delivery in HA until delivery/deduplication state i
 reason = "Host-local delivery state risks duplicate external side effects."
 
 [[state]]
+id = "frontend-preferences"
+source = "db/frontend-preferences.sqlite3"
+owner = "frontend-preferences"
+disposition = "unsupported"
+initial_support = "conditional"
+gate = "Treat frontend personalization as single-node-only until preference state uses shared HA persistence."
+reason = "Personal presentation state is non-authoritative, but host-local preferences can diverge across failover."
+
+[[state]]
 id = "agents"
 source = "db/agents.json"
 owner = "agents"

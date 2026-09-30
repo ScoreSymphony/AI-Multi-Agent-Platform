@@ -89,6 +89,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
     ),
     DurableStoreSpec("automation", "db/automation.sqlite3", "sqlite", True, "automation"),
     DurableStoreSpec("notifications", "db/notifications.sqlite3", "sqlite", True, "notifications"),
+    DurableStoreSpec(
+        "frontend-preferences",
+        "db/frontend-preferences.sqlite3",
+        "sqlite",
+        False,
+        "frontend-preferences",
+    ),
     DurableStoreSpec("agents", "db/agents.json", "json", False, "agents"),
     DurableStoreSpec("conversations", "db/conversations.json", "json", False, "conversations"),
     DurableStoreSpec("models", "db/models.json", "json", False, "models"),
