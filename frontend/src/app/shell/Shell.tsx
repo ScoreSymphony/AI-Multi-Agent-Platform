@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FirstUserBootstrapStatus } from "../../api/browserSession";
 import { ControlPlaneError } from "../../api/client";
 import type { SetupSessionStatus } from "../../api/setup";
@@ -8,6 +8,7 @@ import { useFrontendCustomization } from "../../customization/FrontendCustomizat
 import { normalizeFrontendCustomization } from "../../customization/model";
 import { FirstUserSetupPage } from "../../pages/FirstUserSetupPage";
 import { SignInPage } from "../../pages/SignInPage";
+import { navigation } from "../navigation";
 import { useRouter } from "../router";
 import { useShellClients } from "./clients";
 import { ShellLayout } from "./ShellLayout";
@@ -18,7 +19,7 @@ export function Shell() {
   const { path, navigate } = useRouter();
   const baseUrl = import.meta.env.VITE_CONTROL_PLANE_URL ?? "";
   const clients = useShellClients(baseUrl);
-  const { hydrateSaved } = useFrontendCustomization();
+  const { customization, hydrateSaved } = useFrontendCustomization();
   const [manifest, setManifest] = useState<APImanifest | null>(null);
   const [manifestState, setManifestState] = useState<ManifestState>("loading");
   const [manifestError, setManifestError] = useState<unknown>(null);
@@ -30,6 +31,7 @@ export function Shell() {
   const [authenticated, setAuthenticated] = useState(false);
   const [sessionError, setSessionError] = useState<unknown>(null);
   const [frontendPreferenceHydrated, setFrontendPreferenceHydrated] = useState(false);
+  const startPageApplied = useRef(false);
 
   const loadBootstrapStatus = useCallback(async () => {
     if (typeof document === "undefined") return null;
@@ -100,18 +102,18 @@ export function Shell() {
       setManifestError(null);
       setManifestState("loading");
       setFrontendPreferenceHydrated(false);
+      startPageApplied.current = false;
       return;
     }
     void loadManifest();
   }, [authenticated, loadManifest]);
 
   useEffect(() => {
-    if (
-      !authenticated ||
-      frontendPreferenceHydrated ||
-      manifestState !== "ready" ||
-      !manifest?.resources.includes("frontend-preferences")
-    ) {
+    if (!authenticated || frontendPreferenceHydrated || manifestState !== "ready" || !manifest) {
+      return;
+    }
+    if (!manifest.resources.includes("frontend-preferences")) {
+      setFrontendPreferenceHydrated(true);
       return;
     }
     let active = true;
@@ -138,6 +140,15 @@ export function Shell() {
     manifest,
     manifestState,
   ]);
+
+  useEffect(() => {
+    if (!authenticated || !frontendPreferenceHydrated || startPageApplied.current) return;
+    startPageApplied.current = true;
+    if (path !== "/") return;
+    const preferred = customization.layout.startPage;
+    if (preferred === "/" || !navigation.some((item) => item.path === preferred)) return;
+    navigate(preferred);
+  }, [authenticated, customization.layout.startPage, frontendPreferenceHydrated, navigate, path]);
 
   useEffect(() => setMenuOpen(false), [path]);
 

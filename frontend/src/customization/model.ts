@@ -1,10 +1,11 @@
-export const FRONTEND_CUSTOMIZATION_VERSION = 1;
+export const FRONTEND_CUSTOMIZATION_VERSION = 2;
 
 export type FrontendDensity = "compact" | "comfortable" | "spacious";
 export type NavigationPosition = "left" | "right";
 export type ShadowPreset = "none" | "soft" | "medium";
 export type FontPreset = "system" | "serif" | "monospace";
 export type DashboardWidgetId = "metrics" | "recent-tasks" | "recent-runs";
+export type DashboardWidgetSize = "normal" | "wide";
 
 export interface FrontendAppearance {
   background: string;
@@ -46,11 +47,13 @@ export interface FrontendBranding {
 
 export interface FrontendLayoutCustomization {
   maxContentWidth: number;
+  startPage: string;
 }
 
 export interface FrontendDashboardCustomization {
   hiddenWidgets: DashboardWidgetId[];
   order: DashboardWidgetId[];
+  widgetSizes: Record<DashboardWidgetId, DashboardWidgetSize>;
 }
 
 export interface FrontendCustomization {
@@ -68,7 +71,9 @@ export interface FrontendCustomizationLayer {
   navigation?: Partial<FrontendNavigationCustomization>;
   branding?: Partial<FrontendBranding>;
   layout?: Partial<FrontendLayoutCustomization>;
-  dashboard?: Partial<FrontendDashboardCustomization>;
+  dashboard?: Omit<Partial<FrontendDashboardCustomization>, "widgetSizes"> & {
+    widgetSizes?: Partial<Record<DashboardWidgetId, DashboardWidgetSize>>;
+  };
 }
 
 export const DASHBOARD_WIDGETS: readonly DashboardWidgetId[] = [
@@ -78,6 +83,12 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetId[] = [
 ];
 
 export const MAX_BRANDING_IMAGE_BYTES = 256 * 1024;
+
+const DEFAULT_WIDGET_SIZES: Record<DashboardWidgetId, DashboardWidgetSize> = {
+  metrics: "wide",
+  "recent-tasks": "normal",
+  "recent-runs": "normal",
+};
 
 export const DEFAULT_FRONTEND_CUSTOMIZATION: FrontendCustomization = {
   version: FRONTEND_CUSTOMIZATION_VERSION,
@@ -118,10 +129,12 @@ export const DEFAULT_FRONTEND_CUSTOMIZATION: FrontendCustomization = {
   },
   layout: {
     maxContentWidth: 1500,
+    startPage: "/",
   },
   dashboard: {
     hiddenWidgets: [],
     order: [...DASHBOARD_WIDGETS],
+    widgetSizes: { ...DEFAULT_WIDGET_SIZES },
   },
 };
 
@@ -132,6 +145,7 @@ const FONT_PRESETS = new Set<FontPreset>(["system", "serif", "monospace"]);
 const NAVIGATION_POSITIONS = new Set<NavigationPosition>(["left", "right"]);
 const SHADOW_PRESETS = new Set<ShadowPreset>(["none", "soft", "medium"]);
 const DASHBOARD_WIDGET_SET = new Set<DashboardWidgetId>(DASHBOARD_WIDGETS);
+const DASHBOARD_WIDGET_SIZES = new Set<DashboardWidgetSize>(["normal", "wide"]);
 const BRANDING_IMAGE_PATTERN = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const MAX_BRANDING_DATA_URL_LENGTH = Math.ceil(MAX_BRANDING_IMAGE_BYTES * 1.4) + 128;
 
@@ -158,6 +172,23 @@ function shortText(value: unknown, fallback: string, maximum = 80): string {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
   return trimmed && trimmed.length <= maximum ? trimmed : fallback;
+}
+
+function routePath(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (
+    !trimmed.startsWith("/") ||
+    trimmed.startsWith("//") ||
+    trimmed.length > 160 ||
+    trimmed.includes("?") ||
+    trimmed.includes("#") ||
+    trimmed.includes("\n") ||
+    trimmed.includes("\r")
+  ) {
+    return fallback;
+  }
+  return trimmed;
 }
 
 function logoDataUrl(value: unknown): string | null {
@@ -194,9 +225,44 @@ function dashboardWidgetList(value: unknown): DashboardWidgetId[] {
   );
 }
 
-export function normalizeFrontendCustomization(value: unknown): FrontendCustomization {
+function dashboardWidgetSizes(value: unknown): Record<DashboardWidgetId, DashboardWidgetSize> {
+  const source = record(value) ?? {};
+  return Object.fromEntries(
+    DASHBOARD_WIDGETS.map((widget) => {
+      const size = source[widget];
+      return [
+        widget,
+        DASHBOARD_WIDGET_SIZES.has(size as DashboardWidgetSize)
+          ? size as DashboardWidgetSize
+          : DEFAULT_WIDGET_SIZES[widget],
+      ];
+    }),
+  ) as Record<DashboardWidgetId, DashboardWidgetSize>;
+}
+
+export function migrateFrontendCustomization(value: unknown): Record<string, unknown> | null {
   const source = record(value);
-  if (source?.version !== FRONTEND_CUSTOMIZATION_VERSION) {
+  if (!source) return null;
+  if (source.version === FRONTEND_CUSTOMIZATION_VERSION) return { ...source };
+  if (source.version !== 1) return null;
+
+  const layout = { ...(record(source.layout) ?? {}) };
+  if (layout.startPage === undefined) layout.startPage = "/";
+
+  const dashboard = { ...(record(source.dashboard) ?? {}) };
+  if (dashboard.widgetSizes === undefined) dashboard.widgetSizes = { ...DEFAULT_WIDGET_SIZES };
+
+  return {
+    ...source,
+    version: FRONTEND_CUSTOMIZATION_VERSION,
+    layout,
+    dashboard,
+  };
+}
+
+export function normalizeFrontendCustomization(value: unknown): FrontendCustomization {
+  const source = migrateFrontendCustomization(value);
+  if (!source) {
     return structuredClone(DEFAULT_FRONTEND_CUSTOMIZATION);
   }
 
@@ -265,10 +331,12 @@ export function normalizeFrontendCustomization(value: unknown): FrontendCustomiz
     },
     layout: {
       maxContentWidth: numberInRange(layout.maxContentWidth, defaults.layout.maxContentWidth, 960, 2200),
+      startPage: routePath(layout.startPage, defaults.layout.startPage),
     },
     dashboard: {
       hiddenWidgets: dashboardWidgetList(dashboard.hiddenWidgets),
       order: dashboardOrder,
+      widgetSizes: dashboardWidgetSizes(dashboard.widgetSizes),
     },
   };
 }
@@ -284,7 +352,11 @@ export function resolveFrontendCustomizationLayers(
     if (layer.navigation) Object.assign(merged.navigation, layer.navigation);
     if (layer.branding) Object.assign(merged.branding, layer.branding);
     if (layer.layout) Object.assign(merged.layout, layer.layout);
-    if (layer.dashboard) Object.assign(merged.dashboard, layer.dashboard);
+    if (layer.dashboard) {
+      const { widgetSizes, ...dashboard } = layer.dashboard;
+      Object.assign(merged.dashboard, dashboard);
+      if (widgetSizes) Object.assign(merged.dashboard.widgetSizes, widgetSizes);
+    }
   }
 
   return normalizeFrontendCustomization(merged);
@@ -297,15 +369,21 @@ export function parseFrontendCustomizationJson(raw: string): FrontendCustomizati
   } catch {
     throw new Error("Customization import must be valid JSON.");
   }
-  const source = record(parsed);
-  if (source?.version !== FRONTEND_CUSTOMIZATION_VERSION) {
-    throw new Error(`Unsupported customization schema version. Expected ${FRONTEND_CUSTOMIZATION_VERSION}.`);
+  const migrated = migrateFrontendCustomization(parsed);
+  if (!migrated) {
+    throw new Error(
+      `Unsupported customization schema version. Supported versions: 1 and ${FRONTEND_CUSTOMIZATION_VERSION}.`,
+    );
   }
-  return normalizeFrontendCustomization(parsed);
+  return normalizeFrontendCustomization(migrated);
 }
 
 export function serializeFrontendCustomization(value: FrontendCustomization): string {
   return JSON.stringify(normalizeFrontendCustomization(value), null, 2);
+}
+
+function widgetGridColumn(size: DashboardWidgetSize): string {
+  return size === "wide" ? "1 / -1" : "auto";
 }
 
 export function customizationCssVariables(value: FrontendCustomization): Record<string, string> {
@@ -347,6 +425,9 @@ export function customizationCssVariables(value: FrontendCustomization): Record<
     "--card-shadow": shadow,
     "--sidebar-width": `${normalized.navigation.width}px`,
     "--content-max-width": `${normalized.layout.maxContentWidth}px`,
+    "--dashboard-metrics-grid-column": widgetGridColumn(normalized.dashboard.widgetSizes.metrics),
+    "--dashboard-recent-tasks-grid-column": widgetGridColumn(normalized.dashboard.widgetSizes["recent-tasks"]),
+    "--dashboard-recent-runs-grid-column": widgetGridColumn(normalized.dashboard.widgetSizes["recent-runs"]),
   };
 }
 

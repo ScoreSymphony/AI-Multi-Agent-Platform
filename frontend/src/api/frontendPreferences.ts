@@ -19,6 +19,7 @@ export interface FrontendPreferencesClientOptions extends ApiTransportOptions {
 }
 
 const FRONTEND_PREFERENCE_COLLECTION = "frontend-preferences";
+const FRONTEND_CUSTOMIZATION_SCHEMA_VERSION = 2;
 
 export class FrontendPreferencesClient {
   private readonly transport: ApiTransport;
@@ -45,7 +46,7 @@ export class FrontendPreferencesClient {
     expectedRevision: number,
   ): Promise<CanonicalFrontendPreference> {
     return this.command("frontend-preference.update", preferenceId, {
-      schema_version: 1,
+      schema_version: FRONTEND_CUSTOMIZATION_SCHEMA_VERSION,
       customization,
       expected_revision: expectedRevision,
     });

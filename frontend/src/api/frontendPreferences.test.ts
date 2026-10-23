@@ -16,10 +16,10 @@ describe("FrontendPreferencesClient", () => {
       id: "user:test",
       type: "frontend-preference",
       scope: "user",
-      schema_version: 1,
+      schema_version: 2,
       revision: 1,
       updated_at: "2026-09-26T15:00:00+00:00",
-      customization: { version: 1, appearance: { accent: "#112233" } },
+      customization: { version: 2, appearance: { accent: "#112233" } },
     };
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(input), init: init ?? {} });
@@ -48,7 +48,7 @@ describe("FrontendPreferencesClient", () => {
     await expect(
       client.update(
         "user:test",
-        { version: 1, appearance: { accent: "#445566" } },
+        { version: 2, appearance: { accent: "#445566" } },
         1,
       ),
     ).resolves.toMatchObject({ revision: 2 });
@@ -68,8 +68,8 @@ describe("FrontendPreferencesClient", () => {
 
     expect(JSON.parse(String(calls[1]?.init.body))).toEqual({
       resource_ref: "user:test",
-      schema_version: 1,
-      customization: { version: 1, appearance: { accent: "#445566" } },
+      schema_version: 2,
+      customization: { version: 2, appearance: { accent: "#445566" } },
       expected_revision: 1,
     });
     expect(JSON.parse(String(calls[2]?.init.body))).toEqual({

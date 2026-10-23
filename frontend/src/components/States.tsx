@@ -49,7 +49,7 @@ export function CanonicalId({ value }: { value: string }) {
 
 export function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="card">
+    <section className="card" data-card-title={title}>
       <h2>{title}</h2>
       {children}
     </section>

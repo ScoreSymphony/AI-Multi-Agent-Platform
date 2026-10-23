@@ -32,7 +32,15 @@ main[data-route="/"] .dashboard-widgets {
 }
 
 main[data-route="/"] .dashboard-widget-wide {
-  grid-column: 1 / -1;
+  grid-column: var(--dashboard-metrics-grid-column, 1 / -1);
+}
+
+main[data-route="/"] .dashboard-widgets > .card[data-card-title="Recent tasks"] {
+  grid-column: var(--dashboard-recent-tasks-grid-column, auto);
+}
+
+main[data-route="/"] .dashboard-widgets > .card[data-card-title="Recent runs"] {
+  grid-column: var(--dashboard-recent-runs-grid-column, auto);
 }
 
 main[data-route="/"] .dashboard-widgets > .metrics {
