@@ -65,7 +65,7 @@ def test_sqlite_frontend_preference_survives_service_restart(tmp_path) -> None:
         first = FrontendPreferenceService(SqliteFrontendPreferenceRepository(database))
         saved = await first.update(
             "user:test",
-            {"version": 1, "appearance": {"accent": "#112233"}},
+            {"version": 1, "appearance": {"accent": "#a1b2c3"}},
             expected_revision=0,
         )
         assert saved.revision == 1
@@ -78,7 +78,7 @@ def test_sqlite_frontend_preference_survives_service_restart(tmp_path) -> None:
         assert restored.revision == 1
         assert restored.schema_version == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
         assert restored.customization is not None
-        assert restored.customization["appearance"] == {"accent": "#112233"}
+        assert restored.customization["appearance"] == {"accent": "#a1b2c3"}
         assert restored.customization["layout"] == {"startPage": "/"}
         assert restored.customization["dashboard"] == {
             "widgetSizes": {
@@ -107,7 +107,7 @@ def test_sqlite_frontend_preference_migrates_legacy_v1_row_on_read(tmp_path) -> 
                     1,
                     4,
                     datetime.now(UTC).isoformat(),
-                    json.dumps({"version": 1, "appearance": {"accent": "#445566"}}),
+                    json.dumps({"version": 1, "appearance": {"accent": "#d4e5f6"}}),
                 ),
             )
 
@@ -127,13 +127,13 @@ def test_frontend_preference_revision_conflict_is_fail_closed() -> None:
         service = FrontendPreferenceService(InMemoryFrontendPreferenceRepository())
         await service.update(
             "user:test",
-            {"version": 1, "appearance": {"accent": "#112233"}},
+            {"version": 1, "appearance": {"accent": "#a1b2c3"}},
             expected_revision=0,
         )
         with pytest.raises(ContractError) as failure:
             await service.update(
                 "user:test",
-                {"version": 1, "appearance": {"accent": "#445566"}},
+                {"version": 1, "appearance": {"accent": "#d4e5f6"}},
                 expected_revision=0,
             )
         assert failure.value.code is ErrorCode.CONFLICT
@@ -141,7 +141,7 @@ def test_frontend_preference_revision_conflict_is_fail_closed() -> None:
         assert current.revision == 1
         assert current.customization is not None
         assert current.customization["version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
-        assert current.customization["appearance"] == {"accent": "#112233"}
+        assert current.customization["appearance"] == {"accent": "#a1b2c3"}
 
     asyncio.run(scenario())
 
@@ -186,7 +186,7 @@ def test_frontend_preference_control_plane_binds_resource_to_authenticated_princ
                     "expected_revision": 0,
                     "customization": {
                         "version": 1,
-                        "appearance": {"accent": "#112233"},
+                        "appearance": {"accent": "#a1b2c3"},
                     },
                 },
             )
