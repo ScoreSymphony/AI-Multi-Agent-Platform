@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-FRONTEND_CUSTOMIZATION_SCHEMA_VERSION = 1
+from .migrations import FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
 
 
 @dataclass(frozen=True, slots=True)

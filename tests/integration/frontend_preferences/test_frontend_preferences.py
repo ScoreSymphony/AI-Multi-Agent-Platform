@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import sqlite3
+from datetime import UTC, datetime
 
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.frontend_preferences import (
+    FRONTEND_CUSTOMIZATION_SCHEMA_VERSION,
     FRONTEND_PREFERENCE_COLLECTION,
     FRONTEND_PREFERENCE_COMMANDS,
     FrontendPreferenceService,
@@ -65,14 +69,55 @@ def test_sqlite_frontend_preference_survives_service_restart(tmp_path) -> None:
             expected_revision=0,
         )
         assert saved.revision == 1
+        assert saved.schema_version == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert saved.customization is not None
+        assert saved.customization["version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
 
         second = FrontendPreferenceService(SqliteFrontendPreferenceRepository(database))
         restored = await second.get("user:test")
         assert restored.revision == 1
-        assert restored.customization == {
-            "version": 1,
-            "appearance": {"accent": "#112233"},
+        assert restored.schema_version == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert restored.customization is not None
+        assert restored.customization["appearance"] == {"accent": "#112233"}
+        assert restored.customization["layout"] == {"startPage": "/"}
+        assert restored.customization["dashboard"] == {
+            "widgetSizes": {
+                "metrics": "wide",
+                "recent-tasks": "normal",
+                "recent-runs": "normal",
+            }
         }
+
+    asyncio.run(scenario())
+
+
+def test_sqlite_frontend_preference_migrates_legacy_v1_row_on_read(tmp_path) -> None:
+    async def scenario() -> None:
+        database = tmp_path / "frontend-preferences.sqlite3"
+        SqliteFrontendPreferenceRepository(database)
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                """
+                INSERT INTO frontend_preferences(
+                    principal_ref, schema_version, revision, updated_at, customization_json
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    "user:test",
+                    1,
+                    4,
+                    datetime.now(UTC).isoformat(),
+                    json.dumps({"version": 1, "appearance": {"accent": "#445566"}}),
+                ),
+            )
+
+        service = FrontendPreferenceService(SqliteFrontendPreferenceRepository(database))
+        restored = await service.get("user:test")
+        assert restored.revision == 4
+        assert restored.schema_version == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert restored.customization is not None
+        assert restored.customization["version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert restored.customization["layout"] == {"startPage": "/"}
 
     asyncio.run(scenario())
 
@@ -94,10 +139,9 @@ def test_frontend_preference_revision_conflict_is_fail_closed() -> None:
         assert failure.value.code is ErrorCode.CONFLICT
         current = await service.get("user:test")
         assert current.revision == 1
-        assert current.customization == {
-            "version": 1,
-            "appearance": {"accent": "#112233"},
-        }
+        assert current.customization is not None
+        assert current.customization["version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert current.customization["appearance"] == {"accent": "#112233"}
 
     asyncio.run(scenario())
 
@@ -128,6 +172,7 @@ def test_frontend_preference_control_plane_binds_resource_to_authenticated_princ
         item = initial.body["items"][0]
         assert item["id"] == "user:test"
         assert item["revision"] == 0
+        assert item["schema_version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
         assert item["customization"] is None
 
         saved = await http.handle(
@@ -149,6 +194,9 @@ def test_frontend_preference_control_plane_binds_resource_to_authenticated_princ
         assert saved.status == 200
         assert isinstance(saved.body, dict)
         assert saved.body["revision"] == 1
+        assert saved.body["schema_version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert saved.body["customization"]["version"] == FRONTEND_CUSTOMIZATION_SCHEMA_VERSION
+        assert saved.body["customization"]["layout"] == {"startPage": "/"}
 
         cross_principal = await http.handle(
             HTTPRequest(
@@ -157,9 +205,9 @@ def test_frontend_preference_control_plane_binds_resource_to_authenticated_princ
                 headers=_headers(key="cross-principal"),
                 body={
                     "resource_ref": "user:other",
-                    "schema_version": 1,
+                    "schema_version": FRONTEND_CUSTOMIZATION_SCHEMA_VERSION,
                     "expected_revision": 0,
-                    "customization": {"version": 1},
+                    "customization": {"version": FRONTEND_CUSTOMIZATION_SCHEMA_VERSION},
                 },
             )
         )

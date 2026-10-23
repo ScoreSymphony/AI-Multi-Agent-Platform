@@ -10,6 +10,7 @@ from typing import Protocol, cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .migrations import migrate_frontend_customization
 from .models import FrontendPreference
 
 
@@ -214,10 +215,13 @@ def _decode(row: sqlite3.Row) -> FrontendPreference:
             ErrorCode.CONTRACT_VIOLATION,
             "stored frontend preference must be an object",
         )
+    migrated = migrate_frontend_customization(
+        cast(dict[str, JsonValue], decoded),
+        schema_version=int(row["schema_version"]),
+    )
     return FrontendPreference(
         principal_ref=cast(str, row["principal_ref"]),
-        schema_version=int(row["schema_version"]),
         revision=int(row["revision"]),
         updated_at=_datetime.datetime.fromisoformat(cast(str, row["updated_at"])),
-        customization=cast(dict[str, JsonValue], decoded),
+        customization=migrated,
     )

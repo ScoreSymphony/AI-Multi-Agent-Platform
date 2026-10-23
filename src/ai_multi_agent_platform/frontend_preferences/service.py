@@ -12,6 +12,7 @@ from typing import TypeVar
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 
+from .migrations import migrate_frontend_customization
 from .models import FrontendPreference
 from .repository import FrontendPreferenceRepository
 
@@ -101,8 +102,9 @@ class FrontendPreferenceService:
                 "frontend preference revision changed",
                 details={"current_revision": current.revision},
             )
+        migrated = migrate_frontend_customization(customization)
         candidate = current.next_revision(
-            customization,
+            migrated,
             now=datetime.now(UTC),
         )
         return await self._offload.run(

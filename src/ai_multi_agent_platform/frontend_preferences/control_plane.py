@@ -16,7 +16,12 @@ from ai_multi_agent_platform.control_plane.extensions import (
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.control_plane.module_registry import install_control_plane_modules
 
-from .models import FRONTEND_CUSTOMIZATION_SCHEMA_VERSION, FrontendPreference
+from .migrations import (
+    FRONTEND_CUSTOMIZATION_SCHEMA_VERSION,
+    SUPPORTED_FRONTEND_CUSTOMIZATION_SCHEMA_VERSIONS,
+    migrate_frontend_customization,
+)
+from .models import FrontendPreference
 from .service import FrontendPreferenceService
 
 FRONTEND_PREFERENCE_COLLECTION = "frontend-preferences"
@@ -101,13 +106,8 @@ def _update_handler(service: FrontendPreferenceService) -> CommandHandler:
                 "frontend preference update contains unknown fields",
                 details={"fields": cast(JsonValue, unexpected)},
             )
-        schema_version = payload.get("schema_version")
-        if schema_version != FRONTEND_CUSTOMIZATION_SCHEMA_VERSION:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "unsupported frontend customization schema version",
-            )
-        customization = _customization(payload.get("customization"))
+        schema_version = _schema_version(payload.get("schema_version"))
+        customization = _customization(payload.get("customization"), schema_version=schema_version)
         expected_revision = _expected_revision(payload.get("expected_revision"))
         saved = await service.update(
             principal_ref,
@@ -167,16 +167,30 @@ def _expected_revision(value: JsonValue | None) -> int:
     return value
 
 
-def _customization(value: JsonValue | None) -> dict[str, JsonValue]:
+def _schema_version(value: JsonValue | None) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "frontend customization schema_version must be an integer",
+        )
+    if value not in SUPPORTED_FRONTEND_CUSTOMIZATION_SCHEMA_VERSIONS:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "unsupported frontend customization schema version",
+            details={"schema_version": value},
+        )
+    return value
+
+
+def _customization(
+    value: JsonValue | None,
+    *,
+    schema_version: int,
+) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
             "customization must be an object",
-        )
-    if value.get("version") != FRONTEND_CUSTOMIZATION_SCHEMA_VERSION:
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            "customization version does not match schema_version",
         )
     unexpected = sorted(set(value).difference(_ALLOWED_CUSTOMIZATION_KEYS))
     if unexpected:
@@ -185,9 +199,10 @@ def _customization(value: JsonValue | None) -> dict[str, JsonValue]:
             "customization contains unsupported top-level fields",
             details={"fields": cast(JsonValue, unexpected)},
         )
+    migrated = migrate_frontend_customization(dict(value), schema_version=schema_version)
     try:
         encoded = json.dumps(
-            value,
+            migrated,
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
@@ -203,7 +218,7 @@ def _customization(value: JsonValue | None) -> dict[str, JsonValue]:
             ErrorCode.INPUT_TOO_LARGE,
             "frontend customization exceeds the supported size limit",
         )
-    return dict(value)
+    return migrated
 
 
 def _resource(preference: FrontendPreference) -> dict[str, JsonValue]:
