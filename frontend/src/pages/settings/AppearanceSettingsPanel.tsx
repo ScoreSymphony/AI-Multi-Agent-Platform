@@ -11,6 +11,7 @@ import {
   normalizeFrontendCustomization,
   serializeFrontendCustomization,
   type DashboardWidgetId,
+  type DashboardWidgetSize,
   type FrontendAppearance,
   type FrontendCustomization,
 } from "../../customization/model";
@@ -144,6 +145,16 @@ export function AppearanceSettingsPanel({
     update((current) => ({
       ...current,
       dashboard: { ...current.dashboard, hiddenWidgets: Array.from(hidden) },
+    }));
+  }
+
+  function setDashboardWidgetSize(widget: DashboardWidgetId, size: DashboardWidgetSize) {
+    update((current) => ({
+      ...current,
+      dashboard: {
+        ...current.dashboard,
+        widgetSizes: { ...current.dashboard.widgetSizes, [widget]: size },
+      },
     }));
   }
 
@@ -353,7 +364,25 @@ export function AppearanceSettingsPanel({
                 }))}
               />
             </label>
+            <label>
+              Start page
+              <select
+                value={draft.layout.startPage}
+                onChange={(event) => update((current) => ({
+                  ...current,
+                  layout: { ...current.layout, startPage: event.target.value },
+                }))}
+              >
+                {navigation.map((item) => (
+                  <option key={item.path} value={item.path}>{item.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
+          <p className="customization-note">
+            The start page applies only when entering the authenticated shell at Home. If its feature
+            is unavailable in the Control Plane manifest, Home remains the safe fallback.
+          </p>
         </section>
 
         <section className="customization-section" aria-labelledby="customization-branding">
@@ -508,7 +537,7 @@ export function AppearanceSettingsPanel({
 
         <section className="customization-section" aria-labelledby="customization-dashboard">
           <h3 id="customization-dashboard">Dashboard</h3>
-          <p>Choose which overview widgets are visible and in which order they appear.</p>
+          <p>Choose which overview widgets are visible, how wide they are and in which order they appear.</p>
           <div className="customization-navigation-list">
             {orderedDashboardWidgets.map((widget, index) => {
               const visible = !draft.dashboard.hiddenWidgets.includes(widget);
@@ -524,6 +553,20 @@ export function AppearanceSettingsPanel({
                     <span>{label}</span>
                   </label>
                   <div className="actions">
+                    <label>
+                      <span className="sr-only">{label} width</span>
+                      <select
+                        aria-label={`${label} width`}
+                        value={draft.dashboard.widgetSizes[widget]}
+                        onChange={(event) => setDashboardWidgetSize(
+                          widget,
+                          event.target.value as DashboardWidgetSize,
+                        )}
+                      >
+                        <option value="normal">Normal width</option>
+                        <option value="wide">Full width</option>
+                      </select>
+                    </label>
                     <button
                       aria-label={`Move ${label} up`}
                       disabled={index === 0}
@@ -549,6 +592,7 @@ export function AppearanceSettingsPanel({
           <h3 id="customization-transfer">Import / export</h3>
           <p>
             The versioned JSON format can be copied between browsers or kept as a reusable theme preset.
+            Legacy v1 themes are migrated into the current schema when imported.
           </p>
           <textarea
             className="customization-json"
