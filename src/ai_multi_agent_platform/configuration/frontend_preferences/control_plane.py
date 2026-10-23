@@ -17,7 +17,6 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.control_plane.module_registry import install_control_plane_modules
 
 from .migrations import (
-    FRONTEND_CUSTOMIZATION_SCHEMA_VERSION,
     SUPPORTED_FRONTEND_CUSTOMIZATION_SCHEMA_VERSIONS,
     migrate_frontend_customization,
 )

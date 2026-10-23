@@ -7,9 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
-from ai_multi_agent_platform.frontend_preferences import (
+from ai_multi_agent_platform.configuration.frontend_preferences import (
     FRONTEND_CUSTOMIZATION_SCHEMA_VERSION,
     FRONTEND_PREFERENCE_COLLECTION,
     FRONTEND_PREFERENCE_COMMANDS,
@@ -18,9 +16,11 @@ from ai_multi_agent_platform.frontend_preferences import (
     SqliteFrontendPreferenceRepository,
     register_frontend_preference_control_plane,
 )
-from ai_multi_agent_platform.frontend_preferences.control_plane import (
+from ai_multi_agent_platform.configuration.frontend_preferences.control_plane import (
     FrontendPreferenceResourceService,
 )
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,

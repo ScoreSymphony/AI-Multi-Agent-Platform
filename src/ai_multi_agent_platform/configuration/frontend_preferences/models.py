@@ -33,7 +33,7 @@ class FrontendPreference:
             object.__setattr__(self, "customization", dict(self.customization))
 
     @classmethod
-    def empty(cls, principal_ref: str) -> "FrontendPreference":
+    def empty(cls, principal_ref: str) -> FrontendPreference:
         return cls(principal_ref=principal_ref)
 
     def next_revision(
@@ -41,7 +41,7 @@ class FrontendPreference:
         customization: dict[str, JsonValue],
         *,
         now: datetime | None = None,
-    ) -> "FrontendPreference":
+    ) -> FrontendPreference:
         current = now or datetime.now(UTC)
         return FrontendPreference(
             principal_ref=self.principal_ref,
