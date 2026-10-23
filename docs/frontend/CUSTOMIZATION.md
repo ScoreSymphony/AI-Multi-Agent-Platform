@@ -86,6 +86,10 @@ Personal frontend customization is exposed through the canonical Control Plane a
 - command: `frontend-preference.update`;
 - command: `frontend-preference.reset`.
 
+The backend implementation lives below the existing configuration authority at
+`ai_multi_agent_platform.configuration.frontend_preferences`; frontend presentation preferences do
+not create another root domain or lifecycle authority.
+
 The server derives the owning principal from the authenticated `RequestContext`. The browser cannot
 supply a different owner identity. Each mutation carries an expected revision so stale tabs fail with
 a canonical conflict instead of silently overwriting a newer preference.
@@ -100,6 +104,10 @@ contains a saved preference, that server record hydrates the shell. A temporary 
 failure leaves the safe local cache usable instead of turning presentation state into product
 availability authority.
 
+Personal frontend preferences are deliberately excluded from global search. They are private
+presentation state bound to the authenticated principal, while generic search enumeration does not
+carry that principal ownership context.
+
 ## Scope precedence
 
 The schema defines deterministic least-specific-to-most-specific layer resolution:
@@ -112,6 +120,10 @@ The current durable Control Plane implementation owns the **personal** layer. De
 organization and workspace layers are intentionally not stored in unrelated Organization/Workspace
 metadata merely to complete the hierarchy. They require explicit owning contracts before becoming
 durable.
+
+A future inherited-scope implementation must persist sparse overrides (or an equivalent explicit
+inheritance representation) rather than full duplicated normalized themes. Otherwise a personal
+snapshot would unintentionally shadow every inherited deployment/organization/workspace value.
 
 ## Start-page semantics
 
@@ -155,7 +167,9 @@ navigation customization, preserving a route back to recovery controls.
 
 The following acceptance areas remain beyond the current implementation:
 
-- explicit deployment/organization/workspace preference ownership and server-side layer composition;
+- reusable named themes with create/save/edit/rename/duplicate/switch lifecycle;
+- explicit deployment/organization/workspace preference ownership, sparse inheritance and server-side
+  layer composition;
 - optional top-navigation shell if it can preserve responsive and accessibility guarantees;
 - richer drag-and-drop/arbitrary dashboard placement beyond deterministic visibility/order and
   normal/wide sizing;
