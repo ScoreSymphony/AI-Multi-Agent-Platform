@@ -21,7 +21,11 @@ from ai_multi_agent_platform.distribution import (
     REGISTRY_PREVIEW_COMMAND,
     REGISTRY_UNPIN_COMMAND,
 )
-from ai_multi_agent_platform.plugins import PluginState, ReferenceCapabilityPlugin, reference_manifest
+from ai_multi_agent_platform.plugins import (
+    PluginState,
+    ReferenceCapabilityPlugin,
+    reference_manifest,
+)
 from ai_multi_agent_platform.plugins.reference import REFERENCE_PLUGIN_ID
 
 
@@ -46,18 +50,18 @@ def test_default_single_node_exposes_curated_starter_registry(tmp_path) -> None:
 
 
 def test_starter_reference_provider_round_trips_through_marketplace_owner(tmp_path) -> None:
-    async def scenario() -> None:
-        deployment = build_default_single_node_deployment(
-            SingleNodeConfig(data_dir=tmp_path / "starter-lifecycle", secure_cookie=False)
-        )
-        admin = deployment.bootstrap_admin("admin", "correct horse battery staple")
-        actor = ActorContext(
-            principal_ref=admin.user_id,
-            owner_type="user",
-            owner_id=admin.user_id,
-        )
-        manifest = reference_manifest()
+    deployment = build_default_single_node_deployment(
+        SingleNodeConfig(data_dir=tmp_path / "starter-lifecycle", secure_cookie=False)
+    )
+    admin = deployment.bootstrap_admin("admin", "correct horse battery staple")
+    actor = ActorContext(
+        principal_ref=admin.user_id,
+        owner_type="user",
+        owner_id=admin.user_id,
+    )
+    manifest = reference_manifest()
 
+    async def scenario() -> None:
         installed = await deployment.control_plane.execute_command(
             RequestContext(
                 request_id="starter-reference-install",
