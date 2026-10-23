@@ -34,9 +34,11 @@ No Hermes Python package or source tree is required by platform core or referenc
 
 ## Browser-first installation
 
-The default single-node product exposes the reviewed **Hermes adapter** in the shipped starter
-Registry, so a fresh browser-first setup can select and install the adapter package without an
-operator first configuring `AI_MAP_REGISTRY_CATALOG`.
+The default single-node product exposes the reviewed **Hermes adapter** as the Orchestrator entry
+in the shipped multi-kind starter Registry, so a fresh browser-first setup can select and install
+the adapter package without an operator first configuring `AI_MAP_REGISTRY_CATALOG`. The same
+starter source also contains the local/offline Reference capability provider; that separate package
+does not change Hermes' external-runtime boundary.
 
 That install is deliberately not presented as a Hermes service installation. The Registry item
 installs the platform-owned orchestrator adapter only. A separately running self-hosted Hermes API

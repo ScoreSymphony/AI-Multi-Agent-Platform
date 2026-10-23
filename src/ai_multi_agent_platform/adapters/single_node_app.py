@@ -65,7 +65,9 @@ from ai_multi_agent_platform.plugins import (
     PluginManifest,
     PluginPermission,
     PluginRegistry,
+    ReferenceCapabilityPlugin,
     StaticPluginSource,
+    reference_manifest,
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
 from ai_multi_agent_platform.repositories.intelligence import (
@@ -195,7 +197,8 @@ async def _single_node_plugin_permissions(
     """Grant permissions only to exact platform-composed plugin manifests."""
 
     del context
-    if manifest == hermes_plugin_manifest():
+    governed_manifests = (hermes_plugin_manifest(), reference_manifest())
+    if manifest in governed_manifests:
         return manifest.requested_permissions
     return frozenset()
 
@@ -226,13 +229,19 @@ def _registry_plugin_runtime(deployment: SingleNodeDeployment) -> PluginRegistry
         },
     )
     hermes_manifest = hermes_plugin_manifest()
+    reference_manifest_value = reference_manifest()
     plugin_catalog = PluginCatalog(
         StaticPluginSource(
             DiscoveredPlugin(
                 manifest=hermes_manifest,
                 runtime_factory=HermesOrchestratorPlugin,
                 install_source="bundled:hermes-adapter",
-            )
+            ),
+            DiscoveredPlugin(
+                manifest=reference_manifest_value,
+                runtime_factory=ReferenceCapabilityPlugin,
+                install_source="bundled:reference-capability-plugin",
+            ),
         )
     )
     deployment.control_plane.attach_plugin_runtime(
