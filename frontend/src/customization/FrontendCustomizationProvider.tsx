@@ -17,7 +17,8 @@ import {
   type FrontendCustomization,
 } from "./model";
 
-const STORAGE_KEY = "ai-multi-agent-platform.frontend-customization.v1";
+const STORAGE_KEY = "ai-multi-agent-platform.frontend-customization.v2";
+const LEGACY_STORAGE_KEYS = ["ai-multi-agent-platform.frontend-customization.v1"] as const;
 
 interface FrontendCustomizationContextValue {
   customization: FrontendCustomization;
@@ -36,26 +37,32 @@ function cloneDefault(): FrontendCustomization {
   return structuredClone(DEFAULT_FRONTEND_CUSTOMIZATION);
 }
 
-function loadStoredCustomization(): FrontendCustomization {
-  if (typeof window === "undefined" || !window.localStorage) return cloneDefault();
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return cloneDefault();
-  try {
-    return parseFrontendCustomizationJson(raw);
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return cloneDefault();
-  }
-}
-
 function persistCustomization(value: FrontendCustomization) {
   if (typeof window === "undefined" || !window.localStorage) return;
   window.localStorage.setItem(STORAGE_KEY, serializeFrontendCustomization(value));
+  for (const key of LEGACY_STORAGE_KEYS) window.localStorage.removeItem(key);
+}
+
+function loadStoredCustomization(): FrontendCustomization {
+  if (typeof window === "undefined" || !window.localStorage) return cloneDefault();
+  for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = parseFrontendCustomizationJson(raw);
+      if (key !== STORAGE_KEY) persistCustomization(parsed);
+      return parsed;
+    } catch {
+      window.localStorage.removeItem(key);
+    }
+  }
+  return cloneDefault();
 }
 
 function clearStoredCustomization() {
   if (typeof window === "undefined" || !window.localStorage) return;
   window.localStorage.removeItem(STORAGE_KEY);
+  for (const key of LEGACY_STORAGE_KEYS) window.localStorage.removeItem(key);
 }
 
 function applyCustomization(value: FrontendCustomization) {

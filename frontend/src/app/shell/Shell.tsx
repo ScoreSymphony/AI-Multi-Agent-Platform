@@ -142,13 +142,22 @@ export function Shell() {
   ]);
 
   useEffect(() => {
-    if (!authenticated || !frontendPreferenceHydrated || startPageApplied.current) return;
+    if (!authenticated || !frontendPreferenceHydrated || startPageApplied.current || !manifest) return;
     startPageApplied.current = true;
     if (path !== "/") return;
     const preferred = customization.layout.startPage;
-    if (preferred === "/" || !navigation.some((item) => item.path === preferred)) return;
+    if (preferred === "/") return;
+    const item = navigation.find((candidate) => candidate.path === preferred);
+    if (!item || (item.apiResource && !manifest.resources.includes(item.apiResource))) return;
     navigate(preferred);
-  }, [authenticated, customization.layout.startPage, frontendPreferenceHydrated, navigate, path]);
+  }, [
+    authenticated,
+    customization.layout.startPage,
+    frontendPreferenceHydrated,
+    manifest,
+    navigate,
+    path,
+  ]);
 
   useEffect(() => setMenuOpen(false), [path]);
 
