@@ -387,9 +387,7 @@ def build_control_plane(
     register_frontend_preference_control_plane(
         control_plane,
         FrontendPreferenceService(
-            SqliteFrontendPreferenceRepository(
-                config.database_dir / "frontend-preferences.sqlite3"
-            )
+            SqliteFrontendPreferenceRepository(config.database_dir / "frontend-preferences.sqlite3")
         ),
     )
     _register_templates(control_plane, storage, security, runtime, platform_services)

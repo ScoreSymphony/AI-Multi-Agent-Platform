@@ -18,6 +18,9 @@ from ai_multi_agent_platform.frontend_preferences import (
     SqliteFrontendPreferenceRepository,
     register_frontend_preference_control_plane,
 )
+from ai_multi_agent_platform.frontend_preferences.control_plane import (
+    FrontendPreferenceResourceService,
+)
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
@@ -57,6 +60,10 @@ def _control_plane() -> tuple[ControlPlane, ControlPlaneHTTP]:
         FrontendPreferenceService(InMemoryFrontendPreferenceRepository()),
     )
     return control_plane, ControlPlaneHTTP(control_plane)
+
+
+def test_frontend_preference_resource_is_not_globally_searchable() -> None:
+    assert FrontendPreferenceResourceService.search_indexable is False
 
 
 def test_sqlite_frontend_preference_survives_service_restart(tmp_path) -> None:
@@ -152,9 +159,7 @@ def test_frontend_preference_control_plane_binds_resource_to_authenticated_princ
         assert FRONTEND_PREFERENCE_COLLECTION in control_plane.registered_collections
         assert set(FRONTEND_PREFERENCE_COMMANDS).issubset(control_plane.registered_commands)
 
-        manifest = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1", headers=_headers())
-        )
+        manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1", headers=_headers()))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
         assert FRONTEND_PREFERENCE_COLLECTION in manifest.body["resources"]

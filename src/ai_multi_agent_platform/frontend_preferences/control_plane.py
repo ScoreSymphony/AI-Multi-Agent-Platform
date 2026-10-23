@@ -42,6 +42,10 @@ _ALLOWED_CUSTOMIZATION_KEYS = {
 
 
 class FrontendPreferenceResourceService(ResourceService):
+    # Private presentation state is not meaningful global-search content. In particular,
+    # generic search enumeration uses an internal context rather than the owning user's identity.
+    search_indexable = False
+
     def __init__(self, service: FrontendPreferenceService) -> None:
         self._service = service
 
