@@ -2,18 +2,18 @@
 
 - **Project name:** tzdata
 - **Canonical upstream repository:** https://github.com/python/tzdata
-- **Candidate version:** 2026.4
+- **Candidate version:** 2026.5
 - **Integration category:** library dependency
 - **Proposed platform boundary:** Python standard-library `zoneinfo` data-source fallback
 - **Reviewer:** ScoreSymphony
-- **Review date:** 2026-09-16
+- **Review date:** 2026-11-11
 - **Related issues:** #1031, #1032
 
 ## Decision
 
 **Approved** as a Windows-only required runtime dependency for the supported Windows baseline.
 
-Python's standard-library `zoneinfo` module uses system IANA time-zone data when available and otherwise falls back to the first-party `tzdata` package. Supported Windows environments do not normally provide an IANA zoneinfo database in the standard search path, so the platform declares `tzdata==2026.4; platform_system == 'Windows'`. Non-Windows installations remain unchanged and continue to use their normal system time-zone data when available.
+Python's standard-library `zoneinfo` module uses system IANA time-zone data when available and otherwise falls back to the first-party `tzdata` package. Supported Windows environments do not normally provide an IANA zoneinfo database in the standard search path, so the platform declares `tzdata==2026.5; platform_system == 'Windows'`. Non-Windows installations remain unchanged and continue to use their normal system time-zone data when available.
 
 ## Functional and architecture fit
 
@@ -35,7 +35,7 @@ Python's standard-library `zoneinfo` module uses system IANA time-zone data when
 
 ## Compatibility and deployment
 
-The platform baseline requires Python >=3.12. `tzdata 2026.4` is compatible with that baseline and is consumed through the standard-library `zoneinfo` fallback path. The dependency is required for the supported Windows baseline because Windows normally lacks the IANA database locations searched by `zoneinfo`; it is intentionally not made unconditional on systems that already provide system time-zone data.
+The platform baseline requires Python >=3.12. `tzdata 2026.5` is compatible with that baseline and is consumed through the standard-library `zoneinfo` fallback path. The dependency is required for the supported Windows baseline because Windows normally lacks the IANA database locations searched by `zoneinfo`; it is intentionally not made unconditional on systems that already provide system time-zone data.
 
 The package is runtime data only. It requires no network endpoint, credentials, subprocess, database, GPU, hosted service or recurring paid service.
 
@@ -56,7 +56,7 @@ The dependency may be removed if the supported Windows baseline gains a reliable
 
 ## Required follow-up before merge
 
-- [x] Keep `tzdata==2026.4; platform_system == 'Windows'` pinned in `pyproject.toml`.
+- [x] Keep `tzdata==2026.5; platform_system == 'Windows'` pinned in `pyproject.toml`.
 - [x] Add machine-readable provenance metadata.
 - [x] Record the dependency in `docs/UPSTREAMS.md` and the direct-dependency table.
 - [x] Bind declared Python requirements, including environment markers, into release evidence.
@@ -64,3 +64,7 @@ The dependency may be removed if the supported Windows baseline gains a reliable
 - [ ] Confirm full repository CI is green on the final PR head.
 
 No ADR is required because the package supplies data to the existing standard-library timezone boundary and does not change canonical architecture.
+
+## 2026.5 update
+
+The Windows-only dependency is now pinned to `tzdata==2026.5`; tag `2026.5` resolves to commit `9493aaba724e991b239647cb7bfe977d019ce1b9`. Windows timezone and release inventory checks must pass before merge.

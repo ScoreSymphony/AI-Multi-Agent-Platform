@@ -31,7 +31,7 @@ def test_declared_python_inventory_preserves_windows_environment_marker(tmp_path
 
     requirements = output.read_text(encoding="utf-8").splitlines()
     assert "jsonschema==4.26.0" in requirements
-    assert "tzdata==2026.4; platform_system == 'Windows'" in requirements
+    assert "tzdata==2026.5; platform_system == 'Windows'" in requirements
 
 
 def test_release_evidence_binds_declared_and_resolved_python_dependency_sets() -> None:
@@ -56,8 +56,8 @@ def test_tzdata_provenance_and_documentation_match_runtime_pin() -> None:
     provenance = TZDATA_PROVENANCE_PATH.read_text(encoding="utf-8")
     upstreams = UPSTREAMS_PATH.read_text(encoding="utf-8")
 
-    assert 'pinned_revision: "2026.4"' in provenance
+    assert 'pinned_revision: "2026.5"' in provenance
     assert 'verified_license: "Apache-2.0"' in provenance
     assert "platform_system == 'Windows'" in provenance
     assert "### tzdata" in upstreams
-    assert "`==2026.4; platform_system == 'Windows'`" in upstreams
+    assert "`==2026.5; platform_system == 'Windows'`" in upstreams

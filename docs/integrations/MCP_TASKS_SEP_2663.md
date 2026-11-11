@@ -32,7 +32,7 @@ experimental Tasks surface.
 | SEP | `SEP-2663` — Tasks Extension — Final |
 | Extension identifier | `io.modelcontextprotocol/tasks` |
 | MCP/stateless protocol family | `2026-07-28` |
-| Platform optional Python SDK | `mcp==2.2.0` |
+| Platform optional Python SDK | `mcp==2.3.0` |
 | Platform Tasks transport | `MCPStatelessHTTPClient` |
 
 Normative/evaluation sources:
