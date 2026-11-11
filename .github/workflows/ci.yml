@@ -622,7 +622,9 @@ jobs:
           sudo rm -rf .ci-compose-backups
 
   frontend:
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 cannot install Chromium on ubuntu-26.04 (ubuntu-latest).
+    # Keep real browser regression checks on the supported Ubuntu 24.04 runner.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
