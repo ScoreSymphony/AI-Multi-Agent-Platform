@@ -622,7 +622,9 @@ jobs:
           sudo rm -rf .ci-compose-backups
 
   frontend:
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 cannot install Chromium on ubuntu-26.04 (ubuntu-latest).
+    # Keep real browser regression checks on the supported Ubuntu 24.04 runner.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
@@ -678,7 +680,9 @@ jobs:
           ln -s "$runner_dir/node_modules/playwright" node_modules/playwright
           ln -s "$runner_dir/node_modules/playwright-core" node_modules/playwright-core
       - name: Install Chromium
-        run: '"$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium'
+        # The hosted Ubuntu 24.04 image already provides the browser runtime libraries.
+        # --with-deps invokes apt and can fail when the runner cannot resolve its mirror.
+        run: '"$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install chromium'
       - name: Run real browser session regression
         run: node tests/browserSession.browser.mjs
       - name: Run clean browser-first deployment regression
