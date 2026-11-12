@@ -101,8 +101,14 @@ exposure should keep secure cookies enabled and terminate TLS at an explicitly c
 reverse proxy or equivalent trusted boundary. The maintained Web UI rejects administrator
 bootstrap and sign-in on non-loopback HTTP origins before credentials are submitted, with an
 actionable HTTPS-required message; direct server-IP HTTP remains a diagnostics-only path. For repository-based VPS installs, the root `docker-compose.yml` is the HTTPS-first production
-default. New Hostinger Docker Manager Compose-from-URL installs that need hPanel's **Open** action
-use `deploy/docker/docker-compose.hostinger-managed.yml`, not the repository landing page.
+default. New Hostinger installations target `deploy/docker/docker-compose.hostinger-compose-from-url.yml`
+through Docker Manager → Compose → Compose from URL. The candidate requires no manually supplied
+hostname or environment values and keeps all application host ports unpublished. It is pending
+real-provider acceptance: automatic hPanel Open is unresolved. See
+[the Compose-from-URL runbook](HOSTINGER_COMPOSE_FROM_URL.md) for evidence and the mandatory smoke.
+Catalog/One Click is not a substitute. The following describes only the historical operator fallback.
+
+
 
 The first URL import intentionally succeeds without `TRAEFIK_HOST` but remains setup-pending.
 After the project exists, set `TRAEFIK_HOST` through **Manage → Environment variables (.env)**
