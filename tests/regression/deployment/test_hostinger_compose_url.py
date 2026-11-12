@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -14,6 +15,9 @@ DOCKER = ROOT / "deploy" / "docker"
 def test_hostinger_compose_url_keeps_application_private() -> None:
     compose = (DOCKER / "docker-compose.hostinger-install.yml").read_text(encoding="utf-8")
     assert compose.count("dockerfile: deploy/docker/") == 3
+    source_refs = re.findall(r"AI-Multi-Agent-Platform\.git#([0-9a-f]{40})", compose)
+    assert len(source_refs) == 3
+    assert len(set(source_refs)) == 1
     assert 'AI_MAP_SECURE_COOKIE: "true"' in compose
     assert "AI_MAP_HOSTINGER_EDGE_MODE: traefik-alpn" in compose
     assert "uts: host" in compose

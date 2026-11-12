@@ -3,7 +3,7 @@ name: ai-multi-agent-platform
 services:
   control-plane:
     build:
-      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#codex/hostinger-compose-url-tls}
+      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#0d1be8663508d4311f1791b5be8c9d0ba31fa92e}
       dockerfile: deploy/docker/control-plane.Dockerfile
     restart: unless-stopped
     init: true
@@ -42,7 +42,7 @@ services:
 
   web:
     build:
-      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#codex/hostinger-compose-url-tls}
+      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#0d1be8663508d4311f1791b5be8c9d0ba31fa92e}
       dockerfile: deploy/docker/web.Dockerfile
     restart: unless-stopped
     depends_on:
@@ -76,7 +76,7 @@ services:
 
   hostinger-gateway:
     build:
-      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#codex/hostinger-compose-url-tls}
+      context: ${AI_MAP_SOURCE_CONTEXT:-https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git#0d1be8663508d4311f1791b5be8c9d0ba31fa92e}
       dockerfile: deploy/docker/hostinger-gateway.Dockerfile
     restart: unless-stopped
     depends_on:
