@@ -2,10 +2,10 @@
 
 - **Projects:** PostgreSQL and Psycopg 3
 - **Canonical upstreams:** https://github.com/postgres/postgres and https://github.com/psycopg/psycopg
-- **Reviewed versions:** PostgreSQL 18.6; Psycopg 3.3.5
+- **Reviewed versions:** PostgreSQL 18.6 (original coordination baseline); Psycopg 3.3.6 (current pinned driver)
 - **Integration categories:** optional external self-hosted service; optional library dependency; platform-owned adapter
 - **Proposed platform boundary:** `ai_multi_agent_platform.distributed.postgres_control_plane_coordination`
-- **Review date:** 2026-09-13
+- **Review date:** 2026-11-12
 - **Related issue:** #566
 
 ## Decision
@@ -64,11 +64,11 @@ profile or canonical public contracts.
 
 ### Psycopg
 
-- Psycopg 3.3.5 package metadata declares `LGPL-3.0-only`.
+- Psycopg 3.3.6 package metadata declares `LGPL-3.0-only`.
 - The repository consumes Psycopg as an optional normal library dependency; no upstream source is
   copied or modified.
 - The project-level source remains MIT; installed Psycopg retains its own license terms and metadata.
-- This slice uses the pure `psycopg==3.3.5` package rather than the optional bundled `binary` extra,
+- This slice uses the pure `psycopg==3.3.6` package rather than the optional bundled `binary` extra,
   avoiding an unnecessary bundled native-library distribution boundary in the platform package.
 
 A release/package review must preserve the separation and re-check direct/transitive obligations if the
@@ -149,3 +149,7 @@ No new ADR is required for this adapter choice because ADR 0009 already makes th
 replaceable and #891 explicitly preserves a future central PostgreSQL seam. A future decision that makes
 PostgreSQL mandatory or changes canonical persistence ownership would require separate architecture
 review.
+
+## Maintained Psycopg 3.3.6 update (PR #1514)
+
+The original 2026-09-13 adoption review used Psycopg 3.3.5; that historical baseline is retained above for traceability. The new exact optional pin is `psycopg==3.3.6` (upstream tag `3.3.6`, commit `a67654d1e7afbf9b3a619557838f62de1c790e7c`). The library retains `LGPL-3.0-only` licensing, pure-Python installation and lazy loading behind `CoordinationProvider`; no package source is copied. Release changes include interruption/cancellation fixes, async wait improvements and additional Python 3.15 support. The improved interrupted-query termination fix requires libpq 17+; older libpq deployments retain their previous behavior. PostgreSQL HA tests, compatibility and full CI are required before merge; no new mandatory infrastructure or canonical authority is introduced.

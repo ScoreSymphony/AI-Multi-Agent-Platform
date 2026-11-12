@@ -1,14 +1,15 @@
 # Expo / React Native mobile-client adoption review
 
 Issue: #1240  
-Review date: 2026-09-19
+Review date: 2026-11-12
 
 ## Candidate identity
 
 - **Project:** Expo SDK / React Native mobile runtime
 - **Canonical upstream:** https://github.com/expo/expo and https://github.com/facebook/react-native
-- **Target:** Expo SDK 57.0.17, React Native 0.86.3
-- **Security storage module:** expo-secure-store 57.0.4
+- **Target:** Expo SDK 58.0.22, React Native 0.88.1, React 19.3.0
+- **Security storage module:** expo-secure-store 58.0.3
+- **Camera module:** expo-camera 58.0.14
 - **Integration category:** library dependency / client build runtime
 - **Boundary:** optional `mobile/` northbound Control Plane client
 
@@ -37,8 +38,8 @@ cache.
 
 ## License and provenance
 
-- Expo repository: MIT.
-- React Native repository: MIT.
+- Expo repository: MIT; reviewed against release tag `expo@58.0.22` (`004bfc41cfd82784da23450101015717c5da74e6`).
+- React Native repository: MIT; version `0.88.1` is paired with Expo SDK 58.
 - No upstream source is copied, vendored, forked or selectively ported.
 - Packages are installed through npm and retain their package license metadata.
 
@@ -47,6 +48,9 @@ cache.
 - Stay on stable Expo SDK lines for the maintained client; prerelease SDKs are not the default.
 - Review Expo/React Native security and release notes during explicit dependency updates.
 - Run typecheck, unit tests, Expo config validation and Android/iOS export smoke checks.
+- Expo SDK 58 uses Android 7+ and iOS 16.4+ as the minimum runtime OS versions; Android compile SDK 37, target SDK 36, and iOS build toolchain Xcode 26.4+.
+- The React Native 0.88 strict TypeScript API is the default. The mobile deep-link callback signature was adapted in PR #1514.
+- Keep the transitive `node-forge` resolved at patched `1.4.3` through the npm override; do not relax dependency-review checks.
 - Remote Control Plane endpoints require TLS.
 - Bearer credentials live only behind the `SecretStorage` boundary backed by
   `expo-secure-store`.
@@ -66,3 +70,7 @@ not required for repository CI or server operation.
 
 The dependency is justified by native secure storage and one shared Android/iOS codebase while
 remaining fully behind the canonical Control Plane boundary.
+
+## Maintained SDK 58 update (PR #1514)
+
+The initial #1240 review approved SDK 57. This maintenance review changes the pinned runtime to Expo SDK 58, React Native 0.88.1, React 19.3.0, Secure Store 58.0.3, and Camera 58.0.14. It preserves the canonical Control Plane boundary, secure-storage requirements, Android 7+/iOS 16.4+ minimums and replaceability decision. The package-lock.json was regenerated with npm, and the merged integration validation must include mobile typecheck, tests, configuration, Android/iOS export, release workflow, dependency review and overall CI. No physical-device validation or signed APK release is inferred from these checks.

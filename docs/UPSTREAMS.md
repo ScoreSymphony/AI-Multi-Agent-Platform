@@ -264,23 +264,23 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** approved for the #566 coordination slice; becomes integrated when the corresponding adapter PR merges.
 - **Integration category/categories:** optional library dependency; adapter integration.
 - **Canonical upstream repository:** `https://github.com/psycopg/psycopg`.
-- **Pinned version/tag/commit or deployed revision:** `3.3.5`.
+- **Pinned version/tag/commit or deployed revision:** `3.3.6`.
 - **Verified license:** LGPL-3.0-only.
-- **License verification date:** 2026-09-13.
-- **Last review date:** 2026-09-13.
+- **License verification date:** 2026-11-12.
+- **Last review date:** 2026-11-12.
 - **Platform adapter/boundary:** private connection transport inside `ai_multi_agent_platform.distributed.postgres_control_plane_coordination.PostgresCoordinationProvider`; no Psycopg types appear in canonical contracts.
 - **Local source path:** none; normal optional package dependency only.
 - **Source origin/path:** no Psycopg source copied or vendored into this repository.
 - **Modified locally:** no.
 - **Required notices / attribution:** the installed dependency retains its upstream package/license metadata; no Psycopg source is redistributed by this repository.
-- **Known compatibility constraints:** platform Python >=3.12; reviewed Psycopg release `3.3.5`; the selected pure `psycopg` package requires an available PostgreSQL client library (`libpq`).
+- **Known compatibility constraints:** platform Python >=3.12; reviewed Psycopg release `3.3.6`; the selected pure `psycopg` package requires an available PostgreSQL client library (`libpq`). The improved interrupted-query termination behavior requires libpq >=17; older client-library versions do not gain that improvement.
 - **Security/deployment/resource constraints:** installed only through the optional `ha-postgres` extra. Backend/driver failures are translated at the adapter boundary so raw DSNs/driver exception text do not become canonical coordination errors.
 - **Required for baseline:** no; normal platform imports and #39 single-node operation do not install or eagerly import Psycopg.
 - **Recurring paid service required:** no.
 - **Update/review method:** explicit pinned dependency update; re-review license/security/API changes and run deterministic adapter tests, real PostgreSQL integration and full repository CI.
 - **Exit/replacement strategy:** remove the optional dependency and replace the private connection implementation while preserving the platform-owned coordination contract.
 - **ADR:** none required for the driver choice; PostgreSQL itself remains a replaceable adapter backend.
-- **Provenance:** `upstream/psycopg-ha-coordination.yaml`.
+- **Provenance:** `upstream/psycopg-ha-coordination.yaml`; tag `3.3.6` resolves to commit `a67654d1e7afbf9b3a619557838f62de1c790e7c`.
 - **Adoption review:** `docs/upstream/POSTGRES_HA_COORDINATION_ADOPTION.md`.
 
 ### Expo / React Native mobile client runtime
@@ -289,23 +289,23 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #1240.
 - **Integration category/categories:** library dependency; optional client build/runtime.
 - **Canonical upstream repository:** `https://github.com/expo/expo` and `https://github.com/facebook/react-native`.
-- **Pinned version/tag/commit or deployed revision:** Expo `57.0.17`; React Native `0.86.3`; `expo-secure-store` `57.0.4`.
+- **Pinned version/tag/commit or deployed revision:** Expo `58.0.22`; React Native `0.88.1`; React `19.3.0`; `expo-secure-store` `58.0.3`; `expo-camera` `58.0.14`.
 - **Verified license:** MIT.
-- **License verification date:** 2026-09-19.
-- **Last review date:** 2026-09-19.
+- **License verification date:** 2026-11-12.
+- **Last review date:** 2026-11-12.
 - **Platform adapter/boundary:** optional `mobile/` application consuming only public `/api/v1` Control Plane resources/commands.
 - **Local source path:** none for upstream source; `mobile/` contains project-owned client code only.
 - **Source origin/path:** no upstream source copied, vendored, forked or selectively ported.
 - **Modified locally:** no upstream source modifications.
 - **Required notices / attribution:** installed packages retain their own package/license metadata; no vendored upstream notice bundle is required.
-- **Known compatibility constraints:** Expo SDK 57 stable line; React Native 0.86 stable line; Android 7+; iOS 16.4+.
-- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; no server port/database/GPU/paid service is introduced.
+- **Known compatibility constraints:** Expo SDK 58 stable line; React Native 0.88.1; React 19.3.0; Android 7+; iOS 16.4+; Android compile SDK 37 and target SDK 36.
+- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; `node-forge` is overridden to patched 1.4.3 in the committed lockfile; no server port/database/GPU/paid service is introduced.
 - **Required for baseline:** no.
 - **Recurring paid service required:** no.
 - **Update/review method:** explicit dependency update PR; review Expo/React Native release/security notes and run mobile typecheck/tests/config plus Android/iOS export smoke.
 - **Exit/replacement strategy:** replace the mobile implementation behind the unchanged public Control Plane; canonical platform state requires no migration.
 - **ADR:** `docs/adr/0016-optional-mobile-control-plane-client.md`.
-- **Provenance:** `upstream/expo-mobile-client.yaml`.
+- **Provenance:** `upstream/expo-mobile-client.yaml`; Expo tag `expo@58.0.22` resolves to commit `004bfc41cfd82784da23450101015717c5da74e6`.
 - **Adoption review:** `docs/upstream/EXPO_MOBILE_CLIENT_ADOPTION.md`.
 
 ## Current direct build/development dependencies
@@ -322,7 +322,7 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | mcp | optional MCP transport + CI integration coverage | `==2.3.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT (2026-09-14) | yes; optional adapter recorded above |
 | litellm | optional model gateway SDK / proxy compatibility target | `==1.106.2` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed (2026-09-21) | yes; optional adapter recorded above |
 | uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause (2026-09-02) | no |
-| psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only (2026-09-13) | yes; optional adapter recorded above |
+| psycopg | optional PostgreSQL HA coordination transport | `==3.3.6` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only (2026-09-13) | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT (2026-09-02) | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT (2026-09-02) | no |
 | mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT (2026-09-02) | no |
