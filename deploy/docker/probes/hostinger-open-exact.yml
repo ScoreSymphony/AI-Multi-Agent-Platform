@@ -1,0 +1,18 @@
+# Temporary hPanel discovery experiment for #1446 and #1466.
+# Run only on the designated test VPS. This is not the platform installer.
+services:
+  probe:
+    image: caddy:2.11.4-alpine
+    command: ["caddy", "respond", "--listen", ":8080", "--body", "hPanel Open probe"]
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${COMPOSE_PROJECT_NAME}.srv1887380.hstgr.cloud`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.middlewares=${COMPOSE_PROJECT_NAME}-local"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}-local.ipallowlist.sourcerange=127.0.0.1/32,::1/128"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=8080"
