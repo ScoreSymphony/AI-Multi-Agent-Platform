@@ -23,8 +23,8 @@ provider APIs or private lifecycle services.
 
 ## Supported platforms
 
-The initial profile uses Expo SDK 57 / React Native 0.86 and therefore targets the Expo 57
-supported mobile baseline:
+The maintained profile uses Expo SDK 58 / React Native 0.88 (React 19.3) and follows the
+Expo 58 supported mobile baseline:
 
 - Android 7+;
 - iOS 16.4+.

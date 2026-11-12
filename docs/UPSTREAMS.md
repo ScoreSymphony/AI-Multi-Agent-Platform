@@ -64,7 +64,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #1031; provenance and release-policy review completed by #1032.
 - **Integration category/categories:** library dependency.
 - **Canonical upstream repository:** `https://github.com/python/tzdata`.
-- **Pinned version/tag/commit or deployed revision:** `2026.4` / tag `2026.4` / `b4d2086cb5a5ca5032ef8f6955057c49e5e12903`.
+- **Pinned version/tag/commit or deployed revision:** `2026.5` / tag `2026.5` / `9493aaba724e991b239647cb7bfe977d019ce1b9`.
 - **Verified license:** Apache-2.0 for the package; bundled IANA time-zone source data identifies itself as public domain.
 - **License verification date:** 2026-09-16.
 - **Last review date:** 2026-09-16.
@@ -73,7 +73,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Source origin/path:** no upstream package source or data is copied into this repository.
 - **Modified locally:** no.
 - **Required notices / attribution:** the installed package retains its Apache-2.0 license metadata; no package source is vendored or redistributed by this repository. The bundled IANA source data is marked public domain.
-- **Known compatibility constraints:** platform Python >=3.12; pinned `tzdata==2026.4`; declared only for `platform_system == 'Windows'`. `zoneinfo` uses system IANA data when available and falls back to `tzdata`, so the normal non-Windows dependency/install path is unchanged.
+- **Known compatibility constraints:** platform Python >=3.12; pinned `tzdata==2026.5`; declared only for `platform_system == 'Windows'`. `zoneinfo` uses system IANA data when available and falls back to `tzdata`, so the normal non-Windows dependency/install path is unchanged.
 - **Security/deployment/resource constraints:** data-only package; no network access, credentials, subprocess, service, database, GPU or external infrastructure is required.
 - **Required for baseline:** yes on the supported Windows baseline; the environment marker keeps it uninstalled on platforms that use system IANA data.
 - **Recurring paid service required:** no.
@@ -89,7 +89,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #12.
 - **Integration category/categories:** optional adapter/library dependency.
 - **Canonical upstream repository:** `https://github.com/modelcontextprotocol/python-sdk`.
-- **Pinned version/tag/commit or deployed revision:** `v2.2.0` / `9972c21aa42054fb1450c5fc614761ed11847ec6`.
+- **Pinned version/tag/commit or deployed revision:** `v2.3.0` / `2118f14f8a19bc158d8a1cf90af58d85d187f849`.
 - **Verified license:** MIT for the SDK; material dependency set reviewed as permissive (MIT/BSD-3-Clause/Apache-2.0/PSF-2.0 families).
 - **License verification date:** 2026-09-14.
 - **Last review date:** 2026-09-14.
@@ -98,7 +98,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Source origin/path:** no upstream source copied into this repository.
 - **Modified locally:** no.
 - **Required notices / attribution:** installed packages retain their own upstream license metadata; no SDK source/NOTICE material is vendored or redistributed by this repository.
-- **Known compatibility constraints:** platform Python >=3.12; SDK Python >=3.10; SDK v2.2.0 is the explicit compatibility target. Streamable HTTP replaces new SSE usage; stdio requires a runnable local command. SDK 2.2.0 restricts HTTP redirects to the endpoint origin (with same-host HTTP-to-HTTPS upgrade allowed) and tightens OAuth issuer validation; the retained `2025-11-25` client/tool Streamable-HTTP protocol profile passes with this version.
+- **Known compatibility constraints:** platform Python >=3.12; SDK Python >=3.10; SDK v2.3.0 is the explicit compatibility target. Streamable HTTP replaces new SSE usage; stdio requires a runnable local command. SDK 2.3.0 restricts HTTP redirects to the endpoint origin (with same-host HTTP-to-HTTPS upgrade allowed) and tightens OAuth issuer validation; the retained `2025-11-25` client/tool Streamable-HTTP protocol profile remains a required CI acceptance gate for this update.
 - **Security/deployment/resource constraints:** endpoint transport performs configured network access; stdio transport starts a configured process and may receive environment values. Secrets are not copied into canonical adapter metadata or default persistent invocation audit events.
 - **Required for baseline:** no; base/native capability operation and core imports must work without the MCP extra.
 - **Recurring paid service required:** no.
@@ -138,7 +138,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #11.
 - **Integration category/categories:** optional adapter/library dependency; optional external service.
 - **Canonical upstream repository:** `https://github.com/BerriAI/litellm`.
-- **Pinned version/tag/commit or deployed revision:** `v1.101.0` / `18243cd7af4c3325165ba68b21379e2719e051c7`.
+- **Pinned version/tag/commit or deployed revision:** `v1.106.2` / `49943cd52ea46aacf8db2e5cb2b890d580fe9bb4`.
 - **Verified license:** MIT for content outside `enterprise/`; `enterprise/` is separately licensed and is not used or copied by this integration.
 - **License verification date:** 2026-09-21.
 - **Last review date:** 2026-09-21.
@@ -147,7 +147,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Source origin/path:** no LiteLLM source is copied; library mode uses the pinned PyPI dependency and proxy mode targets a separately deployed service.
 - **Modified locally:** no upstream source is vendored or modified.
 - **Required notices / attribution:** installed packages retain upstream license metadata. Do not copy or vendor `enterprise/` under the MIT assumption; any future source redistribution requires a new license/notices review.
-- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.101.0` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
+- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.106.2` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
 - **Security/deployment/resource constraints:** credential values are resolved from environment-variable references and are not exposed through canonical metadata. Proxy authentication does not replace platform authentication/authorization. No LiteLLM telemetry callbacks are enabled by the baseline adapter. Resource and GPU requirements depend on the selected downstream endpoint, not on platform core.
 - **Required for baseline:** no; core imports, model contracts, reference routing and baseline tests must work without the package or proxy installed.
 - **Recurring paid service required:** no; local/self-hosted endpoints are explicitly supported and covered by configuration/tests.
@@ -264,23 +264,23 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** approved for the #566 coordination slice; becomes integrated when the corresponding adapter PR merges.
 - **Integration category/categories:** optional library dependency; adapter integration.
 - **Canonical upstream repository:** `https://github.com/psycopg/psycopg`.
-- **Pinned version/tag/commit or deployed revision:** `3.3.5`.
+- **Pinned version/tag/commit or deployed revision:** `3.3.6`.
 - **Verified license:** LGPL-3.0-only.
-- **License verification date:** 2026-09-13.
-- **Last review date:** 2026-09-13.
+- **License verification date:** 2026-11-12.
+- **Last review date:** 2026-11-12.
 - **Platform adapter/boundary:** private connection transport inside `ai_multi_agent_platform.distributed.postgres_control_plane_coordination.PostgresCoordinationProvider`; no Psycopg types appear in canonical contracts.
 - **Local source path:** none; normal optional package dependency only.
 - **Source origin/path:** no Psycopg source copied or vendored into this repository.
 - **Modified locally:** no.
 - **Required notices / attribution:** the installed dependency retains its upstream package/license metadata; no Psycopg source is redistributed by this repository.
-- **Known compatibility constraints:** platform Python >=3.12; reviewed Psycopg release `3.3.5`; the selected pure `psycopg` package requires an available PostgreSQL client library (`libpq`).
+- **Known compatibility constraints:** platform Python >=3.12; reviewed Psycopg release `3.3.6`; the selected pure `psycopg` package requires an available PostgreSQL client library (`libpq`). The improved interrupted-query termination behavior requires libpq >=17; older client-library versions do not gain that improvement.
 - **Security/deployment/resource constraints:** installed only through the optional `ha-postgres` extra. Backend/driver failures are translated at the adapter boundary so raw DSNs/driver exception text do not become canonical coordination errors.
 - **Required for baseline:** no; normal platform imports and #39 single-node operation do not install or eagerly import Psycopg.
 - **Recurring paid service required:** no.
 - **Update/review method:** explicit pinned dependency update; re-review license/security/API changes and run deterministic adapter tests, real PostgreSQL integration and full repository CI.
 - **Exit/replacement strategy:** remove the optional dependency and replace the private connection implementation while preserving the platform-owned coordination contract.
 - **ADR:** none required for the driver choice; PostgreSQL itself remains a replaceable adapter backend.
-- **Provenance:** `upstream/psycopg-ha-coordination.yaml`.
+- **Provenance:** `upstream/psycopg-ha-coordination.yaml`; tag `3.3.6` resolves to commit `a67654d1e7afbf9b3a619557838f62de1c790e7c`.
 - **Adoption review:** `docs/upstream/POSTGRES_HA_COORDINATION_ADOPTION.md`.
 
 ### Expo / React Native mobile client runtime
@@ -289,23 +289,23 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Status:** integrated through #1240.
 - **Integration category/categories:** library dependency; optional client build/runtime.
 - **Canonical upstream repository:** `https://github.com/expo/expo` and `https://github.com/facebook/react-native`.
-- **Pinned version/tag/commit or deployed revision:** Expo `57.0.17`; React Native `0.86.3`; `expo-secure-store` `57.0.4`.
+- **Pinned version/tag/commit or deployed revision:** Expo `58.0.22`; React Native `0.88.1`; React `19.3.0`; `expo-secure-store` `58.0.3`; `expo-camera` `58.0.14`.
 - **Verified license:** MIT.
-- **License verification date:** 2026-09-19.
-- **Last review date:** 2026-09-19.
+- **License verification date:** 2026-11-12.
+- **Last review date:** 2026-11-12.
 - **Platform adapter/boundary:** optional `mobile/` application consuming only public `/api/v1` Control Plane resources/commands.
 - **Local source path:** none for upstream source; `mobile/` contains project-owned client code only.
 - **Source origin/path:** no upstream source copied, vendored, forked or selectively ported.
 - **Modified locally:** no upstream source modifications.
 - **Required notices / attribution:** installed packages retain their own package/license metadata; no vendored upstream notice bundle is required.
-- **Known compatibility constraints:** Expo SDK 57 stable line; React Native 0.86 stable line; Android 7+; iOS 16.4+.
-- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; no server port/database/GPU/paid service is introduced.
+- **Known compatibility constraints:** Expo SDK 58 stable line; React Native 0.88.1; React 19.3.0; Android 7+; iOS 16.4+; Android compile SDK 37 and target SDK 36.
+- **Security/deployment/resource constraints:** remote Control Plane URLs require TLS; bearer credentials are stored through `expo-secure-store`; `node-forge` is overridden to patched 1.4.3 in the committed lockfile; no server port/database/GPU/paid service is introduced.
 - **Required for baseline:** no.
 - **Recurring paid service required:** no.
 - **Update/review method:** explicit dependency update PR; review Expo/React Native release/security notes and run mobile typecheck/tests/config plus Android/iOS export smoke.
 - **Exit/replacement strategy:** replace the mobile implementation behind the unchanged public Control Plane; canonical platform state requires no migration.
 - **ADR:** `docs/adr/0016-optional-mobile-control-plane-client.md`.
-- **Provenance:** `upstream/expo-mobile-client.yaml`.
+- **Provenance:** `upstream/expo-mobile-client.yaml`; Expo tag `expo@58.0.22` resolves to commit `004bfc41cfd82784da23450101015717c5da74e6`.
 - **Adoption review:** `docs/upstream/EXPO_MOBILE_CLIENT_ADOPTION.md`.
 
 ## Current direct build/development dependencies
@@ -318,11 +318,11 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | wheel | build requirement | unbounded in build-system manifest | `https://github.com/pypa/wheel` | MIT (2026-09-02) | no |
 | build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT (2026-09-02) | no |
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT (2026-09-02) | yes; integrated for #12 |
-| tzdata | Windows runtime IANA time-zone data fallback for `zoneinfo` | `==2026.4; platform_system == 'Windows'` | `https://github.com/python/tzdata` | Apache-2.0 (2026-09-16) | yes; required only for supported Windows baseline |
-| mcp | optional MCP transport + CI integration coverage | `==2.2.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT (2026-09-14) | yes; optional adapter recorded above |
-| litellm | optional model gateway SDK / proxy compatibility target | `==1.101.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed (2026-09-21) | yes; optional adapter recorded above |
+| tzdata | Windows runtime IANA time-zone data fallback for `zoneinfo` | `==2026.5; platform_system == 'Windows'` | `https://github.com/python/tzdata` | Apache-2.0 (2026-09-16) | yes; required only for supported Windows baseline |
+| mcp | optional MCP transport + CI integration coverage | `==2.3.0` | `https://github.com/modelcontextprotocol/python-sdk` | MIT (2026-09-14) | yes; optional adapter recorded above |
+| litellm | optional model gateway SDK / proxy compatibility target | `==1.106.2` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed (2026-09-21) | yes; optional adapter recorded above |
 | uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause (2026-09-02) | no |
-| psycopg | optional PostgreSQL HA coordination transport | `==3.3.5` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only (2026-09-13) | yes; optional adapter recorded above |
+| psycopg | optional PostgreSQL HA coordination transport | `==3.3.6` | `https://github.com/psycopg/psycopg` | LGPL-3.0-only (2026-09-13) | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT (2026-09-02) | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT (2026-09-02) | no |
 | mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT (2026-09-02) | no |

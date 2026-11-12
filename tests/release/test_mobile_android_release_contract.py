@@ -36,9 +36,13 @@ def test_mobile_release_dependency_override_patches_xcode_uuid() -> None:
     lock = json.loads(LOCK_CONFIG.read_text(encoding="utf-8"))
 
     assert package["overrides"]["xcode"]["uuid"] == "11.1.1"
-    assert lock["packages"]["node_modules/xcode"]["version"] == "3.0.1"
-    assert lock["packages"]["node_modules/xcode"]["dependencies"]["uuid"] == "^7.0.3"
-    assert lock["packages"]["node_modules/uuid"]["version"] == "11.1.1"
+    xcode = lock["packages"]["node_modules/xcode"]
+    if "uuid" in xcode.get("dependencies", {}):
+        assert xcode["dependencies"]["uuid"] == "^7.0.3"
+        assert lock["packages"]["node_modules/uuid"]["version"] == "11.1.1"
+    else:
+        # Expo SDK 58 resolves xcode 4, which no longer depends on uuid.
+        assert int(xcode["version"].split(".", maxsplit=1)[0]) >= 4
 
 
 def test_rolldown_optional_platform_bindings_are_locked() -> None:
@@ -53,7 +57,11 @@ def test_rolldown_optional_platform_bindings_are_locked() -> None:
     linux_x64 = lock["packages"]["node_modules/@rolldown/binding-linux-x64-gnu"]
     assert linux_x64["os"] == ["linux"]
     assert linux_x64["cpu"] == ["x64"]
-    assert linux_x64["libc"] == ["glibc"]
+    # Newer Rolldown manifests may omit libc metadata from npm lock entries.
+    assert linux_x64.get("libc") in (None, ["glibc"])
+    musl = lock["packages"]["node_modules/@rolldown/binding-linux-x64-musl"]
+    assert musl["os"] == ["linux"]
+    assert musl["cpu"] == ["x64"]
 
 
 def test_production_signing_secrets_are_publish_only() -> None:
@@ -102,7 +110,7 @@ def test_pull_requests_skip_native_apk_assembly_and_signing() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     for step in (
-        "actions/setup-java@v5",
+        "actions/setup-java@v6",
         "Generate native Android project",
         "Keep release assembly unsigned until the signing job",
         "Assemble production release APK",

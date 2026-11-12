@@ -4,10 +4,10 @@ status: integrated
 integration_categories:
   - "library dependency"
 canonical_upstream: "https://github.com/expo/expo; https://github.com/facebook/react-native"
-pinned_revision: "expo 57.0.17; react-native 0.86.3; expo-secure-store 57.0.4"
+pinned_revision: "expo 58.0.22; react-native 0.88.1; react 19.3.0; expo-secure-store 58.0.3; expo-camera 58.0.14"
 verified_license: "MIT"
-license_verification_date: "2026-09-19"
-last_review_date: "2026-09-19"
+license_verification_date: "2026-11-12"
+last_review_date: "2026-11-12"
 platform_adapter_or_boundary: "mobile/ -> public /api/v1 Control Plane only"
 local_source_path: ""
 source_origin_path: ""
@@ -15,21 +15,22 @@ modified_locally: false
 modification_summary: ""
 required_notices: []
 compatibility_constraints:
-  - "Expo SDK 57 stable line"
-  - "React Native 0.86 stable line"
+  - "Expo SDK 58 stable line; React Native 0.88.1 and React 19.3.0"
+  - "Expo SDK 58 uses Android compileSdkVersion 37 and targetSdkVersion 36"
   - "Android 7+"
   - "iOS 16.4+"
 security_constraints:
   - "Remote Control Plane URLs require HTTPS"
   - "Bearer credential persisted only through expo-secure-store"
   - "Deep links are allowlisted resource references and never commands"
+  - "Transitive node-forge dependency is constrained to patched 1.4.3 via npm override; security review must verify the resolved lockfile"
 deployment_constraints:
   - "Optional mobile build only; no server runtime dependency"
 resource_constraints:
-  - "Node/npm required for client development and export smoke"
+  - "Node/npm required for client development and export smoke; Expo SDK 58 requires Node >=22.13"
 required_for_baseline: false
 recurring_paid_service_required: false
 update_review_method: "Explicit dependency PR; review Expo/React Native release and security notes; run mobile typecheck, tests, config validation and Android/iOS export smoke."
 exit_replacement_strategy: "Replace mobile implementation behind the unchanged public Control Plane; no canonical platform-state migration required."
 adr: "docs/adr/0016-optional-mobile-control-plane-client.md"
-notes: "No upstream source is copied or vendored."
+notes: "No upstream source is copied or vendored. Expo tag expo@58.0.22 resolves to 004bfc41cfd82784da23450101015717c5da74e6. This update preserves the existing public /api/v1 boundary and Android 7+/iOS 16.4+ support; CI validates typecheck, mobile tests, configuration and export smoke. SDK 58 strict TypeScript API changes are handled in mobile/App.tsx."

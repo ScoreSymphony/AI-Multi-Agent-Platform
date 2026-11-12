@@ -222,7 +222,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handle = (url: string | null) => {
+    const handle = (url: string | null | undefined) => {
       if (!url) return;
       const route = parseMobileDeepLink(url);
       if (!route) {

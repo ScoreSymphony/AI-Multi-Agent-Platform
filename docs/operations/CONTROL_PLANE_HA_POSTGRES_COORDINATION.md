@@ -35,7 +35,7 @@ Install the explicit optional extra when using the adapter:
 python -m pip install -e ".[ha-postgres]"
 ```
 
-The extra pins `psycopg==3.3.5`. The platform imports Psycopg lazily only when a
+The extra pins `psycopg==3.3.6`. The platform imports Psycopg lazily only when a
 `PostgresCoordinationProvider` is constructed, so normal platform imports stay PostgreSQL-independent.
 
 A PostgreSQL 18.x service is the initial reviewed deployment target. The SQL intentionally uses only

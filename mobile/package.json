@@ -23,21 +23,22 @@
     "smoke:ios": "expo export --platform ios --output-dir dist/ios"
   },
   "dependencies": {
-    "expo": "57.0.17",
-    "expo-secure-store": "57.0.4",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
-    "expo-camera": "~57.0.5"
+    "expo": "58.0.22",
+    "expo-secure-store": "58.0.3",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "expo-camera": "~58.0.14"
   },
   "devDependencies": {
     "@types/node": "22.20.3",
-    "@types/react": "19.2.18",
+    "@types/react": "19.3.0",
     "typescript": "6.0.3",
-    "vitest": "5.0.0"
+    "vitest": "5.0.5"
   },
   "overrides": {
     "xcode": {
       "uuid": "11.1.1"
-    }
+    },
+    "node-forge": "1.4.3"
   }
 }

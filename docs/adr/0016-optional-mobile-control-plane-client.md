@@ -95,3 +95,7 @@ Native, so this decision remains replaceable.
 - #86 verification/review
 
 No canonical Task/Run/Event/Notification lifecycle contract changes.
+
+## Maintenance version update (2026-11-12)
+
+The original decision above remains an historical record of the initial SDK 57 adoption. The maintained runtime now uses Expo SDK 58 and React Native 0.88 behind the unchanged public Control Plane boundary; the current version and constraints are recorded in `upstream/expo-mobile-client.yaml`, `docs/UPSTREAMS.md`, and the mobile package manifest. This maintenance update does not change the architectural decision.
