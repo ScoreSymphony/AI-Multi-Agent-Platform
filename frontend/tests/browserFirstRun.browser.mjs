@@ -512,14 +512,64 @@ try {
   if (new URL(page.url()).pathname !== "/marketplace") {
     throw new Error(`Incomplete setup unexpectedly redirected Marketplace back to ${page.url()}`);
   }
+
+  // #1489: the actual Marketplace surface, not only the setup projection, must expose multiple
+  // real starter kinds and the owner-management handoff for a clean default installation.
+  const marketplaceHermesCard = page
+    .locator("article.card")
+    .filter({ hasText: "Hermes adapter" });
+  await marketplaceHermesCard.waitFor();
+  requireText(
+    await marketplaceHermesCard.innerText(),
+    "Orchestrator",
+    "Marketplace Hermes semantic kind",
+  );
+
+  const marketplaceReferenceCard = page
+    .locator("article.card")
+    .filter({ hasText: "Reference echo capability provider" });
+  await marketplaceReferenceCard.waitFor();
+  const marketplaceReferenceCardText = await marketplaceReferenceCard.innerText();
+  requireText(
+    marketplaceReferenceCardText,
+    "Capability Provider",
+    "Marketplace reference provider semantic kind",
+  );
+  requireText(
+    marketplaceReferenceCardText,
+    "beta",
+    "Marketplace reference provider maturity",
+  );
+
+  await marketplaceReferenceCard.getByRole("link", { name: "Inspect", exact: true }).click();
+  await page.waitForURL("**/marketplace/items/**");
+  await page
+    .getByRole("heading", {
+      name: "Reference echo capability provider 1.0.0",
+      exact: true,
+    })
+    .waitFor();
+  const marketplaceReferenceDetail = await page.locator("main").innerText();
+  requireText(
+    marketplaceReferenceDetail,
+    "requires no external service",
+    "Marketplace reference provider external requirements",
+  );
+  await page
+    .getByRole("link", { name: "Open Capability Provider management", exact: true })
+    .waitFor();
+  await page.getByRole("link", { name: "Back to Marketplace", exact: true }).click();
+  await page.waitForURL("**/marketplace");
+
   await page.getByRole("link", { name: "Continue first-run onboarding", exact: true }).click();
   await page.waitForURL("**/onboarding");
   await page.getByRole("heading", { name: "Guided onboarding", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Model setup", exact: true }).waitFor();
 
-  // #1391: a clean default install must expose the shipped optional-component catalog without
-  // operator-side Registry configuration. Hermes is deliberately presented as an adapter package,
-  // not as an already managed Hermes runtime.
+  // #1391/#1489: a clean default install must expose the shipped optional-component catalog
+  // without operator-side Registry configuration. The catalog spans multiple real semantic kinds:
+  // Hermes remains an adapter package with an external runtime prerequisite, while the bundled
+  // reference capability provider is a local/offline package with a trusted runtime candidate.
   const hermesCard = page.locator("article.state").filter({ hasText: "Hermes adapter" });
   await hermesCard.waitFor();
   const hermesCardText = await hermesCard.innerText();
@@ -529,6 +579,27 @@ try {
     hermesCardText,
     "does not install or start Hermes itself",
     "Fresh-install Hermes runtime prerequisite",
+  );
+
+  const referenceCapabilityCard = page
+    .locator("article.state")
+    .filter({ hasText: "Reference echo capability provider" });
+  await referenceCapabilityCard.waitFor();
+  const referenceCapabilityCardText = await referenceCapabilityCard.innerText();
+  requireText(
+    referenceCapabilityCardText,
+    "installable",
+    "Fresh-install reference capability card",
+  );
+  requireText(
+    referenceCapabilityCardText,
+    "local",
+    "Fresh-install reference capability delivery mode",
+  );
+  requireText(
+    referenceCapabilityCardText,
+    "requires no external service",
+    "Fresh-install reference capability requirements",
   );
 
   let releaseStaleSetupRead;

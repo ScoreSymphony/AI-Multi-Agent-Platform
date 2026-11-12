@@ -38,10 +38,16 @@ The persistent browser-first setup lifecycle exposes reviewed Registry-backed pa
 default; a normal fresh installation therefore does not need an operator-side
 `AI_MAP_REGISTRY_CATALOG` step before optional components can be displayed.
 
-The starter catalog is deliberately conservative. It currently includes the platform-owned
-**Hermes adapter** as an optional orchestrator package. Selection and installation use the
-canonical Registry/Marketplace and Plugin owner-domain paths. The browser never runs an upstream
-installer script directly.
+The starter catalog is deliberately conservative. It currently includes two reviewed packages
+whose executable implementations and owner lifecycles are already composed by the platform:
+
+- the platform-owned **Hermes adapter** as an optional Orchestrator package;
+- the bundled **Reference echo capability provider** as a local/offline Capability Provider that
+  exposes the deterministic `plugin.echo` capability after explicit Plugin configuration/enable.
+
+Selection and installation use the canonical Registry/Marketplace and Plugin owner-domain paths.
+Marketplace installation records the governed package; it never enables Plugin code by itself, and
+the browser never runs an upstream installer script directly.
 
 Hermes has two distinct states that the UI must not collapse:
 
@@ -51,9 +57,18 @@ Hermes has two distinct states that the UI must not collapse:
 
 After only the first step, the product reports `adapter_installed`, keeps the external runtime as
 an explicit prerequisite and does not treat the selected Hermes option as readiness-complete. The
-selection remains removable from the setup plan, so an intentionally unconfigured optional runtime
+Reference echo provider has no external runtime, network, credential or paid-service prerequisite;
+after installation its remaining configuration/activation handoff is the canonical Plugins surface.
+The selection remains removable from the setup plan, so an intentionally unconfigured optional runtime
 cannot dead-end the rest of first-run setup. The platform-native orchestrator remains the baseline,
 and no remote or paid service is selected implicitly.
+
+The presence of a Marketplace kind does not require a fabricated starter entry. Standard Agents and
+Agent Teams remain owned by the explicit standard-agent bootstrap/clone flow; model adapters are
+configured through the model/onboarding owner unless a distributable Plugin package exists; and
+experimental/research integrations are not promoted merely to fill a category. Other kinds therefore
+remain empty in the default source until a reviewed package has a truthful install/update/uninstall
+handoff and, where executable code is involved, a trusted runtime candidate.
 
 An operator-provided `registry_catalog` replaces the starter catalog for deployments that govern
 their own distribution source.
