@@ -11,6 +11,11 @@ from ai_multi_agent_platform.agents import register_standard_agent_control_plane
 from ai_multi_agent_platform.agents.routing_profile_control_plane import (
     register_routing_profile_aware_agent_control_plane,
 )
+from ai_multi_agent_platform.configuration.frontend_preferences import (
+    FrontendPreferenceService,
+    SqliteFrontendPreferenceRepository,
+    register_frontend_preference_control_plane,
+)
 from ai_multi_agent_platform.contracts import HealthStatus, ProviderContract, ProviderDescriptor
 from ai_multi_agent_platform.control_plane import (
     ControlPlaneASGI,
@@ -378,6 +383,12 @@ def build_control_plane(
         repository_runtime,
         kernel,
         evaluation,
+    )
+    register_frontend_preference_control_plane(
+        control_plane,
+        FrontendPreferenceService(
+            SqliteFrontendPreferenceRepository(config.database_dir / "frontend-preferences.sqlite3")
+        ),
     )
     _register_templates(control_plane, storage, security, runtime, platform_services)
     _register_verification_observability(

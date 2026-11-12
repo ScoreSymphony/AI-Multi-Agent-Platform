@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FirstUserBootstrapStatus } from "../../api/browserSession";
 import { ControlPlaneError } from "../../api/client";
 import type { SetupSessionStatus } from "../../api/setup";
 import type { APImanifest } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/States";
+import { useFrontendCustomization } from "../../customization/FrontendCustomizationProvider";
+import { normalizeFrontendCustomization } from "../../customization/model";
 import { FirstUserSetupPage } from "../../pages/FirstUserSetupPage";
 import { SignInPage } from "../../pages/SignInPage";
+import { navigation } from "../navigation";
 import { useRouter } from "../router";
 import { useShellClients } from "./clients";
 import { ShellLayout } from "./ShellLayout";
@@ -16,6 +19,7 @@ export function Shell() {
   const { path, navigate } = useRouter();
   const baseUrl = import.meta.env.VITE_CONTROL_PLANE_URL ?? "";
   const clients = useShellClients(baseUrl);
+  const { customization, hydrateSaved } = useFrontendCustomization();
   const [manifest, setManifest] = useState<APImanifest | null>(null);
   const [manifestState, setManifestState] = useState<ManifestState>("loading");
   const [manifestError, setManifestError] = useState<unknown>(null);
@@ -26,6 +30,8 @@ export function Shell() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [sessionError, setSessionError] = useState<unknown>(null);
+  const [frontendPreferenceHydrated, setFrontendPreferenceHydrated] = useState(false);
+  const startPageApplied = useRef(false);
 
   const loadBootstrapStatus = useCallback(async () => {
     if (typeof document === "undefined") return null;
@@ -95,10 +101,63 @@ export function Shell() {
       setManifest(null);
       setManifestError(null);
       setManifestState("loading");
+      setFrontendPreferenceHydrated(false);
+      startPageApplied.current = false;
       return;
     }
     void loadManifest();
   }, [authenticated, loadManifest]);
+
+  useEffect(() => {
+    if (!authenticated || frontendPreferenceHydrated || manifestState !== "ready" || !manifest) {
+      return;
+    }
+    if (!manifest.resources.includes("frontend-preferences")) {
+      setFrontendPreferenceHydrated(true);
+      return;
+    }
+    let active = true;
+    void clients.frontendPreferencesClient.preference()
+      .then((preference) => {
+        if (!active || preference.customization === null) return;
+        hydrateSaved(normalizeFrontendCustomization(preference.customization));
+      })
+      .catch(() => {
+        // Presentation preference failure must not make the canonical product shell unavailable.
+        // The validated browser-local cache remains a safe fallback.
+      })
+      .finally(() => {
+        if (active) setFrontendPreferenceHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    authenticated,
+    clients.frontendPreferencesClient,
+    frontendPreferenceHydrated,
+    hydrateSaved,
+    manifest,
+    manifestState,
+  ]);
+
+  useEffect(() => {
+    if (!authenticated || !frontendPreferenceHydrated || startPageApplied.current || !manifest) return;
+    startPageApplied.current = true;
+    if (path !== "/") return;
+    const preferred = customization.layout.startPage;
+    if (preferred === "/") return;
+    const item = navigation.find((candidate) => candidate.path === preferred);
+    if (!item || (item.apiResource && !manifest.resources.includes(item.apiResource))) return;
+    navigate(preferred);
+  }, [
+    authenticated,
+    customization.layout.startPage,
+    frontendPreferenceHydrated,
+    manifest,
+    navigate,
+    path,
+  ]);
 
   useEffect(() => setMenuOpen(false), [path]);
 
