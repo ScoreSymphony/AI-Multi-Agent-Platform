@@ -1,0 +1,27 @@
+{
+    admin off
+}
+
+:8081 {
+    respond /health "ok" 200
+}
+
+http://{$AI_MAP_PUBLIC_DOMAIN} {
+    redir https://{$AI_MAP_PUBLIC_DOMAIN}{uri} 308
+}
+
+{$AI_MAP_PUBLIC_DOMAIN} {
+    tls {
+        issuer acme {
+            disable_http_challenge
+        }
+    }
+
+    reverse_proxy web:8080
+
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+}

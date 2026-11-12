@@ -7,9 +7,9 @@ traefik_host="${AI_MAP_HOSTINGER_TRAEFIK_HOST:-}"
 project_name="${AI_MAP_COMPOSE_PROJECT_NAME:-ai-multi-agent-platform}"
 
 case "$edge_mode" in
-  direct|shared-traefik|traefik-passthrough|traefik-managed) ;;
+  direct|shared-traefik|traefik-passthrough|traefik-managed|traefik-alpn) ;;
   *)
-    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, traefik-passthrough, or traefik-managed." >&2
+    echo "Invalid AI_MAP_HOSTINGER_EDGE_MODE: expected direct, shared-traefik, traefik-passthrough, traefik-managed, or traefik-alpn." >&2
     exit 64
     ;;
 esac
@@ -98,7 +98,12 @@ verify_traefik_host_matches_runtime() {
   return 0
 }
 
-if [ -n "$explicit_domain" ]; then
+if [ "$edge_mode" = "traefik-alpn" ]; then
+  derive_hostinger_domain || {
+    echo "Runtime host UTS hostname is not a validated Hostinger hostname." >&2
+    exit 64
+  }
+elif [ -n "$explicit_domain" ]; then
   domain="$explicit_domain"
   domain_source="AI_MAP_PUBLIC_DOMAIN"
 elif [ "$edge_mode" = "shared-traefik" ] && [ -n "$traefik_host" ]; then
@@ -151,6 +156,10 @@ done
 
 export AI_MAP_PUBLIC_DOMAIN="$domain"
 echo "Starting Hostinger ingress gateway for $domain (source: $domain_source, mode: $edge_mode)" >&2
+
+if [ "$edge_mode" = "traefik-alpn" ]; then
+  exec caddy run --config /etc/caddy/Caddyfile.hostinger-compose-url --adapter caddyfile
+fi
 
 if [ "$edge_mode" = "direct" ] || [ "$edge_mode" = "traefik-passthrough" ] || [ "$edge_mode" = "traefik-managed" ]; then
   exec caddy run --config /etc/caddy/Caddyfile.hostinger-direct --adapter caddyfile
