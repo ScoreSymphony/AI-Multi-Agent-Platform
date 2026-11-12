@@ -1,0 +1,11 @@
+# Private Compose-time diagnostic for Hostinger issues #1446 and #1466.
+services:
+  probe:
+    image: alpine:3.22
+    container_name: "${COMPOSE_PROJECT_NAME}-traefik-${TRAEFIK_HOST:-missing}-host-${HOSTNAME:-missing}"
+    command: ["sleep", "180"]
+    user: "65534:65534"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
