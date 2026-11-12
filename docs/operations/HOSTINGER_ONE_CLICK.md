@@ -117,6 +117,12 @@ PR-time evidence of package-level public visibility before a new publisher chang
 catalog packaging input. Its image/network/persistence boundaries are intentional, but the
 provider-specific shape remains provisional until Hostinger confirms the catalog contract.
 
+> **Not a Compose-from-URL install file.** Do not paste this candidate into Hostinger Docker
+> Manager's generic **Compose from URL** form. The candidate deliberately fails closed unless the
+> provider-owned Catalog environment supplies `TRAEFIK_HOST`. Real Hostinger probes established
+> that the generic Compose-from-URL path does not inject that value, so such a deployment can fail
+> during Compose interpolation before hPanel creates a usable Docker project.
+
 Unlike the generic Hostinger Compose profiles, it contains **no Git build contexts**. All services
 pull prebuilt GHCR images. This avoids cloning/building the complete repository during One Click
 deployment and makes the deployment artifact deterministic at a pinned image version.
