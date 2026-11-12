@@ -188,6 +188,27 @@ Do not disable Secure cookies to make public HTTP work.
 
 ## Hostinger Docker Manager
 
+### Single-import HTTPS candidate
+
+The production candidate for Docker Manager → Compose → **Compose from URL** is
+`docker-compose.hostinger-install.yml`. It needs only the raw Compose URL and
+the project name. The three services build from the same public repository,
+keep Web and Control Plane on a private bridge, and persist platform and TLS
+state in named volumes. No VPS-specific variable or public application port is
+required.
+
+Hostinger Traefik continues to own ports 80/443. Its Docker provider discovers
+project-scoped HTTP and TCP SNI rules. The gateway reads and validates the VPS
+hostname through `uts: host`, then Caddy obtains the exact project certificate
+through TLS-ALPN-01 on the TCP passthrough path. HTTP-01 is disabled for this
+profile because the existing Hostinger Traefik handles its own HTTP-01
+challenges on port 80.
+
+This candidate requires a real Compose-from-URL smoke before it replaces the
+managed-host instructions below. Confirm that HTTPS works before judging
+hPanel's separately generated **Open** link. The pinned test URL is published
+only after the branch build and checks pass.
+
 Hostinger Docker Manager's **Compose from URL** flow expects the direct URL of a Docker Compose
 file. For a **new installation** that should expose hPanel's **Open** action, use this maintained
 managed-host Compose URL:

@@ -12,10 +12,13 @@ RUN apk add --no-cache libcap \
 COPY deploy/docker/Caddyfile.hostinger-gateway /etc/caddy/Caddyfile.hostinger-gateway
 COPY deploy/docker/Caddyfile.hostinger-setup-pending /etc/caddy/Caddyfile.hostinger-setup-pending
 COPY deploy/docker/Caddyfile.hostinger-direct /etc/caddy/Caddyfile.hostinger-direct
+COPY deploy/docker/Caddyfile.hostinger-compose-url /etc/caddy/Caddyfile.hostinger-compose-url
 COPY deploy/docker/Caddyfile.hostinger-direct-setup-pending /etc/caddy/Caddyfile.hostinger-direct-setup-pending
 COPY deploy/docker/hostinger-gateway-entrypoint.sh /usr/local/bin/ai-map-hostinger-gateway-entrypoint
 
 RUN AI_MAP_PUBLIC_DOMAIN=agents.example.test \
+      caddy validate --config /etc/caddy/Caddyfile.hostinger-compose-url --adapter caddyfile \
+    && AI_MAP_PUBLIC_DOMAIN=agents.example.test \
       caddy validate --config /etc/caddy/Caddyfile.hostinger-direct --adapter caddyfile \
     && AI_MAP_PUBLIC_DOMAIN=agents.example.test \
       caddy validate --config /etc/caddy/Caddyfile.hostinger-gateway --adapter caddyfile \
