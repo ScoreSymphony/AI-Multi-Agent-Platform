@@ -12,7 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "ScoreSymphony" }]
 dependencies = [
   "jsonschema==4.26.0",
-  "tzdata==2026.5; platform_system == 'Windows'",
+  "tzdata==2026.6; platform_system == 'Windows'",
 ]
 
 [project.scripts]
@@ -56,13 +56,13 @@ server = [
   "uvicorn>=0.35,<1",
 ]
 ha-postgres = [
-  "psycopg==3.3.6",
+  "psycopg==3.3.9",
 ]
 mcp = [
   "mcp==2.3.0",
 ]
 litellm = [
-  "litellm==1.106.2",
+  "litellm==1.109.1",
 ]
 dev = [
   "build>=1.2,<2",
